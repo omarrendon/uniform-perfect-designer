@@ -1,3 +1,269 @@
+// import { create } from "zustand";
+// import { devtools, persist } from "zustand/middleware";
+// import type {
+//   CanvasConfig,
+//   CanvasElement,
+//   HistoryState,
+//   Project,
+//   Size,
+//   SizeConfig,
+// } from "../types";
+
+// interface DesignerState {
+//   // Canvas configuration
+//   canvasConfig: CanvasConfig;
+//   setCanvasConfig: (config: Partial<CanvasConfig>) => void;
+
+//   // Elements
+//   elements: CanvasElement[];
+//   selectedElementId: string | null;
+//   addElement: (element: CanvasElement) => void;
+//   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
+//   deleteElement: (id: string) => void;
+//   selectElement: (id: string | null) => void;
+//   duplicateElement: (id: string) => void;
+//   bringToFront: (id: string) => void;
+//   sendToBack: (id: string) => void;
+
+//   // Size configurations
+//   sizeConfigs: SizeConfig[];
+//   updateSizeConfig: (size: Size, config: Partial<SizeConfig>) => void;
+
+//   // History (Undo/Redo)
+//   history: HistoryState[];
+//   historyIndex: number;
+//   saveHistory: () => void;
+//   undo: () => void;
+//   redo: () => void;
+//   canUndo: () => boolean;
+//   canRedo: () => boolean;
+
+//   // Project management
+//   currentProject: Project | null;
+//   saveProject: (name: string) => void;
+//   loadProject: (project: Project) => void;
+//   clearProject: () => void;
+
+//   // UI State
+//   showGrid: boolean;
+//   toggleGrid: () => void;
+//   zoom: number;
+//   setZoom: (zoom: number) => void;
+// }
+
+// const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
+//   width: 100, // cm
+//   height: 50, // cm
+//   pixelsPerCm: 10,
+// };
+
+// const DEFAULT_SIZE_CONFIGS: SizeConfig[] = [
+//   { size: "XS", width: 40, height: 50 },
+//   { size: "S", width: 45, height: 55 },
+//   { size: "M", width: 50, height: 60 },
+//   { size: "L", width: 55, height: 65 },
+//   { size: "XL", width: 60, height: 70 },
+// ];
+
+// export const useDesignerStore = create<DesignerState>()(
+//   devtools(
+//     persist(
+//       (set, get) => ({
+//         // Initial state
+//         canvasConfig: DEFAULT_CANVAS_CONFIG,
+//         elements: [],
+//         selectedElementId: null,
+//         sizeConfigs: DEFAULT_SIZE_CONFIGS,
+//         history: [],
+//         historyIndex: -1,
+//         currentProject: null,
+//         showGrid: true,
+//         zoom: 1,
+
+//         // Canvas configuration
+//         setCanvasConfig: config =>
+//           set(state => ({
+//             canvasConfig: { ...state.canvasConfig, ...config },
+//           })),
+
+//         // Element management
+//         addElement: element =>
+//           set(state => {
+//             const newElements = [...state.elements, element];
+//             return { elements: newElements };
+//           }),
+
+//         updateElement: (id, updates) =>
+//           set(state => ({
+//             elements: state.elements.map(el =>
+//               el.id === id ? ({ ...el, ...updates } as CanvasElement) : el
+//             ),
+//           })),
+
+//         deleteElement: id =>
+//           set(state => ({
+//             elements: state.elements.filter(el => el.id !== id),
+//             selectedElementId:
+//               state.selectedElementId === id ? null : state.selectedElementId,
+//           })),
+
+//         selectElement: id =>
+//           set(() => ({
+//             selectedElementId: id,
+//           })),
+
+//         duplicateElement: id =>
+//           set(state => {
+//             const element = state.elements.find(el => el.id === id);
+//             if (!element) return state;
+
+//             const newElement: CanvasElement = {
+//               ...element,
+//               id: `${element.type}-${Date.now()}`,
+//               position: {
+//                 x: element.position.x + 20,
+//                 y: element.position.y + 20,
+//               },
+//             };
+
+//             return {
+//               elements: [...state.elements, newElement],
+//               selectedElementId: newElement.id,
+//             };
+//           }),
+
+//         bringToFront: id =>
+//           set(state => {
+//             const maxZIndex = Math.max(...state.elements.map(el => el.zIndex));
+//             return {
+//               elements: state.elements.map(el =>
+//                 el.id === id ? { ...el, zIndex: maxZIndex + 1 } : el
+//               ),
+//             };
+//           }),
+
+//         sendToBack: id =>
+//           set(state => {
+//             const minZIndex = Math.min(...state.elements.map(el => el.zIndex));
+//             return {
+//               elements: state.elements.map(el =>
+//                 el.id === id ? { ...el, zIndex: minZIndex - 1 } : el
+//               ),
+//             };
+//           }),
+
+//         // Size configurations
+//         updateSizeConfig: (size, config) =>
+//           set(state => ({
+//             sizeConfigs: state.sizeConfigs.map(sc =>
+//               sc.size === size ? { ...sc, ...config } : sc
+//             ),
+//           })),
+
+//         // History management
+//         saveHistory: () =>
+//           set(state => {
+//             const newHistory = state.history.slice(0, state.historyIndex + 1);
+//             newHistory.push({
+//               elements: [...state.elements],
+//               timestamp: Date.now(),
+//             });
+
+//             // Limit history to 50 states
+//             if (newHistory.length > 50) {
+//               newHistory.shift();
+//             }
+
+//             return {
+//               history: newHistory,
+//               historyIndex: newHistory.length - 1,
+//             };
+//           }),
+
+//         undo: () =>
+//           set(state => {
+//             if (state.historyIndex <= 0) return state;
+
+//             const newIndex = state.historyIndex - 1;
+//             return {
+//               elements: [...state.history[newIndex].elements],
+//               historyIndex: newIndex,
+//             };
+//           }),
+
+//         redo: () =>
+//           set(state => {
+//             if (state.historyIndex >= state.history.length - 1) return state;
+
+//             const newIndex = state.historyIndex + 1;
+//             return {
+//               elements: [...state.history[newIndex].elements],
+//               historyIndex: newIndex,
+//             };
+//           }),
+
+//         canUndo: () => get().historyIndex > 0,
+//         canRedo: () => get().historyIndex < get().history.length - 1,
+
+//         // Project management
+//         saveProject: name =>
+//           set(state => {
+//             const project: Project = {
+//               id: `project-${Date.now()}`,
+//               name,
+//               canvasConfig: state.canvasConfig,
+//               elements: state.elements,
+//               sizeConfigs: state.sizeConfigs,
+//               createdAt: new Date(),
+//               updatedAt: new Date(),
+//             };
+
+//             localStorage.setItem(project.id, JSON.stringify(project));
+
+//             return { currentProject: project };
+//           }),
+
+//         loadProject: project =>
+//           set(() => ({
+//             canvasConfig: project.canvasConfig,
+//             elements: project.elements,
+//             sizeConfigs: project.sizeConfigs,
+//             currentProject: project,
+//             selectedElementId: null,
+//           })),
+
+//         clearProject: () =>
+//           set(() => ({
+//             elements: [],
+//             selectedElementId: null,
+//             currentProject: null,
+//             history: [],
+//             historyIndex: -1,
+//           })),
+
+//         // UI State
+//         toggleGrid: () =>
+//           set(state => ({
+//             showGrid: !state.showGrid,
+//           })),
+
+//         setZoom: zoom =>
+//           set(() => ({
+//             zoom: Math.max(0.1, Math.min(3, zoom)),
+//           })),
+//       }),
+//       {
+//         name: "designer-storage",
+//         partialize: state => ({
+//           canvasConfig: state.canvasConfig,
+//           sizeConfigs: state.sizeConfigs,
+//           showGrid: state.showGrid,
+//         }),
+//       }
+//     )
+//   )
+// );
+
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import type {
@@ -58,11 +324,11 @@ const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
 };
 
 const DEFAULT_SIZE_CONFIGS: SizeConfig[] = [
-  { size: "XS", width: 40, height: 50 },
-  { size: "S", width: 45, height: 55 },
-  { size: "M", width: 50, height: 60 },
-  { size: "L", width: 55, height: 65 },
-  { size: "XL", width: 60, height: 70 },
+  { size: "XS", width: 80, height: 100 }, // XS - más pequeño
+  { size: "S", width: 90, height: 110 }, // S
+  { size: "M", width: 100, height: 120 }, // M - base
+  { size: "L", width: 110, height: 130 }, // L
+  { size: "XL", width: 120, height: 140 }, // XL - más grande
 ];
 
 export const useDesignerStore = create<DesignerState>()(
