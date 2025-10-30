@@ -1,13 +1,14 @@
 import React, { useRef } from "react";
 import { Stage, Layer, Rect, Line } from "react-konva";
+import type Konva from "konva";
 
-import { cmToPixels } from "../utils/canvas";
 import { UniformElement } from "./UniformElement";
 import { TextElementComponent } from "./TextElement";
 import { useDesignerStore } from "../store/desingerStore";
+import { cmToPixels, CANVAS_MARGIN_CM } from "../utils/canvas";
 
 export const Canvas: React.FC = () => {
-  const stageRef = useRef<any>(null);
+  const stageRef = useRef<Konva.Stage>(null);
   const {
     canvasConfig,
     elements,
@@ -22,8 +23,9 @@ export const Canvas: React.FC = () => {
     canvasConfig.height,
     canvasConfig.pixelsPerCm
   );
+  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
 
-  const handleStageClick = (e: any) => {
+  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     // Deseleccionar si se hace clic en el fondo
     if (e.target === e.target.getStage()) {
       selectElement(null);
@@ -66,7 +68,7 @@ export const Canvas: React.FC = () => {
   return (
     <div className="flex-1 flex items-center justify-center bg-gray-100 overflow-hidden p-4">
       <div
-        className="bg-white shadow-lg"
+        className="bg-white shadow-lg relative"
         style={{
           width: canvasWidth * zoom,
           height: canvasHeight * zoom,
@@ -89,6 +91,29 @@ export const Canvas: React.FC = () => {
               width={canvasWidth}
               height={canvasHeight}
               fill="white"
+            />
+
+            {/* Borde del canvas para marcar límites */}
+            <Rect
+              x={0}
+              y={0}
+              width={canvasWidth}
+              height={canvasHeight}
+              stroke="#e5e7eb"
+              strokeWidth={2}
+              listening={false}
+            />
+
+            {/* Área permitida para elementos (con margen de 1cm) */}
+            <Rect
+              x={margin}
+              y={margin}
+              width={canvasWidth - margin * 2}
+              height={canvasHeight - margin * 2}
+              stroke="#3b82f6"
+              strokeWidth={2}
+              dash={[10, 5]}
+              listening={false}
             />
 
             {/* Grid */}
@@ -130,6 +155,10 @@ export const Canvas: React.FC = () => {
           </span>
           <span>Zoom: {Math.round(zoom * 100)}%</span>
           <span>Elementos: {elements.length}</span>
+        </div>
+        <div className="text-xs text-gray-500 mt-1">
+          Los elementos deben permanecer dentro del área azul punteada (margen
+          de 1cm)
         </div>
       </div>
     </div>

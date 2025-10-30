@@ -274,6 +274,7 @@ import type {
   Size,
   SizeConfig,
 } from "../types";
+import { findValidPosition } from "../utils/canvas";
 
 interface DesignerState {
   // Canvas configuration
@@ -383,13 +384,24 @@ export const useDesignerStore = create<DesignerState>()(
             const element = state.elements.find(el => el.id === id);
             if (!element) return state;
 
+            // Encontrar una posición válida para el elemento duplicado
+            // Preferimos una posición cerca del original (offset de 20px)
+            const preferredPosition = {
+              x: element.position.x + 20,
+              y: element.position.y + 20,
+            };
+
+            const validPosition = findValidPosition(
+              element.dimensions,
+              state.elements,
+              state.canvasConfig,
+              preferredPosition
+            );
+
             const newElement: CanvasElement = {
               ...element,
               id: `${element.type}-${Date.now()}`,
-              position: {
-                x: element.position.x + 20,
-                y: element.position.y + 20,
-              },
+              position: validPosition,
             };
 
             return {

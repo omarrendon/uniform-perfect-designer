@@ -1,4 +1,4 @@
-import { CanvasElement, Position, Dimensions, CanvasConfig } from '@/types';
+import type { CanvasElement, Position, Dimensions, CanvasConfig } from "../types";
 
 /**
  * Convierte centímetros a píxeles
@@ -45,19 +45,23 @@ export const optimizeLayout = (
   if (elements.length === 0) return elements;
 
   const sortedElements = [...elements].sort(
-    (a, b) => b.dimensions.width * b.dimensions.height - 
-              a.dimensions.width * a.dimensions.height
+    (a, b) =>
+      b.dimensions.width * b.dimensions.height -
+      a.dimensions.width * a.dimensions.height
   );
 
   const optimized: CanvasElement[] = [];
   const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
-  const canvasHeight = cmToPixels(canvasConfig.height, canvasConfig.pixelsPerCm);
+  const canvasHeight = cmToPixels(
+    canvasConfig.height,
+    canvasConfig.pixelsPerCm
+  );
 
   let currentX = 10;
   let currentY = 10;
   let rowHeight = 0;
 
-  sortedElements.forEach((element) => {
+  sortedElements.forEach(element => {
     const elementWidth = element.dimensions.width;
     const elementHeight = element.dimensions.height;
 
@@ -70,7 +74,7 @@ export const optimizeLayout = (
 
     // Si el elemento no cabe en el canvas verticalmente, advertir
     if (currentY + elementHeight > canvasHeight - 10) {
-      console.warn('Elemento no cabe en el canvas:', element.id);
+      console.warn("Elemento no cabe en el canvas:", element.id);
     }
 
     optimized.push({
@@ -136,7 +140,10 @@ export const isWithinCanvas = (
   canvasConfig: CanvasConfig
 ): boolean => {
   const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
-  const canvasHeight = cmToPixels(canvasConfig.height, canvasConfig.pixelsPerCm);
+  const canvasHeight = cmToPixels(
+    canvasConfig.height,
+    canvasConfig.pixelsPerCm
+  );
 
   return (
     element.position.x >= 0 &&
@@ -147,7 +154,13 @@ export const isWithinCanvas = (
 };
 
 /**
+ * Margen de seguridad en cm que se debe respetar en los bordes del canvas
+ */
+export const CANVAS_MARGIN_CM = 1;
+
+/**
  * Ajusta la posición del elemento para que esté dentro del canvas
+ * respetando un margen de 1cm en todos los lados
  */
 export const constrainToCanvas = (
   position: Position,
@@ -155,10 +168,177 @@ export const constrainToCanvas = (
   canvasConfig: CanvasConfig
 ): Position => {
   const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
-  const canvasHeight = cmToPixels(canvasConfig.height, canvasConfig.pixelsPerCm);
+  const canvasHeight = cmToPixels(
+    canvasConfig.height,
+    canvasConfig.pixelsPerCm
+  );
+  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
 
   return {
-    x: Math.max(0, Math.min(position.x, canvasWidth - dimensions.width)),
-    y: Math.max(0, Math.min(position.y, canvasHeight - dimensions.height)),
+    x: Math.max(
+      margin,
+      Math.min(position.x, canvasWidth - dimensions.width - margin)
+    ),
+    y: Math.max(
+      margin,
+      Math.min(position.y, canvasHeight - dimensions.height - margin)
+    ),
   };
+};
+
+/**
+ * Encuentra una posición válida para un nuevo elemento evitando colisiones
+ * con elementos existentes
+ */
+export const findValidPosition = (
+  dimensions: Dimensions,
+  existingElements: CanvasElement[],
+  canvasConfig: CanvasConfig,
+  preferredPosition?: Position
+): Position => {
+  const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
+  const canvasHeight = cmToPixels(
+    canvasConfig.height,
+    canvasConfig.pixelsPerCm
+  );
+  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
+
+  // Posición inicial preferida o default
+  const startX = preferredPosition?.x ?? margin + 50;
+  const startY = preferredPosition?.y ?? margin + 50;
+
+  // Función auxiliar para verificar si una posición tiene colisión
+  const hasCollision = (position: Position): boolean => {
+    const testElement: CanvasElement = {
+      id: "temp",
+      type: "uniform",
+      position,
+      dimensions,
+      rotation: 0,
+      zIndex: 0,
+      locked: false,
+      visible: true,
+    } as CanvasElement;
+
+    return existingElements.some(
+      el => el.visible && checkOverlap(testElement, el)
+    );
+  };
+
+  // Función para verificar si está dentro del canvas con márgenes
+  const isInsideCanvas = (position: Position): boolean => {
+    return (
+      position.x >= margin &&
+      position.y >= margin &&
+      position.x + dimensions.width <= canvasWidth - margin &&
+      position.y + dimensions.height <= canvasHeight - margin
+    );
+  };
+
+  // Intentar la posición preferida primero
+  if (
+    isInsideCanvas({ x: startX, y: startY }) &&
+    !hasCollision({ x: startX, y: startY })
+  ) {
+    return { x: startX, y: startY };
+  }
+
+  // Estrategia 1: Buscar en una cuadrícula con espaciado de 20 píxeles
+  const spacing = 20;
+  const maxX = canvasWidth - dimensions.width - margin;
+  const maxY = canvasHeight - dimensions.height - margin;
+
+  // Buscar en filas, empezando desde la posición preferida
+  for (let y = margin; y <= maxY; y += spacing) {
+    for (let x = margin; x <= maxX; x += spacing) {
+      const position = { x, y };
+      if (isInsideCanvas(position) && !hasCollision(position)) {
+        return position;
+      }
+    }
+  }
+
+  // Estrategia 2: Buscar con menor espaciado si no se encontró nada
+  const fineSpacing = 10;
+  for (let y = margin; y <= maxY; y += fineSpacing) {
+    for (let x = margin; x <= maxX; x += fineSpacing) {
+      const position = { x, y };
+      if (isInsideCanvas(position) && !hasCollision(position)) {
+        return position;
+      }
+    }
+  }
+
+  // Si no se encuentra espacio libre, retornar la posición preferida
+  // ajustada a los límites del canvas (puede estar encimada pero al menos visible)
+  return constrainToCanvas({ x: startX, y: startY }, dimensions, canvasConfig);
+};
+
+/**
+ * Verifica si hay espacio disponible en el canvas para un nuevo elemento
+ * con las dimensiones especificadas sin que se encime con elementos existentes
+ */
+export const hasSpaceForElement = (
+  dimensions: Dimensions,
+  existingElements: CanvasElement[],
+  canvasConfig: CanvasConfig
+): boolean => {
+  const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
+  const canvasHeight = cmToPixels(
+    canvasConfig.height,
+    canvasConfig.pixelsPerCm
+  );
+  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
+
+  // Función auxiliar para verificar si una posición tiene colisión
+  const hasCollision = (position: Position): boolean => {
+    const testElement: CanvasElement = {
+      id: "temp",
+      type: "uniform",
+      position,
+      dimensions,
+      rotation: 0,
+      zIndex: 0,
+      locked: false,
+      visible: true,
+    } as CanvasElement;
+
+    return existingElements.some(
+      el => el.visible && checkOverlap(testElement, el)
+    );
+  };
+
+  // Función para verificar si está dentro del canvas con márgenes
+  const isInsideCanvas = (position: Position): boolean => {
+    return (
+      position.x >= margin &&
+      position.y >= margin &&
+      position.x + dimensions.width <= canvasWidth - margin &&
+      position.y + dimensions.height <= canvasHeight - margin
+    );
+  };
+
+  // Verificar si el elemento cabe dentro del canvas
+  if (
+    dimensions.width > canvasWidth - 2 * margin ||
+    dimensions.height > canvasHeight - 2 * margin
+  ) {
+    return false;
+  }
+
+  // Buscar con espaciado fino para determinar si hay espacio
+  const spacing = 10;
+  const maxX = canvasWidth - dimensions.width - margin;
+  const maxY = canvasHeight - dimensions.height - margin;
+
+  for (let y = margin; y <= maxY; y += spacing) {
+    for (let x = margin; x <= maxX; x += spacing) {
+      const position = { x, y };
+      if (isInsideCanvas(position) && !hasCollision(position)) {
+        return true; // Se encontró al menos un espacio libre
+      }
+    }
+  }
+
+  return false; // No hay espacio disponible
 };

@@ -1,13 +1,13 @@
 import { toPng, toJpeg } from 'html-to-image';
 import jsPDF from 'jspdf';
-import { ExportOptions } from '@/types';
+import type { ExportOptions } from '../types';
 
 /**
  * Exporta el canvas como imagen PNG
  */
 export const exportAsPNG = async (
   element: HTMLElement,
-  options: ExportOptions = {}
+  options: Partial<ExportOptions> = {}
 ): Promise<void> => {
   try {
     const dataUrl = await toPng(element, {
@@ -34,7 +34,7 @@ export const exportAsPNG = async (
  */
 export const exportAsPDF = async (
   element: HTMLElement,
-  options: ExportOptions = {}
+  options: Partial<ExportOptions> = {}
 ): Promise<void> => {
   try {
     const dataUrl = await toJpeg(element, {
