@@ -19,30 +19,32 @@ interface UniformElementProps {
 const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
   const [image] = useImage(element.imageUrl || "");
 
-  // Forma básica del uniforme (rectángulo con esquinas redondeadas)
-  return (
-    <>
-      <Rect
+  // Si hay imagen, mostrar solo la imagen, sino mostrar rectángulo con color
+  if (image) {
+    return (
+      <KonvaImage
+        image={image}
         x={0}
         y={0}
         width={element.dimensions.width}
         height={element.dimensions.height}
-        fill={element.baseColor}
-        cornerRadius={element.part === "jersey" ? 10 : 5}
-        shadowBlur={5}
-        shadowOpacity={0.3}
+        opacity={1}
       />
-      {image && (
-        <KonvaImage
-          image={image}
-          x={0}
-          y={0}
-          width={element.dimensions.width}
-          height={element.dimensions.height}
-          opacity={0.8}
-        />
-      )}
-    </>
+    );
+  }
+
+  // Forma básica del uniforme (rectángulo con esquinas redondeadas) cuando no hay imagen
+  return (
+    <Rect
+      x={0}
+      y={0}
+      width={element.dimensions.width}
+      height={element.dimensions.height}
+      fill={element.baseColor}
+      cornerRadius={element.part === "jersey" ? 10 : 5}
+      shadowBlur={5}
+      shadowOpacity={0.3}
+    />
   );
 };
 

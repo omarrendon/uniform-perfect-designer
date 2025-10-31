@@ -47,9 +47,11 @@ export const Toolbar: React.FC = () => {
     width: sizeConfig.width,
     height: sizeConfig.height,
   };
+  // Los shorts usan moldes reales (imagen con dos piezas lado a lado)
+  // Por lo tanto necesitan más ancho y menos alto
   const shortsDimensions = {
-    width: sizeConfig.width,
-    height: sizeConfig.height * 0.6,
+    width: sizeConfig.width * 2.2, // Ancho para contener ambos moldes
+    height: sizeConfig.height * 0.45, // Altura proporcional de los moldes
   };
 
   const canAddJersey = hasSpaceForElement(
@@ -67,14 +69,19 @@ export const Toolbar: React.FC = () => {
     const sizeConfig = sizeConfigs[2]; // Default M
     const { canvasConfig } = useDesignerStore.getState();
 
-    const uniformWidth = sizeConfig.width;
-    const uniformHeight =
-      part === "shorts" ? sizeConfig.height * 0.6 : sizeConfig.height;
-
-    const dimensions = {
-      width: uniformWidth,
-      height: uniformHeight,
-    };
+    // Dimensiones ajustadas según el tipo de uniforme
+    const dimensions =
+      part === "shorts"
+        ? {
+            // Shorts: dimensiones para contener los dos moldes
+            width: sizeConfig.width * 2.2,
+            height: sizeConfig.height * 0.45,
+          }
+        : {
+            // Jersey: dimensiones normales
+            width: sizeConfig.width,
+            height: sizeConfig.height,
+          };
 
     // Encontrar una posición válida sin colisiones
     const validPosition = findValidPosition(dimensions, elements, canvasConfig);
@@ -91,6 +98,11 @@ export const Toolbar: React.FC = () => {
       locked: false,
       visible: true,
       baseColor: "#3b82f6",
+      // Agregar imagen de moldes según el tipo de uniforme
+      imageUrl:
+        part === "shorts"
+          ? "/moldes/shorts-moldes.png"
+          : "/moldes/jersey-molde.png",
     };
 
     addElement(newUniform);
