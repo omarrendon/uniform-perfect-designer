@@ -10,21 +10,22 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "zustand": "^4.4.7",
-    "konva": "^9.3.0",
-    "react-konva": "^18.2.10",
-    "framer-motion": "^10.16.16",
-    "react-hook-form": "^7.49.2",
-    "zod": "^3.22.4",
     "@hookform/resolvers": "^3.3.3",
+    "clsx": "^2.0.0",
+    "framer-motion": "^10.16.16",
     "html-to-image": "^1.11.11",
     "jspdf": "^2.5.1",
+    "konva": "^9.3.0",
     "lucide-react": "^0.263.1",
-    "clsx": "^2.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.49.2",
+    "react-konva": "^18.2.10",
     "tailwind-merge": "^2.2.0",
-    "use-image": "^1.1.1"
+    "use-image": "^1.1.1",
+    "xlsx": "^0.18.5",
+    "zod": "^3.22.4",
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

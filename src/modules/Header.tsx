@@ -43,6 +43,9 @@ export const Header: React.FC = () => {
         await exportCanvas(canvasElement as HTMLElement, {
           format,
           transparent: true,
+          // Pasar las dimensiones del canvas en cm para el PDF
+          canvasWidth: canvasConfig.width,
+          canvasHeight: canvasConfig.height,
         });
         setShowExportModal(false);
       } catch (error) {

@@ -319,8 +319,8 @@ interface DesignerState {
 }
 
 const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
-  width: 100, // cm
-  height: 50, // cm
+  width: 490, // cm - ancho para impresión
+  height: 156, // cm - alto para impresión
   pixelsPerCm: 10,
 };
 

@@ -244,13 +244,14 @@ export const findValidPosition = (
   }
 
   // Estrategia 1: Buscar en una cuadrícula con espaciado de 20 píxeles
+  // POSICIONAMIENTO VERTICAL: buscar de arriba hacia abajo, luego siguiente columna
   const spacing = 20;
   const maxX = canvasWidth - dimensions.width - margin;
   const maxY = canvasHeight - dimensions.height - margin;
 
-  // Buscar en filas, empezando desde la posición preferida
-  for (let y = margin; y <= maxY; y += spacing) {
-    for (let x = margin; x <= maxX; x += spacing) {
+  // Buscar en columnas (vertical): primero de arriba hacia abajo, luego siguiente columna
+  for (let x = margin; x <= maxX; x += spacing) {
+    for (let y = margin; y <= maxY; y += spacing) {
       const position = { x, y };
       if (isInsideCanvas(position) && !hasCollision(position)) {
         return position;
@@ -258,10 +259,10 @@ export const findValidPosition = (
     }
   }
 
-  // Estrategia 2: Buscar con menor espaciado si no se encontró nada
+  // Estrategia 2: Buscar con menor espaciado si no se encontró nada (también vertical)
   const fineSpacing = 10;
-  for (let y = margin; y <= maxY; y += fineSpacing) {
-    for (let x = margin; x <= maxX; x += fineSpacing) {
+  for (let x = margin; x <= maxX; x += fineSpacing) {
+    for (let y = margin; y <= maxY; y += fineSpacing) {
       const position = { x, y };
       if (isInsideCanvas(position) && !hasCollision(position)) {
         return position;
@@ -326,13 +327,14 @@ export const hasSpaceForElement = (
     return false;
   }
 
-  // Buscar con espaciado fino para determinar si hay espacio
+  // Buscar con espaciado fino para determinar si hay espacio (vertical)
   const spacing = 10;
   const maxX = canvasWidth - dimensions.width - margin;
   const maxY = canvasHeight - dimensions.height - margin;
 
-  for (let y = margin; y <= maxY; y += spacing) {
-    for (let x = margin; x <= maxX; x += spacing) {
+  // Buscar verticalmente: de arriba hacia abajo, luego siguiente columna
+  for (let x = margin; x <= maxX; x += spacing) {
+    for (let y = margin; y <= maxY; y += spacing) {
       const position = { x, y };
       if (isInsideCanvas(position) && !hasCollision(position)) {
         return true; // Se encontró al menos un espacio libre

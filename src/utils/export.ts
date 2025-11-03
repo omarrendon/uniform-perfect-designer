@@ -31,6 +31,8 @@ export const exportAsPNG = async (
 
 /**
  * Exporta el canvas como PDF
+ * @param element - Elemento HTML del canvas
+ * @param options - Opciones de exportación (incluye canvasWidth y canvasHeight en cm)
  */
 export const exportAsPDF = async (
   element: HTMLElement,
@@ -50,14 +52,20 @@ export const exportAsPDF = async (
       img.onload = resolve;
     });
 
-    // Crear PDF en orientación landscape para mejor ajuste
+    // Usar las dimensiones del canvas en centímetros si están disponibles
+    // Si no, usar las dimensiones de la imagen
+    const canvasWidthCm = options.canvasWidth || img.width / 10;
+    const canvasHeightCm = options.canvasHeight || img.height / 10;
+
+    // Crear PDF con dimensiones exactas en centímetros
     const pdf = new jsPDF({
-      orientation: img.width > img.height ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: [img.width, img.height],
+      orientation: canvasWidthCm > canvasHeightCm ? 'landscape' : 'portrait',
+      unit: 'cm',
+      format: [canvasWidthCm, canvasHeightCm],
     });
 
-    pdf.addImage(dataUrl, 'JPEG', 0, 0, img.width, img.height);
+    // Agregar la imagen ocupando todo el espacio del PDF
+    pdf.addImage(dataUrl, 'JPEG', 0, 0, canvasWidthCm, canvasHeightCm);
     pdf.save(`uniform-design-${Date.now()}.pdf`);
   } catch (error) {
     console.error('Error al exportar PDF:', error);

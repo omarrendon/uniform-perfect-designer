@@ -19,15 +19,45 @@ interface UniformElementProps {
 const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
   const [image] = useImage(element.imageUrl || "");
 
-  // Si hay imagen, mostrar solo la imagen, sino mostrar rectángulo con color
+  // Si hay imagen, mostrar la imagen rotada internamente
   if (image) {
+    // Rotar la imagen internamente para que el Group mantenga dimensiones correctas
+    const rotation = element.rotation || 0;
+
+    // Posicionamiento según el ángulo de rotación
+    let x = 0;
+    let y = 0;
+    let imgWidth = element.dimensions.width;
+    let imgHeight = element.dimensions.height;
+
+    if (rotation === 90) {
+      // Rotación 90°: imagen rotada a la derecha
+      x = element.dimensions.width;
+      y = 0;
+      imgWidth = element.dimensions.height;
+      imgHeight = element.dimensions.width;
+    } else if (rotation === 180) {
+      // Rotación 180°: imagen invertida
+      x = element.dimensions.width;
+      y = element.dimensions.height;
+      imgWidth = element.dimensions.width;
+      imgHeight = element.dimensions.height;
+    } else if (rotation === 270) {
+      // Rotación 270°: imagen rotada a la izquierda
+      x = 0;
+      y = element.dimensions.height;
+      imgWidth = element.dimensions.height;
+      imgHeight = element.dimensions.width;
+    }
+
     return (
       <KonvaImage
         image={image}
-        x={0}
-        y={0}
-        width={element.dimensions.width}
-        height={element.dimensions.height}
+        x={x}
+        y={y}
+        width={imgWidth}
+        height={imgHeight}
+        rotation={rotation}
         opacity={1}
       />
     );
@@ -124,7 +154,7 @@ export const UniformElement: React.FC<UniformElementProps> = ({
       <Group
         x={element.position.x}
         y={element.position.y}
-        rotation={element.rotation}
+        // No rotamos el Group, la imagen ya está rotada internamente
       >
         <UniformShape element={element} />
       </Group>
@@ -137,7 +167,8 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         ref={groupRef}
         x={element.position.x}
         y={element.position.y}
-        rotation={element.rotation}
+        // No rotamos el Group, la imagen ya está rotada internamente
+        // Esto mantiene las dimensiones correctas para validaciones
         draggable={!element.locked}
         dragBoundFunc={dragBoundFunc}
         onDragEnd={handleDragEnd}

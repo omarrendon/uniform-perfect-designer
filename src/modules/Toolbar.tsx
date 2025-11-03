@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Type,
   Shirt,
@@ -11,14 +11,21 @@ import {
   Unlock,
   ArrowUp,
   ArrowDown,
+  FileUp,
 } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
-import type { Size, TextElement, UniformTemplate, CanvasElement } from "../types";
+import type {
+  Size,
+  TextElement,
+  UniformTemplate,
+  CanvasElement,
+} from "../types";
 import {
   generateId,
   findValidPosition,
   hasSpaceForElement,
 } from "../utils/canvas";
+import { readExcelFile, validateExcelFile } from "../utils/excelReader";
 import { Button } from "../components/Button";
 import { Select } from "../components/Select";
 import { Input } from "../components/Input";
@@ -43,15 +50,15 @@ export const Toolbar: React.FC = () => {
 
   // Verificar si hay espacio para agregar nuevos uniformes
   const sizeConfig = sizeConfigs[2]; // Default M
+  // ROTACIÓN 270°: Dimensiones intercambiadas (como 90°)
   const jerseyDimensions = {
-    width: sizeConfig.width,
-    height: sizeConfig.height,
+    width: sizeConfig.height,
+    height: sizeConfig.width,
   };
-  // Los shorts usan moldes reales (imagen con dos piezas lado a lado)
-  // Por lo tanto necesitan más ancho y menos alto
+  // Los shorts con rotación 270°: dimensiones intercambiadas
   const shortsDimensions = {
-    width: sizeConfig.width * 2.2, // Ancho para contener ambos moldes
-    height: sizeConfig.height * 0.45, // Altura proporcional de los moldes
+    width: sizeConfig.height * 0.45,
+    height: sizeConfig.width * 2.2,
   };
 
   const canAddJersey = hasSpaceForElement(
@@ -70,17 +77,18 @@ export const Toolbar: React.FC = () => {
     const { canvasConfig } = useDesignerStore.getState();
 
     // Dimensiones ajustadas según el tipo de uniforme
+    // ROTACIÓN 270°: Dimensiones intercambiadas (como 90°)
     const dimensions =
       part === "shorts"
         ? {
-            // Shorts: dimensiones para contener los dos moldes
-            width: sizeConfig.width * 2.2,
-            height: sizeConfig.height * 0.45,
+            // Shorts: dimensiones intercambiadas con rotación 270°
+            width: sizeConfig.height * 0.45,
+            height: sizeConfig.width * 2.2,
           }
         : {
-            // Jersey: dimensiones normales
-            width: sizeConfig.width,
-            height: sizeConfig.height,
+            // Jersey: dimensiones intercambiadas con rotación 270°
+            width: sizeConfig.height,
+            height: sizeConfig.width,
           };
 
     // Encontrar una posición válida sin colisiones
@@ -93,7 +101,7 @@ export const Toolbar: React.FC = () => {
       size: sizeConfig.size,
       position: validPosition,
       dimensions,
-      rotation: 0,
+      rotation: 270, // Rotar 270 grados
       zIndex: elements.length,
       locked: false,
       visible: true,
@@ -140,6 +148,136 @@ export const Toolbar: React.FC = () => {
     addElement(newText);
   };
 
+  const handleExcelUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validar que sea un archivo Excel
+    if (!validateExcelFile(file)) {
+      alert("Por favor selecciona un archivo Excel válido (.xlsx o .xls)");
+      return;
+    }
+
+    try {
+      // Leer el archivo Excel
+      const rows = await readExcelFile(file);
+
+      if (rows.length === 0) {
+        alert("El archivo Excel está vacío");
+        return;
+      }
+
+      // Obtener el estado actual
+      const { canvasConfig } = useDesignerStore.getState();
+      const sizeConfig = sizeConfigs[2]; // Default M
+
+      // Dimensiones de jersey y shorts con rotación 270°
+      // ROTACIÓN 270°: Dimensiones intercambiadas (como 90°)
+      const jerseyDimensions = {
+        width: sizeConfig.height,
+        height: sizeConfig.width,
+      };
+      const shortsDimensions = {
+        width: sizeConfig.height * 0.45,
+        height: sizeConfig.width * 2.2,
+      };
+
+      // Array temporal para mantener los elementos que se van agregando
+      const currentElements = [...elements];
+
+      // Por cada fila del Excel, crear un juego (jersey + shorts)
+      for (const row of rows) {
+        if (!row.nombre || row.nombre.trim() === "") {
+          continue; // Saltar filas sin nombre
+        }
+
+        // 1. Crear Jersey
+        const jerseyPosition = findValidPosition(
+          jerseyDimensions,
+          currentElements,
+          canvasConfig
+        );
+
+        // Verificar que haya espacio para el jersey
+        if (
+          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
+        ) {
+          alert(
+            `No hay espacio suficiente para crear el juego de "${
+              row.nombre
+            }". Se crearon ${rows.indexOf(row)} juegos.`
+          );
+          break;
+        }
+
+        const newJersey: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "jersey",
+          size: sizeConfig.size,
+          position: jerseyPosition,
+          dimensions: jerseyDimensions,
+          rotation: 270, // Rotar 270 grados
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#3b82f6",
+          imageUrl: "/moldes/jersey-molde.png",
+        };
+
+        currentElements.push(newJersey);
+        addElement(newJersey);
+
+        // 2. Crear Shorts
+        const shortsPosition = findValidPosition(
+          shortsDimensions,
+          currentElements,
+          canvasConfig
+        );
+
+        // Verificar que haya espacio para los shorts
+        if (
+          !hasSpaceForElement(shortsDimensions, currentElements, canvasConfig)
+        ) {
+          alert(
+            `No hay espacio suficiente para completar el juego de "${row.nombre}". Se crearon jerseys pero faltan shorts.`
+          );
+          break;
+        }
+
+        const newShorts: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "shorts",
+          size: sizeConfig.size,
+          position: shortsPosition,
+          dimensions: shortsDimensions,
+          rotation: 270, // Rotar 270 grados
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#3b82f6",
+          imageUrl: "/moldes/shorts-moldes.png",
+        };
+
+        currentElements.push(newShorts);
+        addElement(newShorts);
+      }
+
+      alert(`Se crearon ${rows.length} juegos de uniformes exitosamente!`);
+    } catch (error) {
+      console.error("Error al procesar el archivo Excel:", error);
+      alert(
+        "Error al procesar el archivo Excel. Verifica que tenga la columna 'nombre'."
+      );
+    }
+
+    // Limpiar el input para permitir cargar el mismo archivo de nuevo
+    event.target.value = "";
+  };
+
   return (
     <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
       {/* Tabs */}
@@ -172,6 +310,7 @@ export const Toolbar: React.FC = () => {
           <AddTab
             onAddUniform={handleAddUniform}
             onAddText={handleAddText}
+            onExcelUpload={handleExcelUpload}
             canAddJersey={canAddJersey}
             canAddShorts={canAddShorts}
           />
@@ -193,9 +332,22 @@ export const Toolbar: React.FC = () => {
 const AddTab: React.FC<{
   onAddUniform: (part: "jersey" | "shorts") => void;
   onAddText: () => void;
+  onExcelUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
   canAddJersey: boolean;
   canAddShorts: boolean;
-}> = ({ onAddUniform, onAddText, canAddJersey, canAddShorts }) => {
+}> = ({
+  onAddUniform,
+  onAddText,
+  onExcelUpload,
+  canAddJersey,
+  canAddShorts,
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExcelButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -230,6 +382,31 @@ const AddTab: React.FC<{
             </p>
           )}
         </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">
+          Carga Masiva
+        </h3>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          onChange={onExcelUpload}
+          style={{ display: "none" }}
+        />
+        <Button
+          className="w-full justify-start"
+          variant="outline"
+          onClick={handleExcelButtonClick}
+        >
+          <FileUp className="w-4 h-4 mr-2" />
+          Cargar desde Excel
+        </Button>
+        <p className="text-xs text-gray-500 mt-1">
+          Carga un archivo Excel con columna "nombre" para generar juegos de
+          uniformes
+        </p>
       </div>
 
       <div>

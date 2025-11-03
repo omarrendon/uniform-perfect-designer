@@ -86,4 +86,6 @@ export interface ExportOptions {
   backgroundColor?: string;
   transparent?: boolean;
   quality?: number;
+  canvasWidth?: number; // Ancho del canvas en cm (para PDF)
+  canvasHeight?: number; // Alto del canvas en cm (para PDF)
 }
