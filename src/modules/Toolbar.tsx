@@ -26,6 +26,11 @@ import {
   hasSpaceForElement,
 } from "../utils/canvas";
 import { readExcelFile, validateExcelFile } from "../utils/excelReader";
+import {
+  loadGoogleFont,
+  getValidFontOrFallback,
+  GOOGLE_FONTS,
+} from "../utils/fontLoader";
 import { Button } from "../components/Button";
 import { Select } from "../components/Select";
 import { Input } from "../components/Input";
@@ -50,15 +55,15 @@ export const Toolbar: React.FC = () => {
 
   // Verificar si hay espacio para agregar nuevos uniformes
   const sizeConfig = sizeConfigs[2]; // Default M
-  // ROTACIÓN 270°: Dimensiones intercambiadas (como 90°)
+  // ROTACIÓN 0°: Dimensiones normales (sin rotación)
   const jerseyDimensions = {
-    width: sizeConfig.height,
-    height: sizeConfig.width,
+    width: sizeConfig.width,
+    height: sizeConfig.height,
   };
-  // Los shorts con rotación 270°: dimensiones intercambiadas
+  // Los shorts verticales: ancho reducido, alto aumentado
   const shortsDimensions = {
-    width: sizeConfig.height * 0.45,
-    height: sizeConfig.width * 2.2,
+    width: sizeConfig.width * 0.45,
+    height: sizeConfig.height * 2.2,
   };
 
   const canAddJersey = hasSpaceForElement(
@@ -77,18 +82,18 @@ export const Toolbar: React.FC = () => {
     const { canvasConfig } = useDesignerStore.getState();
 
     // Dimensiones ajustadas según el tipo de uniforme
-    // ROTACIÓN 270°: Dimensiones intercambiadas (como 90°)
+    // ROTACIÓN 0°: Dimensiones normales (sin rotación)
     const dimensions =
       part === "shorts"
         ? {
-            // Shorts: dimensiones intercambiadas con rotación 270°
-            width: sizeConfig.height * 0.45,
-            height: sizeConfig.width * 2.2,
+            // Shorts verticales: ancho reducido, alto aumentado
+            width: sizeConfig.width * 0.45,
+            height: sizeConfig.height * 2.2,
           }
         : {
-            // Jersey: dimensiones intercambiadas con rotación 270°
-            width: sizeConfig.height,
-            height: sizeConfig.width,
+            // Jersey: dimensiones normales con rotación 0°
+            width: sizeConfig.width,
+            height: sizeConfig.height,
           };
 
     // Encontrar una posición válida sin colisiones
@@ -101,7 +106,7 @@ export const Toolbar: React.FC = () => {
       size: sizeConfig.size,
       position: validPosition,
       dimensions,
-      rotation: 270, // Rotar 270 grados
+      rotation: 0, // Sin rotación
       zIndex: elements.length,
       locked: false,
       visible: true,
@@ -110,7 +115,7 @@ export const Toolbar: React.FC = () => {
       imageUrl:
         part === "shorts"
           ? "/moldes/shorts-moldes.png"
-          : "/moldes/jersey-molde.png",
+          : "/moldes/M CAB ESPALDA.png",
     };
 
     addElement(newUniform);
@@ -171,102 +176,170 @@ export const Toolbar: React.FC = () => {
 
       // Obtener el estado actual
       const { canvasConfig } = useDesignerStore.getState();
-      const sizeConfig = sizeConfigs[2]; // Default M
 
-      // Dimensiones de jersey y shorts con rotación 270°
-      // ROTACIÓN 270°: Dimensiones intercambiadas (como 90°)
-      const jerseyDimensions = {
-        width: sizeConfig.height,
-        height: sizeConfig.width,
+      // Función para mapear talla del Excel a nombre de archivo
+      const mapSizeToMoldeName = (tallaExcel: string): string => {
+        const talla = tallaExcel.toLowerCase().trim();
+        const sizeMap: Record<string, string> = {
+          xs: "XS",
+          s: "S",
+          m: "M",
+          l: "L",
+          xl: "XL",
+          "2xl": "2XL",
+          "3xl": "3XL",
+        };
+        return sizeMap[talla] || "M"; // Default a M si no se reconoce
       };
-      const shortsDimensions = {
-        width: sizeConfig.height * 0.45,
-        height: sizeConfig.width * 2.2,
+
+      // Función para obtener la configuración de talla
+      const getSizeConfig = (tallaExcel: string) => {
+        const talla = tallaExcel.toUpperCase().trim() as Size;
+        const validSizes: Size[] = ["XS", "S", "M", "L", "XL"];
+
+        // Para 2XL y 3XL, usar XL como base
+        if (talla === "2XL" || talla === "3XL") {
+          return sizeConfigs.find(s => s.size === "XL") || sizeConfigs[2];
+        }
+
+        return (
+          sizeConfigs.find(s => s.size === talla) || sizeConfigs[2]
+        ); // Default M
       };
 
       // Array temporal para mantener los elementos que se van agregando
       const currentElements = [...elements];
 
-      // Por cada fila del Excel, crear un juego (jersey + shorts)
+      // Por cada fila del Excel, crear un juego de playera (espalda + frente)
       for (const row of rows) {
         if (!row.nombre || row.nombre.trim() === "") {
           continue; // Saltar filas sin nombre
         }
 
-        // 1. Crear Jersey
-        const jerseyPosition = findValidPosition(
+        // Obtener la talla de la fila (default "M" si no existe)
+        const tallaExcel = row.talla || "m";
+        const moldeSize = mapSizeToMoldeName(tallaExcel);
+        const sizeConfig = getSizeConfig(tallaExcel);
+
+        // Obtener la fuente de la fila (default "Arial" si no existe)
+        const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
+
+        // Cargar la fuente de Google Fonts si no es Arial
+        if (fonteFila !== "Arial") {
+          await loadGoogleFont(fonteFila);
+        }
+
+        // Dimensiones de jersey con rotación 0°
+        const jerseyDimensions = {
+          width: sizeConfig.width,
+          height: sizeConfig.height,
+        };
+
+        // 1. Crear Jersey ESPALDA
+        const jerseyEspalda = findValidPosition(
           jerseyDimensions,
           currentElements,
           canvasConfig
         );
 
-        // Verificar que haya espacio para el jersey
+        // Verificar que haya espacio para el jersey espalda
         if (
           !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
         ) {
           alert(
             `No hay espacio suficiente para crear el juego de "${
               row.nombre
-            }". Se crearon ${rows.indexOf(row)} juegos.`
+            }" talla ${moldeSize}. Se crearon ${rows.indexOf(row)} juegos.`
           );
           break;
         }
 
-        const newJersey: UniformTemplate = {
+        const newJerseyEspalda: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
           part: "jersey",
           size: sizeConfig.size,
-          position: jerseyPosition,
+          position: jerseyEspalda,
           dimensions: jerseyDimensions,
-          rotation: 270, // Rotar 270 grados
+          rotation: 0, // Sin rotación
           zIndex: currentElements.length,
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: "/moldes/jersey-molde.png",
+          imageUrl: `/moldes/${moldeSize} CAB ESPALDA.png`,
         };
 
-        currentElements.push(newJersey);
-        addElement(newJersey);
+        currentElements.push(newJerseyEspalda);
+        addElement(newJerseyEspalda);
 
-        // 2. Crear Shorts
-        const shortsPosition = findValidPosition(
-          shortsDimensions,
+        // Crear elemento de texto con el nombre para el molde de espalda
+        const textoDimensions = { width: jerseyDimensions.width * 0.8, height: 50 };
+        const textoPosition = {
+          x: jerseyEspalda.x + (jerseyDimensions.width - textoDimensions.width) / 2 + 150, // Centrado horizontalmente + 150px a la derecha
+          y: jerseyEspalda.y + jerseyDimensions.height / 2 - 100, // Centrado y subido 100 píxeles
+        };
+
+        const newTextoNombre: TextElement = {
+          id: generateId("text"),
+          type: "text",
+          part: "jersey",
+          size: sizeConfig.size,
+          position: textoPosition,
+          dimensions: textoDimensions,
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          content: row.nombre,
+          fontFamily: fonteFila,
+          fontSize: 32,
+          fontColor: "#000000",
+          textAlign: "center",
+          fontWeight: "bold",
+          opacity: 1,
+          side: "front",
+        };
+
+        currentElements.push(newTextoNombre);
+        addElement(newTextoNombre);
+
+        // 2. Crear Jersey FRENTE
+        const jerseyFrente = findValidPosition(
+          jerseyDimensions,
           currentElements,
           canvasConfig
         );
 
-        // Verificar que haya espacio para los shorts
+        // Verificar que haya espacio para el jersey frente
         if (
-          !hasSpaceForElement(shortsDimensions, currentElements, canvasConfig)
+          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
         ) {
           alert(
-            `No hay espacio suficiente para completar el juego de "${row.nombre}". Se crearon jerseys pero faltan shorts.`
+            `No hay espacio suficiente para completar el juego de "${row.nombre}" talla ${moldeSize}. Se creó la espalda pero falta el frente.`
           );
           break;
         }
 
-        const newShorts: UniformTemplate = {
+        const newJerseyFrente: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
-          part: "shorts",
+          part: "jersey",
           size: sizeConfig.size,
-          position: shortsPosition,
-          dimensions: shortsDimensions,
-          rotation: 270, // Rotar 270 grados
+          position: jerseyFrente,
+          dimensions: jerseyDimensions,
+          rotation: 0, // Sin rotación
           zIndex: currentElements.length,
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: "/moldes/shorts-moldes.png",
+          imageUrl: `/moldes/${moldeSize} CAB FRENTE.png`,
         };
 
-        currentElements.push(newShorts);
-        addElement(newShorts);
+        currentElements.push(newJerseyFrente);
+        addElement(newJerseyFrente);
       }
 
-      alert(`Se crearon ${rows.length} juegos de uniformes exitosamente!`);
+      alert(`Se crearon ${rows.length} juegos de playeras (espalda + frente) exitosamente!`);
     } catch (error) {
       console.error("Error al procesar el archivo Excel:", error);
       alert(
@@ -404,8 +477,7 @@ const AddTab: React.FC<{
           Cargar desde Excel
         </Button>
         <p className="text-xs text-gray-500 mt-1">
-          Carga un archivo Excel con columna "nombre" para generar juegos de
-          uniformes
+          Carga un archivo Excel con columnas: "nombre", "talla" (xs, s, m, l, xl, 2xl, 3xl) y "fuente" (opcional: Roboto, Montserrat, etc.)
         </p>
       </div>
 
@@ -599,17 +671,22 @@ const EditTab: React.FC<{
             <Select
               label="Fuente"
               value={element.fontFamily}
-              onChange={e =>
-                onUpdate(element.id, { fontFamily: e.target.value })
-              }
-              options={[
-                { value: "Arial", label: "Arial" },
-                { value: "Helvetica", label: "Helvetica" },
-                { value: "Times New Roman", label: "Times New Roman" },
-                { value: "Courier", label: "Courier" },
-                { value: "Verdana", label: "Verdana" },
-              ]}
+              onChange={async e => {
+                const newFont = e.target.value;
+                // Cargar la fuente de Google si no es Arial
+                if (newFont !== "Arial") {
+                  await loadGoogleFont(newFont);
+                }
+                onUpdate(element.id, { fontFamily: newFont });
+              }}
+              options={GOOGLE_FONTS.map(font => ({
+                value: font,
+                label: font,
+              }))}
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Fuentes de Google Fonts
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

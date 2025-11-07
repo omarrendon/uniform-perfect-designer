@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Group, Rect, Transformer, Image as KonvaImage } from "react-konva";
+import { Group, Rect, Transformer, Image as KonvaImage, Text } from "react-konva";
 
 import useImage from "use-image";
 import type { UniformTemplate } from "../types";
@@ -157,6 +157,20 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         // No rotamos el Group, la imagen ya está rotada internamente
       >
         <UniformShape element={element} />
+        {/* Texto de talla en la parte inferior del molde */}
+        <Text
+          x={0}
+          y={element.dimensions.height - 34}
+          width={element.dimensions.width}
+          text={element.size}
+          fontSize={24}
+          fontFamily="Arial"
+          fontStyle="bold"
+          fill="black"
+          align="center"
+          stroke="white"
+          strokeWidth={3}
+        />
       </Group>
     );
   }
@@ -177,6 +191,20 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         onTap={() => selectElement(element.id)}
       >
         <UniformShape element={element} />
+        {/* Texto de talla en la parte inferior del molde */}
+        <Text
+          x={0}
+          y={element.dimensions.height - 34}
+          width={element.dimensions.width}
+          text={element.size}
+          fontSize={24}
+          fontFamily="Arial"
+          fontStyle="bold"
+          fill="black"
+          align="center"
+          stroke="white"
+          strokeWidth={3}
+        />
       </Group>
 
       {isSelected && !element.locked && (

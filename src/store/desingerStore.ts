@@ -319,17 +319,19 @@ interface DesignerState {
 }
 
 const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
-  width: 490, // cm - ancho para impresión
-  height: 156, // cm - alto para impresión
+  width: 158.53, // cm - ancho para impresión (coincide con benito.pdf)
+  height: 379.60, // cm - alto para impresión (coincide con benito.pdf)
   pixelsPerCm: 10,
 };
 
 const DEFAULT_SIZE_CONFIGS: SizeConfig[] = [
-  { size: "XS", width: 80, height: 100 }, // XS - más pequeño
-  { size: "S", width: 90, height: 110 }, // S
-  { size: "M", width: 100, height: 120 }, // M - base
-  { size: "L", width: 110, height: 130 }, // L
-  { size: "XL", width: 120, height: 140 }, // XL - más grande
+  // Medidas realistas en píxeles (dividir entre 10 para obtener cm)
+  // pixelsPerCm = 10, entonces 500px = 50cm
+  { size: "XS", width: 400, height: 600 },  // XS: 40cm × 60cm
+  { size: "S", width: 450, height: 650 },   // S:  45cm × 65cm
+  { size: "M", width: 500, height: 700 },   // M:  50cm × 70cm (base)
+  { size: "L", width: 550, height: 750 },   // L:  55cm × 75cm
+  { size: "XL", width: 600, height: 800 },  // XL: 60cm × 80cm
 ];
 
 export const useDesignerStore = create<DesignerState>()(
@@ -531,7 +533,7 @@ export const useDesignerStore = create<DesignerState>()(
           })),
       }),
       {
-        name: "designer-storage",
+        name: "designer-storage-v5", // Dimensiones ajustadas a benito.pdf
         partialize: state => ({
           canvasConfig: state.canvasConfig,
           sizeConfigs: state.sizeConfigs,
