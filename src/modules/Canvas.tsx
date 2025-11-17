@@ -6,6 +6,7 @@ import { UniformElement } from "./UniformElement";
 import { TextElementComponent } from "./TextElement";
 import { useDesignerStore } from "../store/desingerStore";
 import { cmToPixels, CANVAS_MARGIN_CM } from "../utils/canvas";
+import { Pagination } from "../components/Pagination";
 
 export const Canvas: React.FC = () => {
   const stageRef = useRef<Konva.Stage>(null);
@@ -16,6 +17,9 @@ export const Canvas: React.FC = () => {
     zoom,
     selectElement,
     selectedElementId,
+    currentPage,
+    setCurrentPage,
+    getTotalPages,
   } = useDesignerStore();
 
   const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
@@ -65,15 +69,18 @@ export const Canvas: React.FC = () => {
     return lines;
   };
 
+  const totalPages = getTotalPages();
+
   return (
-    <div className="flex-1 flex items-center justify-center bg-gray-100 overflow-hidden p-4">
-      <div
-        className="bg-white shadow-lg relative"
-        style={{
-          width: canvasWidth * zoom,
-          height: canvasHeight * zoom,
-        }}
-      >
+    <div className="flex-1 flex flex-col bg-gray-100">
+      <div className="flex-1 flex items-center justify-center overflow-hidden p-4">
+        <div
+          className="bg-white shadow-lg relative"
+          style={{
+            width: canvasWidth * zoom,
+            height: canvasHeight * zoom,
+          }}
+        >
         <Stage
           ref={stageRef}
           width={canvasWidth * zoom}
@@ -145,22 +152,32 @@ export const Canvas: React.FC = () => {
               })}
           </Layer>
         </Stage>
+        </div>
+
+        {/* Información del canvas */}
+        <div className="absolute bottom-4 left-4 bg-white px-3 py-2 rounded shadow text-sm">
+          <div className="flex gap-4">
+            <span>
+              Tamaño: {canvasConfig.width} × {canvasConfig.height} cm
+            </span>
+            <span>Zoom: {Math.round(zoom * 100)}%</span>
+            <span>Elementos: {elements.length}</span>
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            Los elementos deben permanecer dentro del área azul punteada (margen
+            de 1cm)
+          </div>
+        </div>
       </div>
 
-      {/* Información del canvas */}
-      <div className="absolute bottom-4 left-4 bg-white px-3 py-2 rounded shadow text-sm">
-        <div className="flex gap-4">
-          <span>
-            Tamaño: {canvasConfig.width} × {canvasConfig.height} cm
-          </span>
-          <span>Zoom: {Math.round(zoom * 100)}%</span>
-          <span>Elementos: {elements.length}</span>
-        </div>
-        <div className="text-xs text-gray-500 mt-1">
-          Los elementos deben permanecer dentro del área azul punteada (margen
-          de 1cm)
-        </div>
-      </div>
+      {/* Paginación */}
+      {totalPages > 1 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
+      )}
     </div>
   );
 };

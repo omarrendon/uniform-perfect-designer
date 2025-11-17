@@ -281,10 +281,18 @@ interface DesignerState {
   canvasConfig: CanvasConfig;
   setCanvasConfig: (config: Partial<CanvasConfig>) => void;
 
-  // Elements
+  // Multi-page support
+  currentPage: number;
+  pages: CanvasElement[][]; // Array de páginas, cada una con sus elementos
+  setCurrentPage: (page: number) => void;
+  addPage: () => void;
+  deletePage: (pageIndex: number) => void;
+  getTotalPages: () => number;
+
+  // Elements (de la página actual)
   elements: CanvasElement[];
   selectedElementId: string | null;
-  addElement: (element: CanvasElement) => void;
+  addElement: (element: CanvasElement, pageIndex?: number) => void;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
   selectElement: (id: string | null) => void;
@@ -340,7 +348,9 @@ export const useDesignerStore = create<DesignerState>()(
       (set, get) => ({
         // Initial state
         canvasConfig: DEFAULT_CANVAS_CONFIG,
-        elements: [],
+        currentPage: 0,
+        pages: [[]], // Iniciar con una página vacía
+        elements: [], // Computed property basado en currentPage
         selectedElementId: null,
         sizeConfigs: DEFAULT_SIZE_CONFIGS,
         history: [],
@@ -355,26 +365,78 @@ export const useDesignerStore = create<DesignerState>()(
             canvasConfig: { ...state.canvasConfig, ...config },
           })),
 
-        // Element management
-        addElement: element =>
+        // Multi-page management
+        setCurrentPage: (page: number) =>
           set(state => {
-            const newElements = [...state.elements, element];
-            return { elements: newElements };
+            const validPage = Math.max(0, Math.min(page, state.pages.length - 1));
+            return {
+              currentPage: validPage,
+              elements: state.pages[validPage] || [],
+              selectedElementId: null, // Deseleccionar al cambiar de página
+            };
+          }),
+
+        addPage: () =>
+          set(state => ({
+            pages: [...state.pages, []],
+          })),
+
+        deletePage: (pageIndex: number) =>
+          set(state => {
+            if (state.pages.length <= 1) return state; // No eliminar la última página
+            const newPages = state.pages.filter((_, i) => i !== pageIndex);
+            const newCurrentPage = Math.min(state.currentPage, newPages.length - 1);
+            return {
+              pages: newPages,
+              currentPage: newCurrentPage,
+              elements: newPages[newCurrentPage] || [],
+            };
+          }),
+
+        getTotalPages: () => get().pages.length,
+
+        // Element management
+        addElement: (element, pageIndex) =>
+          set(state => {
+            const targetPage = pageIndex !== undefined ? pageIndex : state.currentPage;
+            const newPages = [...state.pages];
+
+            // Asegurar que la página existe
+            while (newPages.length <= targetPage) {
+              newPages.push([]);
+            }
+
+            newPages[targetPage] = [...newPages[targetPage], element];
+
+            return {
+              pages: newPages,
+              elements: targetPage === state.currentPage ? newPages[targetPage] : state.elements,
+            };
           }),
 
         updateElement: (id, updates) =>
-          set(state => ({
-            elements: state.elements.map(el =>
+          set(state => {
+            const newPages = [...state.pages];
+            newPages[state.currentPage] = state.elements.map(el =>
               el.id === id ? ({ ...el, ...updates } as CanvasElement) : el
-            ),
-          })),
+            );
+            return {
+              pages: newPages,
+              elements: newPages[state.currentPage],
+            };
+          }),
 
         deleteElement: id =>
-          set(state => ({
-            elements: state.elements.filter(el => el.id !== id),
-            selectedElementId:
-              state.selectedElementId === id ? null : state.selectedElementId,
-          })),
+          set(state => {
+            const newPages = [...state.pages];
+            newPages[state.currentPage] = state.elements.filter(el => el.id !== id);
+            return {
+              pages: newPages,
+              elements: newPages[state.currentPage],
+              selectedElementId:
+                state.selectedElementId === id ? null : state.selectedElementId,
+            };
+          }),
 
         selectElement: id =>
           set(() => ({
@@ -406,8 +468,12 @@ export const useDesignerStore = create<DesignerState>()(
               position: validPosition,
             };
 
+            const newPages = [...state.pages];
+            newPages[state.currentPage] = [...state.elements, newElement];
+
             return {
-              elements: [...state.elements, newElement],
+              pages: newPages,
+              elements: newPages[state.currentPage],
               selectedElementId: newElement.id,
             };
           }),
@@ -415,20 +481,26 @@ export const useDesignerStore = create<DesignerState>()(
         bringToFront: id =>
           set(state => {
             const maxZIndex = Math.max(...state.elements.map(el => el.zIndex));
+            const newPages = [...state.pages];
+            newPages[state.currentPage] = state.elements.map(el =>
+              el.id === id ? { ...el, zIndex: maxZIndex + 1 } : el
+            );
             return {
-              elements: state.elements.map(el =>
-                el.id === id ? { ...el, zIndex: maxZIndex + 1 } : el
-              ),
+              pages: newPages,
+              elements: newPages[state.currentPage],
             };
           }),
 
         sendToBack: id =>
           set(state => {
             const minZIndex = Math.min(...state.elements.map(el => el.zIndex));
+            const newPages = [...state.pages];
+            newPages[state.currentPage] = state.elements.map(el =>
+              el.id === id ? { ...el, zIndex: minZIndex - 1 } : el
+            );
             return {
-              elements: state.elements.map(el =>
-                el.id === id ? { ...el, zIndex: minZIndex - 1 } : el
-              ),
+              pages: newPages,
+              elements: newPages[state.currentPage],
             };
           }),
 

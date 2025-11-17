@@ -12,8 +12,9 @@ import {
   GridIcon,
 } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
-import { exportCanvas } from "../utils/export";
+import { exportCanvas, exportMultiPagePDF } from "../utils/export";
 import { Button } from "../components/Button";
+import { LoadingModal } from "../components/LoadingModal";
 import { optimizeLayout } from "../utils/canvas";
 
 export const Header: React.FC = () => {
@@ -30,28 +31,112 @@ export const Header: React.FC = () => {
     elements,
     // setCanvasConfig,
     canvasConfig,
+    pages,
+    getTotalPages,
+    currentPage,
+    setCurrentPage,
   } = useDesignerStore();
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [projectName, setProjectName] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
 
   const handleExport = async (format: "png" | "pdf") => {
-    const canvasElement = document.querySelector(".konvajs-content");
-    if (canvasElement) {
-      try {
-        await exportCanvas(canvasElement as HTMLElement, {
-          format,
-          transparent: true,
-          // Pasar las dimensiones del canvas en cm para el PDF
-          canvasWidth: canvasConfig.width,
-          canvasHeight: canvasConfig.height,
-        });
-        setShowExportModal(false);
-      } catch (error) {
-        console.error("Error al exportar:", error);
-        alert("Error al exportar el diseño");
+    setShowExportModal(false);
+
+    try {
+      if (format === "pdf") {
+        // Mostrar loading
+        setIsExporting(true);
+
+        // Exportación PDF multipágina
+        const totalPages = getTotalPages();
+        const originalPage = currentPage;
+
+        setExportProgress({ current: 0, total: totalPages });
+
+        // Array para almacenar las imágenes de cada página
+        const pageImages: string[] = [];
+
+        // Capturar cada página como imagen
+        for (let i = 0; i < totalPages; i++) {
+          // Actualizar progreso
+          setExportProgress({ current: i + 1, total: totalPages });
+
+          // Cambiar a la página i
+          setCurrentPage(i);
+
+          // Esperar a que React actualice el DOM y se renderice la página
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Obtener el canvas actual
+          const canvasElement = document.querySelector(".konvajs-content");
+          if (canvasElement) {
+            // Convertir directamente a imagen sin clonar
+            const { toJpeg } = await import('html-to-image');
+            const dataUrl = await toJpeg(canvasElement as HTMLElement, {
+              backgroundColor: '#ffffff',
+              quality: 0.95,
+              pixelRatio: 2,
+            });
+            pageImages.push(dataUrl);
+          }
+        }
+
+        // Restaurar la página original
+        setCurrentPage(originalPage);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Crear el PDF con todas las imágenes capturadas
+        if (pageImages.length > 0) {
+          const { default: jsPDF } = await import('jspdf');
+
+          const canvasWidthCm = canvasConfig.width;
+          const canvasHeightCm = canvasConfig.height;
+
+          const pdf = new jsPDF({
+            orientation: canvasWidthCm > canvasHeightCm ? 'landscape' : 'portrait',
+            unit: 'cm',
+            format: [canvasWidthCm, canvasHeightCm],
+          });
+
+          // Agregar cada imagen al PDF
+          for (let i = 0; i < pageImages.length; i++) {
+            if (i > 0) {
+              pdf.addPage([canvasWidthCm, canvasHeightCm]);
+            }
+            pdf.addImage(pageImages[i], 'JPEG', 0, 0, canvasWidthCm, canvasHeightCm);
+          }
+
+          pdf.save(`uniform-design-${Date.now()}.pdf`);
+        }
+
+        // Ocultar loading
+        setIsExporting(false);
+        setExportProgress({ current: 0, total: 0 });
+      } else {
+        // Exportación PNG (solo página actual)
+        setIsExporting(true);
+
+        const canvasElement = document.querySelector(".konvajs-content");
+        if (canvasElement) {
+          await exportCanvas(canvasElement as HTMLElement, {
+            format,
+            transparent: true,
+            canvasWidth: canvasConfig.width,
+            canvasHeight: canvasConfig.height,
+          });
+        }
+
+        setIsExporting(false);
       }
+    } catch (error) {
+      console.error("Error al exportar:", error);
+      setIsExporting(false);
+      setExportProgress({ current: 0, total: 0 });
+      alert("Error al exportar el diseño");
     }
   };
 
@@ -240,6 +325,14 @@ export const Header: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Loading Modal */}
+      <LoadingModal
+        isOpen={isExporting}
+        currentPage={exportProgress.current}
+        totalPages={exportProgress.total}
+        message={exportProgress.total > 0 ? "Capturando páginas del diseño..." : "Exportando..."}
+      />
     </>
   );
 };

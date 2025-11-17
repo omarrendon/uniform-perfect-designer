@@ -30,13 +30,23 @@ export const readExcelFile = async (
         const worksheet = workbook.Sheets[firstSheetName];
 
         // Convertir a JSON
-        const jsonData = XLSX.utils.sheet_to_json<ExcelRow>(worksheet);
+        const rawData = XLSX.utils.sheet_to_json<any>(worksheet);
+
+        // Normalizar los nombres de las columnas (convertir a minúsculas y quitar espacios)
+        const jsonData = rawData.map((row: any) => {
+          const normalizedRow: any = {};
+          Object.keys(row).forEach((key) => {
+            const normalizedKey = key.toLowerCase().trim();
+            normalizedRow[normalizedKey] = row[key];
+          });
+          return normalizedRow;
+        });
 
         // Validar que tenga la columna "nombre"
         if (jsonData.length > 0 && !("nombre" in jsonData[0])) {
           reject(
             new Error(
-              'El archivo debe contener una columna llamada "nombre"'
+              'El archivo debe contener una columna llamada "nombre" (puede estar en mayúsculas o minúsculas)'
             )
           );
           return;

@@ -175,7 +175,7 @@ export const Toolbar: React.FC = () => {
       }
 
       // Obtener el estado actual
-      const { canvasConfig } = useDesignerStore.getState();
+      const { canvasConfig, addPage } = useDesignerStore.getState();
 
       // Función para mapear talla del Excel a nombre de archivo
       const mapSizeToMoldeName = (tallaExcel: string): string => {
@@ -207,8 +207,12 @@ export const Toolbar: React.FC = () => {
         ); // Default M
       };
 
-      // Array temporal para mantener los elementos que se van agregando
-      const currentElements = [...elements];
+      // Obtener todas las páginas actuales
+      const { pages } = useDesignerStore.getState();
+
+      // Array temporal para mantener los elementos de la página actual
+      let currentElements = pages[0] ? [...pages[0]] : [];
+      let currentPageIndex = 0;
 
       // Por cada fila del Excel, crear un juego de playera (espalda + frente)
       for (const row of rows) {
@@ -236,23 +240,21 @@ export const Toolbar: React.FC = () => {
         };
 
         // 1. Crear Jersey ESPALDA
+        // Verificar que haya espacio para el jersey espalda
+        if (
+          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
+        ) {
+          // No hay espacio en la página actual, crear una nueva página
+          addPage();
+          currentPageIndex++;
+          currentElements = []; // Resetear elementos para la nueva página vacía
+        }
+
         const jerseyEspalda = findValidPosition(
           jerseyDimensions,
           currentElements,
           canvasConfig
         );
-
-        // Verificar que haya espacio para el jersey espalda
-        if (
-          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
-        ) {
-          alert(
-            `No hay espacio suficiente para crear el juego de "${
-              row.nombre
-            }" talla ${moldeSize}. Se crearon ${rows.indexOf(row)} juegos.`
-          );
-          break;
-        }
 
         const newJerseyEspalda: UniformTemplate = {
           id: generateId("uniform"),
@@ -270,7 +272,7 @@ export const Toolbar: React.FC = () => {
         };
 
         currentElements.push(newJerseyEspalda);
-        addElement(newJerseyEspalda);
+        addElement(newJerseyEspalda, currentPageIndex);
 
         // Crear elemento de texto con el nombre para el molde de espalda
         const textoDimensions = { width: jerseyDimensions.width * 0.8, height: 50 };
@@ -301,24 +303,58 @@ export const Toolbar: React.FC = () => {
         };
 
         currentElements.push(newTextoNombre);
-        addElement(newTextoNombre);
+        addElement(newTextoNombre, currentPageIndex);
+
+        // Crear elemento de texto con el número trasero para el molde de espalda (si existe)
+        if (row.numero_trasero) {
+          const numeroFontSize = 102; // 52 + 50 píxeles
+          const numeroTextoDimensions = { width: jerseyDimensions.width * 0.8, height: numeroFontSize + 20 };
+          const numeroTextoPosition = {
+            x: jerseyEspalda.x + (jerseyDimensions.width - numeroTextoDimensions.width) / 2 + 30, // Centrado horizontalmente + 30px a la derecha
+            y: jerseyEspalda.y + (jerseyDimensions.height - numeroTextoDimensions.height) / 2 + 20, // Centrado verticalmente + 20px abajo
+          };
+
+          const newTextoNumero: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: sizeConfig.size,
+            position: numeroTextoPosition,
+            dimensions: numeroTextoDimensions,
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero_trasero),
+            fontFamily: fonteFila,
+            fontSize: numeroFontSize,
+            fontColor: "#000000",
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "front",
+          };
+
+          currentElements.push(newTextoNumero);
+          addElement(newTextoNumero, currentPageIndex);
+        }
 
         // 2. Crear Jersey FRENTE
+        // Verificar que haya espacio para el jersey frente
+        if (
+          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
+        ) {
+          // No hay espacio en la página actual, crear una nueva página
+          addPage();
+          currentPageIndex++;
+          currentElements = []; // Resetear elementos para la nueva página vacía
+        }
+
         const jerseyFrente = findValidPosition(
           jerseyDimensions,
           currentElements,
           canvasConfig
         );
-
-        // Verificar que haya espacio para el jersey frente
-        if (
-          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
-        ) {
-          alert(
-            `No hay espacio suficiente para completar el juego de "${row.nombre}" talla ${moldeSize}. Se creó la espalda pero falta el frente.`
-          );
-          break;
-        }
 
         const newJerseyFrente: UniformTemplate = {
           id: generateId("uniform"),
@@ -336,10 +372,45 @@ export const Toolbar: React.FC = () => {
         };
 
         currentElements.push(newJerseyFrente);
-        addElement(newJerseyFrente);
+        addElement(newJerseyFrente, currentPageIndex);
+
+        // Crear elemento de texto con el número frontal para el molde de frente (si existe)
+        if (row.numero_frente) {
+          const numeroFrenteFontSize = 32; // Mismo tamaño que el nombre
+          const numeroFrenteTextoDimensions = { width: 100, height: numeroFrenteFontSize + 20 };
+          const numeroFrenteTextoPosition = {
+            x: jerseyFrente.x + jerseyDimensions.width - numeroFrenteTextoDimensions.width - 20, // Esquina superior derecha con margen
+            y: jerseyFrente.y + 20, // Parte superior con margen
+          };
+
+          const newTextoNumeroFrente: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: sizeConfig.size,
+            position: numeroFrenteTextoPosition,
+            dimensions: numeroFrenteTextoDimensions,
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero_frente),
+            fontFamily: fonteFila,
+            fontSize: numeroFrenteFontSize,
+            fontColor: "#000000",
+            textAlign: "right",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "front",
+          };
+
+          currentElements.push(newTextoNumeroFrente);
+          addElement(newTextoNumeroFrente, currentPageIndex);
+        }
       }
 
-      alert(`Se crearon ${rows.length} juegos de playeras (espalda + frente) exitosamente!`);
+      const totalPagesUsed = currentPageIndex + 1;
+      alert(`Se crearon ${rows.length} juegos de playeras (espalda + frente) exitosamente en ${totalPagesUsed} página(s)!`);
     } catch (error) {
       console.error("Error al procesar el archivo Excel:", error);
       alert(
@@ -477,7 +548,7 @@ const AddTab: React.FC<{
           Cargar desde Excel
         </Button>
         <p className="text-xs text-gray-500 mt-1">
-          Carga un archivo Excel con columnas: "nombre", "talla" (xs, s, m, l, xl, 2xl, 3xl) y "fuente" (opcional: Roboto, Montserrat, etc.)
+          Carga un archivo Excel con columnas: "nombre", "talla" (xs, s, m, l, xl, 2xl, 3xl), "numero_trasero" (opcional), "numero_frente" (opcional) y "fuente" (opcional: Roboto, Montserrat, etc.)
         </p>
       </div>
 
