@@ -24,6 +24,39 @@ export const GOOGLE_FONTS = [
   "Anton",
   "Architects Daughter",
   "Permanent Marker",
+  // Fuentes deportivas y de impacto
+  "Alfa Slab One",
+  "Black Ops One",
+  "Bungee",
+  "Bungee Inline",
+  "Russo One",
+  "Teko",
+  "Squada One",
+  "Saira Condensed",
+  "Barlow Condensed",
+  "Pathway Gothic One",
+  // Fuentes elegantes y modernas
+  "Cinzel",
+  "Cormorant Garamond",
+  "Great Vibes",
+  "Satisfy",
+  "Caveat",
+  "Shadows Into Light",
+  "Amatic SC",
+  // Fuentes clásicas y serif
+  "Libre Baskerville",
+  "Crimson Text",
+  "EB Garamond",
+  "Merriweather Sans",
+  // Fuentes sans-serif versátiles
+  "Inter",
+  "Work Sans",
+  "Manrope",
+  "Rubik",
+  "Source Sans Pro",
+  "Noto Sans",
+  "Quicksand",
+  "Karla",
 ] as const;
 
 export type GoogleFont = (typeof GOOGLE_FONTS)[number];

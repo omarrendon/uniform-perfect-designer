@@ -327,8 +327,8 @@ interface DesignerState {
 }
 
 const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
-  width: 158.53, // cm - ancho para impresión (coincide con benito.pdf)
-  height: 379.60, // cm - alto para impresión (coincide con benito.pdf)
+  width: 159, // cm - ancho para impresión (basado en benito.pdf)
+  height: 380, // cm - alto para impresión (basado en benito.pdf)
   pixelsPerCm: 10,
 };
 
@@ -605,7 +605,7 @@ export const useDesignerStore = create<DesignerState>()(
           })),
       }),
       {
-        name: "designer-storage-v5", // Dimensiones ajustadas a benito.pdf
+        name: "designer-storage-v6", // Dimensiones exactas de benito.pdf (159x380 cm)
         partialize: state => ({
           canvasConfig: state.canvasConfig,
           sizeConfigs: state.sizeConfigs,

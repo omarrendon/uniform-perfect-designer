@@ -1,4 +1,5 @@
 import type { CanvasElement, Position, Dimensions, CanvasConfig } from "../types";
+import { optimizeLayoutMaxRects, type LayoutOptions } from "./binPacking";
 
 /**
  * Convierte centímetros a píxeles
@@ -36,9 +37,32 @@ export const checkOverlap = (
 
 /**
  * Optimiza la disposición de elementos para evitar superposiciones
- * Implementación básica de bin-packing
+ * Usa el algoritmo MaxRects para mejor aprovechamiento del espacio
  */
 export const optimizeLayout = (
+  elements: CanvasElement[],
+  canvasConfig: CanvasConfig,
+  options?: Partial<LayoutOptions>
+): CanvasElement[] => {
+  if (elements.length === 0) return elements;
+
+  // Usar el nuevo algoritmo MaxRects optimizado
+  return optimizeLayoutMaxRects(elements, canvasConfig, {
+    elementGap: 5,      // 0.5cm entre elementos
+    canvasMargin: 10,   // 1cm de margen horizontal
+    canvasMarginV: 0,   // 0px de margen vertical - moldes pegados al borde
+    allowRotation: false, // No rotar uniformes por defecto
+    sortStrategy: 'area',
+    heuristic: 'BSSF',  // Best Short Side Fit
+    ...options,
+  });
+};
+
+/**
+ * Versión legacy del algoritmo de layout (Shelf algorithm)
+ * Mantenida para compatibilidad
+ */
+export const optimizeLayoutLegacy = (
   elements: CanvasElement[],
   canvasConfig: CanvasConfig
 ): CanvasElement[] => {
@@ -57,8 +81,11 @@ export const optimizeLayout = (
     canvasConfig.pixelsPerCm
   );
 
-  let currentX = 10;
-  let currentY = 10;
+  // Separación entre moldes: 0.5cm = 5mm = 5 píxeles (con pixelsPerCm = 10)
+  const elementGap = 5;
+
+  let currentX = elementGap;
+  let currentY = elementGap;
   let rowHeight = 0;
 
   sortedElements.forEach(element => {
@@ -66,14 +93,14 @@ export const optimizeLayout = (
     const elementHeight = element.dimensions.height;
 
     // Si el elemento no cabe en la fila actual, pasar a la siguiente
-    if (currentX + elementWidth > canvasWidth - 10) {
-      currentX = 10;
-      currentY += rowHeight + 10;
+    if (currentX + elementWidth > canvasWidth - elementGap) {
+      currentX = elementGap;
+      currentY += rowHeight + elementGap;
       rowHeight = 0;
     }
 
     // Si el elemento no cabe en el canvas verticalmente, advertir
-    if (currentY + elementHeight > canvasHeight - 10) {
+    if (currentY + elementHeight > canvasHeight - elementGap) {
       console.warn("Elemento no cabe en el canvas:", element.id);
     }
 
@@ -82,7 +109,7 @@ export const optimizeLayout = (
       position: { x: currentX, y: currentY },
     });
 
-    currentX += elementWidth + 10;
+    currentX += elementWidth + elementGap;
     rowHeight = Math.max(rowHeight, elementHeight);
   });
 
@@ -201,37 +228,44 @@ export const findValidPosition = (
     canvasConfig.height,
     canvasConfig.pixelsPerCm
   );
-  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
+  const marginH = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm); // Margen horizontal
+  const marginV = 0; // Sin margen vertical - moldes pueden estar pegados a los bordes
+
+  // Gap entre elementos (0.5cm = 5px)
+  const elementGap = 5;
 
   // Posición inicial preferida o default
-  const startX = preferredPosition?.x ?? margin + 50;
-  const startY = preferredPosition?.y ?? margin + 50;
+  const startX = preferredPosition?.x ?? marginH;
+  const startY = preferredPosition?.y ?? marginV;
 
   // Función auxiliar para verificar si una posición tiene colisión
+  // Considera el gap entre elementos en todas las direcciones
   const hasCollision = (position: Position): boolean => {
-    const testElement: CanvasElement = {
-      id: "temp",
-      type: "uniform",
-      position,
-      dimensions,
-      rotation: 0,
-      zIndex: 0,
-      locked: false,
-      visible: true,
-    } as CanvasElement;
+    // Verificar colisión con cada elemento existente considerando el gap
+    for (const el of existingElements) {
+      if (!el.visible) continue;
 
-    return existingElements.some(
-      el => el.visible && checkOverlap(testElement, el)
-    );
+      // Verificar si hay superposición considerando el gap en todas las direcciones
+      const noOverlap =
+        position.x + dimensions.width + elementGap <= el.position.x || // Nuevo está a la izquierda
+        position.x >= el.position.x + el.dimensions.width + elementGap || // Nuevo está a la derecha
+        position.y + dimensions.height + elementGap <= el.position.y || // Nuevo está arriba
+        position.y >= el.position.y + el.dimensions.height + elementGap; // Nuevo está abajo
+
+      if (!noOverlap) {
+        return true; // Hay colisión
+      }
+    }
+    return false;
   };
 
   // Función para verificar si está dentro del canvas con márgenes
   const isInsideCanvas = (position: Position): boolean => {
     return (
-      position.x >= margin &&
-      position.y >= margin &&
-      position.x + dimensions.width <= canvasWidth - margin &&
-      position.y + dimensions.height <= canvasHeight - margin
+      position.x >= marginH &&
+      position.y >= marginV &&
+      position.x + dimensions.width <= canvasWidth - marginH &&
+      position.y + dimensions.height <= canvasHeight - marginV
     );
   };
 
@@ -243,15 +277,15 @@ export const findValidPosition = (
     return { x: startX, y: startY };
   }
 
-  // Estrategia 1: Buscar en una cuadrícula con espaciado de 20 píxeles
+  // Estrategia 1: Buscar en una cuadrícula con espaciado igual al gap
   // POSICIONAMIENTO HORIZONTAL: buscar de izquierda a derecha, luego siguiente fila
-  const spacing = 20;
-  const maxX = canvasWidth - dimensions.width - margin;
-  const maxY = canvasHeight - dimensions.height - margin;
+  const spacing = elementGap;
+  const maxX = canvasWidth - dimensions.width - marginH;
+  const maxY = canvasHeight - dimensions.height - marginV;
 
   // Buscar en filas (horizontal): primero de izquierda a derecha, luego siguiente fila
-  for (let y = margin; y <= maxY; y += spacing) {
-    for (let x = margin; x <= maxX; x += spacing) {
+  for (let y = marginV; y <= maxY; y += spacing) {
+    for (let x = marginH; x <= maxX; x += spacing) {
       const position = { x, y };
       if (isInsideCanvas(position) && !hasCollision(position)) {
         return position;
@@ -260,9 +294,9 @@ export const findValidPosition = (
   }
 
   // Estrategia 2: Buscar con menor espaciado si no se encontró nada (también horizontal)
-  const fineSpacing = 10;
-  for (let y = margin; y <= maxY; y += fineSpacing) {
-    for (let x = margin; x <= maxX; x += fineSpacing) {
+  const fineSpacing = 1;
+  for (let y = marginV; y <= maxY; y += fineSpacing) {
+    for (let x = marginH; x <= maxX; x += fineSpacing) {
       const position = { x, y };
       if (isInsideCanvas(position) && !hasCollision(position)) {
         return position;
@@ -289,52 +323,57 @@ export const hasSpaceForElement = (
     canvasConfig.height,
     canvasConfig.pixelsPerCm
   );
-  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
+  const marginH = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm); // Margen horizontal
+  const marginV = 0; // Sin margen vertical
+
+  // Gap entre elementos (0.5cm = 5px)
+  const elementGap = 5;
 
   // Función auxiliar para verificar si una posición tiene colisión
+  // Considera el gap entre elementos en todas las direcciones
   const hasCollision = (position: Position): boolean => {
-    const testElement: CanvasElement = {
-      id: "temp",
-      type: "uniform",
-      position,
-      dimensions,
-      rotation: 0,
-      zIndex: 0,
-      locked: false,
-      visible: true,
-    } as CanvasElement;
+    for (const el of existingElements) {
+      if (!el.visible) continue;
 
-    return existingElements.some(
-      el => el.visible && checkOverlap(testElement, el)
-    );
+      const noOverlap =
+        position.x + dimensions.width + elementGap <= el.position.x ||
+        position.x >= el.position.x + el.dimensions.width + elementGap ||
+        position.y + dimensions.height + elementGap <= el.position.y ||
+        position.y >= el.position.y + el.dimensions.height + elementGap;
+
+      if (!noOverlap) {
+        return true;
+      }
+    }
+    return false;
   };
 
   // Función para verificar si está dentro del canvas con márgenes
   const isInsideCanvas = (position: Position): boolean => {
     return (
-      position.x >= margin &&
-      position.y >= margin &&
-      position.x + dimensions.width <= canvasWidth - margin &&
-      position.y + dimensions.height <= canvasHeight - margin
+      position.x >= marginH &&
+      position.y >= marginV &&
+      position.x + dimensions.width <= canvasWidth - marginH &&
+      position.y + dimensions.height <= canvasHeight - marginV
     );
   };
 
   // Verificar si el elemento cabe dentro del canvas
   if (
-    dimensions.width > canvasWidth - 2 * margin ||
-    dimensions.height > canvasHeight - 2 * margin
+    dimensions.width > canvasWidth - 2 * marginH ||
+    dimensions.height > canvasHeight - 2 * marginV
   ) {
     return false;
   }
 
-  // Buscar con espaciado fino para determinar si hay espacio (horizontal)
-  const spacing = 10;
-  const maxX = canvasWidth - dimensions.width - margin;
-  const maxY = canvasHeight - dimensions.height - margin;
+  // Buscar con espaciado igual al gap para determinar si hay espacio (horizontal)
+  const spacing = elementGap;
+  const maxX = canvasWidth - dimensions.width - marginH;
+  const maxY = canvasHeight - dimensions.height - marginV;
 
   // Buscar horizontalmente: de izquierda a derecha, luego siguiente fila
-  for (let y = margin; y <= maxY; y += spacing) {
-    for (let x = margin; x <= maxX; x += spacing) {
+  for (let y = marginV; y <= maxY; y += spacing) {
+    for (let x = marginH; x <= maxX; x += spacing) {
       const position = { x, y };
       if (isInsideCanvas(position) && !hasCollision(position)) {
         return true; // Se encontró al menos un espacio libre

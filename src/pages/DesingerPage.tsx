@@ -15,7 +15,7 @@ export const DesignerPage: React.FC = () => {
   useAutoSave(30000);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
       <Header />
       <div className="flex-1 flex overflow-hidden">
         <Toolbar />

@@ -19,45 +19,15 @@ interface UniformElementProps {
 const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
   const [image] = useImage(element.imageUrl || "");
 
-  // Si hay imagen, mostrar la imagen rotada internamente
+  // Si hay imagen, mostrarla sin rotación (la rotación se aplica al Group)
   if (image) {
-    // Rotar la imagen internamente para que el Group mantenga dimensiones correctas
-    const rotation = element.rotation || 0;
-
-    // Posicionamiento según el ángulo de rotación
-    let x = 0;
-    let y = 0;
-    let imgWidth = element.dimensions.width;
-    let imgHeight = element.dimensions.height;
-
-    if (rotation === 90) {
-      // Rotación 90°: imagen rotada a la derecha
-      x = element.dimensions.width;
-      y = 0;
-      imgWidth = element.dimensions.height;
-      imgHeight = element.dimensions.width;
-    } else if (rotation === 180) {
-      // Rotación 180°: imagen invertida
-      x = element.dimensions.width;
-      y = element.dimensions.height;
-      imgWidth = element.dimensions.width;
-      imgHeight = element.dimensions.height;
-    } else if (rotation === 270) {
-      // Rotación 270°: imagen rotada a la izquierda
-      x = 0;
-      y = element.dimensions.height;
-      imgWidth = element.dimensions.height;
-      imgHeight = element.dimensions.width;
-    }
-
     return (
       <KonvaImage
         image={image}
-        x={x}
-        y={y}
-        width={imgWidth}
-        height={imgHeight}
-        rotation={rotation}
+        x={0}
+        y={0}
+        width={element.dimensions.width}
+        height={element.dimensions.height}
         opacity={1}
       />
     );
@@ -124,8 +94,10 @@ export const UniformElement: React.FC<UniformElementProps> = ({
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    const newWidth = Math.max(20, node.width() * scaleX);
-    const newHeight = Math.max(20, node.height() * scaleY);
+    // Usar las dimensiones originales del elemento multiplicadas por la escala
+    // No usar node.width()/height() porque el Group no tiene tamaño explícito
+    const newWidth = Math.max(20, element.dimensions.width * scaleX);
+    const newHeight = Math.max(20, element.dimensions.height * scaleY);
 
     // Verificar que las nuevas dimensiones no excedan el canvas
     const constrainedPosition = constrainToCanvas(
@@ -154,7 +126,7 @@ export const UniformElement: React.FC<UniformElementProps> = ({
       <Group
         x={element.position.x}
         y={element.position.y}
-        // No rotamos el Group, la imagen ya está rotada internamente
+        rotation={element.rotation}
       >
         <UniformShape element={element} />
         {/* Texto de talla en la parte inferior del molde */}
@@ -181,8 +153,7 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         ref={groupRef}
         x={element.position.x}
         y={element.position.y}
-        // No rotamos el Group, la imagen ya está rotada internamente
-        // Esto mantiene las dimensiones correctas para validaciones
+        rotation={element.rotation}
         draggable={!element.locked}
         dragBoundFunc={dragBoundFunc}
         onDragEnd={handleDragEnd}

@@ -1,11 +1,11 @@
 import React, { useRef } from "react";
-import { Stage, Layer, Rect, Line } from "react-konva";
+import { Stage, Layer, Rect } from "react-konva";
 import type Konva from "konva";
 
 import { UniformElement } from "./UniformElement";
 import { TextElementComponent } from "./TextElement";
 import { useDesignerStore } from "../store/desingerStore";
-import { cmToPixels, CANVAS_MARGIN_CM } from "../utils/canvas";
+import { cmToPixels } from "../utils/canvas";
 import { Pagination } from "../components/Pagination";
 
 export const Canvas: React.FC = () => {
@@ -13,7 +13,6 @@ export const Canvas: React.FC = () => {
   const {
     canvasConfig,
     elements,
-    showGrid,
     zoom,
     selectElement,
     selectedElementId,
@@ -27,7 +26,6 @@ export const Canvas: React.FC = () => {
     canvasConfig.height,
     canvasConfig.pixelsPerCm
   );
-  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     // Deseleccionar si se hace clic en el fondo
@@ -36,46 +34,13 @@ export const Canvas: React.FC = () => {
     }
   };
 
-  const renderGrid = () => {
-    if (!showGrid) return null;
-
-    const lines = [];
-    const gridSize = cmToPixels(5, canvasConfig.pixelsPerCm); // Grid cada 5cm
-
-    // Líneas verticales
-    for (let i = 0; i <= canvasWidth; i += gridSize) {
-      lines.push(
-        <Line
-          key={`v-${i}`}
-          points={[i, 0, i, canvasHeight]}
-          stroke="#e0e0e0"
-          strokeWidth={1}
-        />
-      );
-    }
-
-    // Líneas horizontales
-    for (let i = 0; i <= canvasHeight; i += gridSize) {
-      lines.push(
-        <Line
-          key={`h-${i}`}
-          points={[0, i, canvasWidth, i]}
-          stroke="#e0e0e0"
-          strokeWidth={1}
-        />
-      );
-    }
-
-    return lines;
-  };
-
   const totalPages = getTotalPages();
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-100">
-      <div className="flex-1 flex items-center justify-center overflow-hidden p-4">
+    <div className="flex-1 flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex-1 flex items-center justify-center overflow-auto relative">
         <div
-          className="bg-white shadow-lg relative"
+          className="bg-white shadow-2xl rounded-lg relative overflow-hidden"
           style={{
             width: canvasWidth * zoom,
             height: canvasHeight * zoom,
@@ -111,21 +76,6 @@ export const Canvas: React.FC = () => {
               listening={false}
             />
 
-            {/* Área permitida para elementos (con margen de 1cm) */}
-            <Rect
-              x={margin}
-              y={margin}
-              width={canvasWidth - margin * 2}
-              height={canvasHeight - margin * 2}
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dash={[10, 5]}
-              listening={false}
-            />
-
-            {/* Grid */}
-            {renderGrid()}
-
             {/* Elementos */}
             {elements
               .filter(el => el.visible)
@@ -154,20 +104,24 @@ export const Canvas: React.FC = () => {
         </Stage>
         </div>
 
-        {/* Información del canvas */}
-        <div className="absolute bottom-4 left-4 bg-white px-3 py-2 rounded shadow text-sm">
-          <div className="flex gap-4">
-            <span>
-              Tamaño: {canvasConfig.width} × {canvasConfig.height} cm
-            </span>
-            <span>Zoom: {Math.round(zoom * 100)}%</span>
-            <span>Elementos: {elements.length}</span>
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            Los elementos deben permanecer dentro del área azul punteada (margen
-            de 1cm)
+        {/* Información del canvas - Posicionada en la esquina superior derecha */}
+        <div className="absolute top-8 right-8 bg-white/95 backdrop-blur-sm px-4 py-3 rounded-xl shadow-lg border border-gray-200">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-semibold text-gray-700">Tamaño:</span>
+              <span className="text-gray-600">{canvasConfig.width} × {canvasConfig.height} cm</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-semibold text-gray-700">Zoom:</span>
+              <span className="text-gray-600">{Math.round(zoom * 100)}%</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-semibold text-gray-700">Elementos:</span>
+              <span className="text-gray-600">{elements.length}</span>
+            </div>
           </div>
         </div>
+
       </div>
 
       {/* Paginación */}

@@ -9,13 +9,12 @@ import {
   ZoomOut,
   Maximize,
   Settings,
-  GridIcon,
 } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
-import { exportCanvas, exportMultiPagePDF } from "../utils/export";
+import { exportCanvas } from "../utils/export";
 import { Button } from "../components/Button";
 import { LoadingModal } from "../components/LoadingModal";
-import { optimizeLayout } from "../utils/canvas";
+import { optimizeLayoutAdvanced, calculateLayoutMetrics, type LayoutOptions } from "../utils/binPacking";
 
 export const Header: React.FC = () => {
   const {
@@ -23,15 +22,12 @@ export const Header: React.FC = () => {
     redo,
     canUndo,
     canRedo,
-    toggleGrid,
-    showGrid,
     zoom,
     setZoom,
     saveProject,
     elements,
     // setCanvasConfig,
     canvasConfig,
-    pages,
     getTotalPages,
     currentPage,
     setCurrentPage,
@@ -39,9 +35,19 @@ export const Header: React.FC = () => {
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showOptimizeModal, setShowOptimizeModal] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
+  const [layoutMetrics, setLayoutMetrics] = useState<{ efficiency: number; wastedSpace: number; overlap: boolean } | null>(null);
+  const [layoutOptions, setLayoutOptions] = useState<Partial<LayoutOptions>>({
+    elementGap: 5,
+    canvasMargin: 10,
+    canvasMarginV: 0,
+    allowRotation: false,
+    sortStrategy: 'area',
+    heuristic: 'BSSF',
+  });
 
   const handleExport = async (format: "png" | "pdf") => {
     setShowExportModal(false);
@@ -75,11 +81,11 @@ export const Header: React.FC = () => {
           const canvasElement = document.querySelector(".konvajs-content");
           if (canvasElement) {
             // Convertir directamente a imagen sin clonar
-            const { toJpeg } = await import('html-to-image');
-            const dataUrl = await toJpeg(canvasElement as HTMLElement, {
+            // Usar PNG para mayor calidad y pixelRatio alto para mejor resolución
+            const { toPng } = await import('html-to-image');
+            const dataUrl = await toPng(canvasElement as HTMLElement, {
               backgroundColor: '#ffffff',
-              quality: 0.95,
-              pixelRatio: 2,
+              pixelRatio: 4, // Mayor resolución para mantener calidad de los moldes
             });
             pageImages.push(dataUrl);
           }
@@ -89,28 +95,37 @@ export const Header: React.FC = () => {
         setCurrentPage(originalPage);
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Crear el PDF con todas las imágenes capturadas
+        // Crear PDFs separados para cada página
         if (pageImages.length > 0) {
           const { default: jsPDF } = await import('jspdf');
 
           const canvasWidthCm = canvasConfig.width;
           const canvasHeightCm = canvasConfig.height;
+          const timestamp = Date.now();
 
-          const pdf = new jsPDF({
-            orientation: canvasWidthCm > canvasHeightCm ? 'landscape' : 'portrait',
-            unit: 'cm',
-            format: [canvasWidthCm, canvasHeightCm],
-          });
-
-          // Agregar cada imagen al PDF
+          // Crear un PDF separado para cada página
           for (let i = 0; i < pageImages.length; i++) {
-            if (i > 0) {
-              pdf.addPage([canvasWidthCm, canvasHeightCm]);
-            }
-            pdf.addImage(pageImages[i], 'JPEG', 0, 0, canvasWidthCm, canvasHeightCm);
-          }
+            const pdf = new jsPDF({
+              orientation: canvasWidthCm > canvasHeightCm ? 'landscape' : 'portrait',
+              unit: 'cm',
+              format: [canvasWidthCm, canvasHeightCm],
+            });
 
-          pdf.save(`uniform-design-${Date.now()}.pdf`);
+            // Agregar la imagen a este PDF (PNG para mayor calidad)
+            pdf.addImage(pageImages[i], 'PNG', 0, 0, canvasWidthCm, canvasHeightCm);
+
+            // Guardar con nombre único (incluye número de página si hay más de una)
+            const fileName = pageImages.length > 1
+              ? `uniform-design-page-${i + 1}-${timestamp}.pdf`
+              : `uniform-design-${timestamp}.pdf`;
+
+            pdf.save(fileName);
+
+            // Pequeña pausa entre descargas para que el navegador procese cada archivo
+            if (i < pageImages.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 300));
+            }
+          }
         }
 
         // Ocultar loading
@@ -150,13 +165,51 @@ export const Header: React.FC = () => {
   };
 
   const handleOptimizeLayout = () => {
-    const optimized = optimizeLayout(elements, canvasConfig);
-    // Actualizar elementos con nueva disposición
+    // Calcular métricas actuales antes de optimizar
+    const currentMetrics = calculateLayoutMetrics(elements, canvasConfig);
+    setLayoutMetrics(currentMetrics);
+    setShowOptimizeModal(true);
+  };
+
+  const applyOptimization = () => {
+    const result = optimizeLayoutAdvanced(elements, canvasConfig, layoutOptions);
+
+    // Si el resultado tiene múltiples páginas, crear las páginas necesarias
+    const { addPage, pages } = useDesignerStore.getState();
+
+    // Crear páginas adicionales si es necesario
+    while (pages.length < result.pagesUsed) {
+      addPage();
+    }
+
+    // Limpiar todos los elementos actuales de todas las páginas
+    // y agregar los optimizados
+    result.pages.forEach((pageElements) => {
+      pageElements.forEach(el => {
+        useDesignerStore.getState().updateElement(el.id, {
+          position: el.position,
+          dimensions: el.dimensions,
+          rotation: el.rotation,
+        });
+      });
+    });
+
+    // Actualizar elementos de la página actual
+    const optimized = result.pages[0] || [];
     optimized.forEach(el => {
       useDesignerStore.getState().updateElement(el.id, {
         position: el.position,
+        dimensions: el.dimensions,
+        rotation: el.rotation,
       });
     });
+
+    // Mostrar resultados
+    const newMetrics = calculateLayoutMetrics(optimized, canvasConfig);
+    setLayoutMetrics(newMetrics);
+
+    alert(`Optimización completada!\n\nEficiencia: ${result.efficiency.toFixed(1)}%\nPáginas utilizadas: ${result.pagesUsed}\nElementos procesados: ${result.totalElements}`);
+    setShowOptimizeModal(false);
   };
 
   return (
@@ -222,16 +275,6 @@ export const Header: React.FC = () => {
           </Button>
 
           <div className="w-px h-6 bg-gray-300 mx-2" />
-
-          {/* Grid */}
-          <Button
-            size="sm"
-            variant={showGrid ? "default" : "ghost"}
-            onClick={toggleGrid}
-            title="Mostrar/ocultar cuadrícula"
-          >
-            <GridIcon className="w-4 h-4" />
-          </Button>
 
           {/* Optimize Layout */}
           <Button
@@ -318,6 +361,133 @@ export const Header: React.FC = () => {
                   setShowSaveModal(false);
                   setProjectName("");
                 }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Optimize Layout Modal */}
+      {showOptimizeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-[480px] max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Optimizar Disposición</h2>
+
+            {/* Métricas actuales */}
+            {layoutMetrics && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Estado actual</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-gray-500">Eficiencia:</span>
+                    <span className={`ml-2 font-medium ${layoutMetrics.efficiency > 70 ? 'text-green-600' : layoutMetrics.efficiency > 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {layoutMetrics.efficiency.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Superposición:</span>
+                    <span className={`ml-2 font-medium ${layoutMetrics.overlap ? 'text-red-600' : 'text-green-600'}`}>
+                      {layoutMetrics.overlap ? 'Sí' : 'No'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Opciones de configuración */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Estrategia de ordenamiento
+                </label>
+                <select
+                  value={layoutOptions.sortStrategy}
+                  onChange={e => setLayoutOptions({ ...layoutOptions, sortStrategy: e.target.value as LayoutOptions['sortStrategy'] })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="area">Por área (mayor a menor)</option>
+                  <option value="height">Por altura (mayor a menor)</option>
+                  <option value="width">Por ancho (mayor a menor)</option>
+                  <option value="perimeter">Por perímetro (mayor a menor)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Heurística de colocación
+                </label>
+                <select
+                  value={layoutOptions.heuristic}
+                  onChange={e => setLayoutOptions({ ...layoutOptions, heuristic: e.target.value as LayoutOptions['heuristic'] })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="BSSF">Best Short Side Fit (recomendado)</option>
+                  <option value="BLSF">Best Long Side Fit</option>
+                  <option value="BAF">Best Area Fit</option>
+                  <option value="BL">Bottom-Left</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Separación (px)
+                  </label>
+                  <input
+                    type="number"
+                    value={layoutOptions.elementGap}
+                    onChange={e => setLayoutOptions({ ...layoutOptions, elementGap: Number(e.target.value) })}
+                    min={0}
+                    max={50}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Margen (px)
+                  </label>
+                  <input
+                    type="number"
+                    value={layoutOptions.canvasMargin}
+                    onChange={e => setLayoutOptions({ ...layoutOptions, canvasMargin: Number(e.target.value) })}
+                    min={0}
+                    max={100}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="allowRotation"
+                  checked={layoutOptions.allowRotation}
+                  onChange={e => setLayoutOptions({ ...layoutOptions, allowRotation: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                />
+                <label htmlFor="allowRotation" className="ml-2 text-sm text-gray-700">
+                  Permitir rotación de elementos (90°)
+                </label>
+              </div>
+            </div>
+
+            {/* Descripción del algoritmo */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-xs text-blue-800">
+                <strong>Algoritmo MaxRects:</strong> Utiliza un algoritmo avanzado de bin-packing que mantiene una lista de espacios libres máximos para optimizar el aprovechamiento del espacio. Eficiencia típica: 80-95%.
+              </p>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <Button className="flex-1" onClick={applyOptimization}>
+                Aplicar Optimización
+              </Button>
+              <Button
+                className="flex-1"
+                variant="ghost"
+                onClick={() => setShowOptimizeModal(false)}
               >
                 Cancelar
               </Button>

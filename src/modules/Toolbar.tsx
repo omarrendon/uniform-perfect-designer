@@ -12,6 +12,8 @@ import {
   ArrowUp,
   ArrowDown,
   FileUp,
+  Plus,
+  Settings,
 } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
 import type {
@@ -31,9 +33,6 @@ import {
   getValidFontOrFallback,
   GOOGLE_FONTS,
 } from "../utils/fontLoader";
-import { Button } from "../components/Button";
-import { Select } from "../components/Select";
-import { Input } from "../components/Input";
 
 export const Toolbar: React.FC = () => {
   const {
@@ -49,7 +48,7 @@ export const Toolbar: React.FC = () => {
     canvasConfig,
   } = useDesignerStore();
 
-  const [activeTab, setActiveTab] = useState<"add" | "edit">("add");
+  const [activeSection, setActiveSection] = useState<"add" | "edit">("add");
 
   const selectedElement = elements.find(el => el.id === selectedElementId);
 
@@ -177,7 +176,7 @@ export const Toolbar: React.FC = () => {
       // Obtener el estado actual
       const { canvasConfig, addPage } = useDesignerStore.getState();
 
-      // Función para mapear talla del Excel a nombre de archivo
+      // Función para mapear talla del Excel a nombre de archivo (para espalda)
       const mapSizeToMoldeName = (tallaExcel: string): string => {
         const talla = tallaExcel.toLowerCase().trim();
         const sizeMap: Record<string, string> = {
@@ -192,16 +191,32 @@ export const Toolbar: React.FC = () => {
         return sizeMap[talla] || "M"; // Default a M si no se reconoce
       };
 
+      // Función para obtener el molde de frente según la talla
+      // Solo CH, M y G usan las imágenes TALLA, las demás usan CAB FRENTE
+      const getMoldeFrenteUrl = (tallaExcel: string, moldeSize: string): string => {
+        const talla = tallaExcel.toLowerCase().trim();
+        // Solo estas tallas específicas usan los moldes TALLA
+        if (talla === "ch") {
+          return "/moldes/TALLA CH.png";
+        } else if (talla === "m") {
+          return "/moldes/TALLA M.png";
+        } else if (talla === "g") {
+          return "/moldes/TALLA G.png";
+        }
+        // Las demás tallas usan los moldes CAB FRENTE originales
+        return `/moldes/${moldeSize} CAB FRENTE.png`;
+      };
+
       // Función para obtener la configuración de talla
       const getSizeConfig = (tallaExcel: string) => {
-        const talla = tallaExcel.toUpperCase().trim() as Size;
-        const validSizes: Size[] = ["XS", "S", "M", "L", "XL"];
+        const tallaUpper = tallaExcel.toUpperCase().trim();
 
         // Para 2XL y 3XL, usar XL como base
-        if (talla === "2XL" || talla === "3XL") {
+        if (tallaUpper === "2XL" || tallaUpper === "3XL") {
           return sizeConfigs.find(s => s.size === "XL") || sizeConfigs[2];
         }
 
+        const talla = tallaUpper as Size;
         return (
           sizeConfigs.find(s => s.size === talla) || sizeConfigs[2]
         ); // Default M
@@ -368,7 +383,7 @@ export const Toolbar: React.FC = () => {
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: `/moldes/${moldeSize} CAB FRENTE.png`,
+          imageUrl: getMoldeFrenteUrl(tallaExcel, moldeSize),
         };
 
         currentElements.push(newJerseyFrente);
@@ -422,35 +437,46 @@ export const Toolbar: React.FC = () => {
     event.target.value = "";
   };
 
+  // Abrir sección de edición automáticamente cuando se selecciona un elemento
+  React.useEffect(() => {
+    if (selectedElement) {
+      setActiveSection("edit");
+    }
+  }, [selectedElement]);
+
   return (
-    <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200">
-        <button
-          className={`flex-1 py-3 text-sm font-medium ${
-            activeTab === "add"
-              ? "text-blue-600 border-b-2 border-blue-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-          onClick={() => setActiveTab("add")}
-        >
-          Agregar
-        </button>
-        <button
-          className={`flex-1 py-3 text-sm font-medium ${
-            activeTab === "edit"
-              ? "text-blue-600 border-b-2 border-blue-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-          onClick={() => setActiveTab("edit")}
-        >
-          Editar
-        </button>
+    <div className="w-1/4 min-w-[300px] max-w-[400px] bg-white border-r border-gray-200 flex flex-col shadow-lg">
+      {/* Header con pestañas */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveSection("add")}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+              activeSection === "add"
+                ? "bg-white text-blue-700 shadow-lg"
+                : "bg-blue-500/30 text-white hover:bg-blue-500/50"
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            Agregar
+          </button>
+          <button
+            onClick={() => setActiveSection("edit")}
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+              activeSection === "edit"
+                ? "bg-white text-blue-700 shadow-lg"
+                : "bg-blue-500/30 text-white hover:bg-blue-500/50"
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            Editar
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {activeTab === "add" ? (
+      {/* Contenido */}
+      <div className="flex-1 overflow-y-auto p-5">
+        {activeSection === "add" ? (
           <AddTab
             onAddUniform={handleAddUniform}
             onAddText={handleAddText}
@@ -493,43 +519,72 @@ const AddTab: React.FC<{
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Uniformes */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Uniformes</h3>
-        <div className="space-y-2">
-          <Button
-            className="w-full justify-start"
-            variant="outline"
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+          Uniformes
+        </h3>
+        <div className="space-y-2.5">
+          <button
             onClick={() => onAddUniform("jersey")}
             disabled={!canAddJersey}
+            className="w-full group relative overflow-hidden bg-gradient-to-r from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 disabled:from-gray-50 disabled:to-gray-100 border border-blue-200 disabled:border-gray-200 rounded-xl p-4 transition-all duration-200 hover:shadow-md disabled:cursor-not-allowed"
           >
-            <Shirt className="w-4 h-4 mr-2" />
-            Agregar Playera
-          </Button>
-          {!canAddJersey && (
-            <p className="text-xs text-red-500 mt-1">
-              No hay espacio disponible en el canvas
-            </p>
-          )}
-          <Button
-            className="w-full justify-start"
-            variant="outline"
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 group-hover:bg-blue-700 group-disabled:bg-gray-400 rounded-lg flex items-center justify-center transition-colors">
+                <Shirt className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left flex-1">
+                <p className="font-semibold text-gray-800 group-disabled:text-gray-500">
+                  Agregar Playera
+                </p>
+                <p className="text-xs text-gray-600 group-disabled:text-gray-400">
+                  Molde de jersey
+                </p>
+              </div>
+            </div>
+            {!canAddJersey && (
+              <div className="absolute bottom-1 right-3">
+                <span className="text-[10px] font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                  Sin espacio
+                </span>
+              </div>
+            )}
+          </button>
+
+          <button
             onClick={() => onAddUniform("shorts")}
             disabled={!canAddShorts}
+            className="w-full group relative overflow-hidden bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 disabled:from-gray-50 disabled:to-gray-100 border border-purple-200 disabled:border-gray-200 rounded-xl p-4 transition-all duration-200 hover:shadow-md disabled:cursor-not-allowed"
           >
-            <Shirt className="w-4 h-4 mr-2" />
-            Agregar Short
-          </Button>
-          {!canAddShorts && (
-            <p className="text-xs text-red-500 mt-1">
-              No hay espacio disponible en el canvas
-            </p>
-          )}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-purple-600 group-hover:bg-purple-700 group-disabled:bg-gray-400 rounded-lg flex items-center justify-center transition-colors">
+                <Shirt className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left flex-1">
+                <p className="font-semibold text-gray-800 group-disabled:text-gray-500">
+                  Agregar Short
+                </p>
+                <p className="text-xs text-gray-600 group-disabled:text-gray-400">
+                  Molde de short
+                </p>
+              </div>
+            </div>
+            {!canAddShorts && (
+              <div className="absolute bottom-1 right-3">
+                <span className="text-[10px] font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                  Sin espacio
+                </span>
+              </div>
+            )}
+          </button>
         </div>
       </div>
 
+      {/* Carga Masiva */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
           Carga Masiva
         </h3>
         <input
@@ -539,38 +594,65 @@ const AddTab: React.FC<{
           onChange={onExcelUpload}
           style={{ display: "none" }}
         />
-        <Button
-          className="w-full justify-start"
-          variant="outline"
+        <button
           onClick={handleExcelButtonClick}
+          className="w-full group bg-gradient-to-r from-green-50 to-emerald-100 hover:from-green-100 hover:to-emerald-200 border border-green-200 rounded-xl p-4 transition-all duration-200 hover:shadow-md"
         >
-          <FileUp className="w-4 h-4 mr-2" />
-          Cargar desde Excel
-        </Button>
-        <p className="text-xs text-gray-500 mt-1">
-          Carga un archivo Excel con columnas: "nombre", "talla" (xs, s, m, l, xl, 2xl, 3xl), "numero_trasero" (opcional), "numero_frente" (opcional) y "fuente" (opcional: Roboto, Montserrat, etc.)
-        </p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-600 group-hover:bg-green-700 rounded-lg flex items-center justify-center transition-colors">
+              <FileUp className="w-5 h-5 text-white" />
+            </div>
+            <div className="text-left flex-1">
+              <p className="font-semibold text-gray-800">Cargar desde Excel</p>
+              <p className="text-xs text-gray-600">Importar múltiples diseños</p>
+            </div>
+          </div>
+        </button>
+        <div className="mt-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+          <p className="text-xs text-blue-800 leading-relaxed">
+            <span className="font-semibold">Columnas requeridas:</span> nombre, talla
+            <br />
+            <span className="font-semibold">Columnas opcionales:</span> numero_trasero, numero_frente, fuente
+          </p>
+        </div>
       </div>
 
+      {/* Texto */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Texto</h3>
-        <Button
-          className="w-full justify-start"
-          variant="outline"
-          onClick={onAddText}
-        >
-          <Type className="w-4 h-4 mr-2" />
-          Agregar Texto
-        </Button>
-      </div>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+          Elementos
+        </h3>
+        <div className="space-y-2.5">
+          <button
+            onClick={onAddText}
+            className="w-full group bg-gradient-to-r from-orange-50 to-amber-100 hover:from-orange-100 hover:to-amber-200 border border-orange-200 rounded-xl p-4 transition-all duration-200 hover:shadow-md"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-600 group-hover:bg-orange-700 rounded-lg flex items-center justify-center transition-colors">
+                <Type className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left flex-1">
+                <p className="font-semibold text-gray-800">Agregar Texto</p>
+                <p className="text-xs text-gray-600">Texto personalizado</p>
+              </div>
+            </div>
+          </button>
 
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Imagen</h3>
-        <Button className="w-full justify-start" variant="outline" disabled>
-          <ImageIcon className="w-4 h-4 mr-2" />
-          Agregar Imagen
-        </Button>
-        <p className="text-xs text-gray-500 mt-1">Próximamente</p>
+          <button
+            disabled
+            className="w-full group bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-xl p-4 cursor-not-allowed opacity-60"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gray-400 rounded-lg flex items-center justify-center">
+                <ImageIcon className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left flex-1">
+                <p className="font-semibold text-gray-600">Agregar Imagen</p>
+                <p className="text-xs text-gray-500">Próximamente</p>
+              </div>
+            </div>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -595,8 +677,16 @@ const EditTab: React.FC<{
 
   if (!element) {
     return (
-      <div className="text-center text-gray-500 py-8">
-        Selecciona un elemento para editarlo
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+          <Settings className="w-10 h-10 text-gray-400" />
+        </div>
+        <p className="text-sm font-medium text-gray-600 text-center">
+          Selecciona un elemento en el canvas
+        </p>
+        <p className="text-xs text-gray-500 text-center mt-2">
+          Haz clic en cualquier elemento para editarlo
+        </p>
       </div>
     );
   }
@@ -622,97 +712,156 @@ const EditTab: React.FC<{
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Indicador de tipo de elemento */}
+      <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl">
+        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+          {element.type === "uniform" ? "Uniforme" : "Texto"} Seleccionado
+        </p>
+        <p className="text-xs text-blue-600 mt-0.5">
+          {element.type === "uniform"
+            ? `${element.part === "jersey" ? "Playera" : "Short"} - Talla ${element.size}`
+            : element.type === "text"
+            ? element.content
+            : "Imagen"}
+        </p>
+      </div>
+
+      {/* Acciones Rápidas */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Acciones</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+          Acciones Rápidas
+        </h3>
         <div className="grid grid-cols-2 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
+          <button
             onClick={() => onDuplicate(element.id)}
+            className="flex items-center justify-center gap-2 p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
           >
-            <Copy className="w-4 h-4 mr-1" />
-            Duplicar
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
+            <Copy className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-700">Duplicar</span>
+          </button>
+          <button
             onClick={() => onDelete(element.id)}
+            className="flex items-center justify-center gap-2 p-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
           >
-            <Trash2 className="w-4 h-4 mr-1" />
-            Eliminar
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+            <Trash2 className="w-4 h-4 text-red-600" />
+            <span className="text-sm font-medium text-red-700">Eliminar</span>
+          </button>
+          <button
             onClick={() => onUpdate(element.id, { visible: !element.visible })}
+            className={`flex items-center justify-center gap-2 p-3 border rounded-lg transition-colors ${
+              element.visible
+                ? "bg-green-50 hover:bg-green-100 border-green-200"
+                : "bg-gray-50 hover:bg-gray-100 border-gray-200"
+            }`}
           >
             {element.visible ? (
-              <Eye className="w-4 h-4 mr-1" />
+              <>
+                <Eye className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700">Visible</span>
+              </>
             ) : (
-              <EyeOff className="w-4 h-4 mr-1" />
+              <>
+                <EyeOff className="w-4 h-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">Oculto</span>
+              </>
             )}
-            {element.visible ? "Ocultar" : "Mostrar"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+          </button>
+          <button
             onClick={() => onUpdate(element.id, { locked: !element.locked })}
+            className={`flex items-center justify-center gap-2 p-3 border rounded-lg transition-colors ${
+              element.locked
+                ? "bg-orange-50 hover:bg-orange-100 border-orange-200"
+                : "bg-gray-50 hover:bg-gray-100 border-gray-200"
+            }`}
           >
             {element.locked ? (
-              <Lock className="w-4 h-4 mr-1" />
+              <>
+                <Lock className="w-4 h-4 text-orange-600" />
+                <span className="text-sm font-medium text-orange-700">Bloqueado</span>
+              </>
             ) : (
-              <Unlock className="w-4 h-4 mr-1" />
+              <>
+                <Unlock className="w-4 h-4 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">Libre</span>
+              </>
             )}
-            {element.locked ? "Bloqueado" : "Desbloquear"}
-          </Button>
+          </button>
         </div>
       </div>
 
+      {/* Capas */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-2">Capas</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+          Orden de Capas
+        </h3>
         <div className="grid grid-cols-2 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
+          <button
             onClick={() => onBringToFront(element.id)}
+            className="flex items-center justify-center gap-2 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
           >
-            <ArrowUp className="w-4 h-4 mr-1" />
-            Al frente
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+            <ArrowUp className="w-4 h-4 text-indigo-600" />
+            <span className="text-sm font-medium text-indigo-700">Al frente</span>
+          </button>
+          <button
             onClick={() => onSendToBack(element.id)}
+            className="flex items-center justify-center gap-2 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
           >
-            <ArrowDown className="w-4 h-4 mr-1" />
-            Atrás
-          </Button>
+            <ArrowDown className="w-4 h-4 text-indigo-600" />
+            <span className="text-sm font-medium text-indigo-700">Atrás</span>
+          </button>
         </div>
       </div>
 
       {element.type === "uniform" && (
         <>
           <div>
-            <Select
-              label="Talla"
-              value={element.size}
-              onChange={e => handleSizeChange(e.target.value as Size)}
-              options={sizes.map(s => ({ value: s, label: s }))}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Color Base
-            </label>
-            <input
-              type="color"
-              value={element.baseColor}
-              onChange={e =>
-                onUpdate(element.id, { baseColor: e.target.value })
-              }
-              className="w-full h-10 rounded border border-gray-300"
-            />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+              Propiedades del Uniforme
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">
+                  Talla
+                </label>
+                <select
+                  value={element.size}
+                  onChange={e => handleSizeChange(e.target.value as Size)}
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                >
+                  {sizes.map(s => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">
+                  Color Base
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={element.baseColor}
+                    onChange={e =>
+                      onUpdate(element.id, { baseColor: e.target.value })
+                    }
+                    className="w-12 h-12 rounded-lg border-2 border-gray-300 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={element.baseColor}
+                      onChange={e =>
+                        onUpdate(element.id, { baseColor: e.target.value })
+                      }
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-mono text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -720,106 +869,152 @@ const EditTab: React.FC<{
       {element.type === "text" && (
         <>
           <div>
-            <Input
-              label="Texto"
-              value={element.content}
-              onChange={e => onUpdate(element.id, { content: e.target.value })}
-            />
-          </div>
-          <div>
-            <Input
-              label="Tamaño"
-              type="number"
-              value={element.fontSize}
-              onChange={e =>
-                onUpdate(element.id, { fontSize: Number(e.target.value) })
-              }
-              min={10}
-              max={200}
-            />
-          </div>
-          <div>
-            <Select
-              label="Fuente"
-              value={element.fontFamily}
-              onChange={async e => {
-                const newFont = e.target.value;
-                // Cargar la fuente de Google si no es Arial
-                if (newFont !== "Arial") {
-                  await loadGoogleFont(newFont);
-                }
-                onUpdate(element.id, { fontFamily: newFont });
-              }}
-              options={GOOGLE_FONTS.map(font => ({
-                value: font,
-                label: font,
-              }))}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Fuentes de Google Fonts
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Color
-            </label>
-            <input
-              type="color"
-              value={element.fontColor}
-              onChange={e =>
-                onUpdate(element.id, { fontColor: e.target.value })
-              }
-              className="w-full h-10 rounded border border-gray-300"
-            />
-          </div>
-          <div>
-            <Select
-              label="Alineación"
-              value={element.textAlign}
-              onChange={e =>
-                onUpdate(element.id, {
-                  textAlign: e.target.value as "left" | "center" | "right",
-                })
-              }
-              options={[
-                { value: "left", label: "Izquierda" },
-                { value: "center", label: "Centro" },
-                { value: "right", label: "Derecha" },
-              ]}
-            />
-          </div>
-          <div>
-            <Select
-              label="Peso"
-              value={element.fontWeight}
-              onChange={e =>
-                onUpdate(element.id, {
-                  fontWeight: e.target.value as "normal" | "bold",
-                })
-              }
-              options={[
-                { value: "normal", label: "Normal" },
-                { value: "bold", label: "Negrita" },
-              ]}
-            />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+              Propiedades del Texto
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">
+                  Contenido
+                </label>
+                <input
+                  type="text"
+                  value={element.content}
+                  onChange={e => onUpdate(element.id, { content: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">
+                    Tamaño
+                  </label>
+                  <input
+                    type="number"
+                    value={element.fontSize}
+                    onChange={e =>
+                      onUpdate(element.id, { fontSize: Number(e.target.value) })
+                    }
+                    min={10}
+                    max={200}
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">
+                    Color
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={element.fontColor}
+                      onChange={e =>
+                        onUpdate(element.id, { fontColor: e.target.value })
+                      }
+                      className="w-full h-10 rounded-lg border-2 border-gray-300 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-2">
+                  Fuente
+                </label>
+                <select
+                  value={element.fontFamily}
+                  onChange={async e => {
+                    const newFont = e.target.value;
+                    if (newFont !== "Arial") {
+                      await loadGoogleFont(newFont);
+                    }
+                    onUpdate(element.id, { fontFamily: newFont });
+                  }}
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                >
+                  {GOOGLE_FONTS.map(font => (
+                    <option key={font} value={font} style={{ fontFamily: font }}>
+                      {font}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-500 mt-1.5">
+                  Google Fonts disponibles
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">
+                    Alineación
+                  </label>
+                  <select
+                    value={element.textAlign}
+                    onChange={e =>
+                      onUpdate(element.id, {
+                        textAlign: e.target.value as "left" | "center" | "right",
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="left">Izquierda</option>
+                    <option value="center">Centro</option>
+                    <option value="right">Derecha</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-2">
+                    Peso
+                  </label>
+                  <select
+                    value={element.fontWeight}
+                    onChange={e =>
+                      onUpdate(element.id, {
+                        fontWeight: e.target.value as "normal" | "bold",
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="bold">Negrita</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </>
       )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Rotación: {element.rotation}°
-        </label>
-        <input
-          type="range"
-          min="0"
-          max="360"
-          value={element.rotation}
-          onChange={e =>
-            onUpdate(element.id, { rotation: Number(e.target.value) })
-          }
-          className="w-full"
-        />
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+          Transformación
+        </h3>
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-600">
+                Rotación
+              </label>
+              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
+                {element.rotation}°
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="360"
+              value={element.rotation}
+              onChange={e =>
+                onUpdate(element.id, { rotation: Number(e.target.value) })
+              }
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+              style={{
+                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(element.rotation / 360) * 100}%, #e5e7eb ${(element.rotation / 360) * 100}%, #e5e7eb 100%)`
+              }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
