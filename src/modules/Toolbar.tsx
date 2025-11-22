@@ -207,6 +207,26 @@ export const Toolbar: React.FC = () => {
         return `/moldes/${moldeSize} CAB FRENTE.png`;
       };
 
+      // Función para obtener el molde de short según la talla
+      // Retorna la URL y las dimensiones originales de la imagen (sin escalar)
+      const getShortConfig = (tallaExcel: string): { url: string; width: number; height: number } => {
+        const talla = tallaExcel.toLowerCase().trim();
+        // Dimensiones originales de las imágenes de shorts
+        if (talla === "xs" || talla === "ch" || talla === "s") {
+          return { url: "/moldes/XS SHORT.png", width: 312, height: 218 };
+        } else if (talla === "m") {
+          return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
+        } else if (talla === "l" || talla === "g") {
+          return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
+        } else if (talla === "xl") {
+          return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
+        } else if (talla === "2xl" || talla === "3xl") {
+          return { url: "/moldes/2 XL SHORT.png", width: 399, height: 278 };
+        }
+        // Default a XL SHORT
+        return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
+      };
+
       // Función para obtener la configuración de talla
       const getSizeConfig = (tallaExcel: string) => {
         const tallaUpper = tallaExcel.toUpperCase().trim();
@@ -434,10 +454,99 @@ export const Toolbar: React.FC = () => {
           currentElements.push(newTextoNumeroFrente);
           addElement(newTextoNumeroFrente, currentPageIndex);
         }
+
+        // 3. Crear SHORT 1 (primer molde del par)
+        // Obtener configuración del short (URL y dimensiones reales)
+        const shortConfig = getShortConfig(tallaExcel);
+        const shortsDimensions = {
+          width: shortConfig.width,
+          height: shortConfig.height,
+        };
+
+        // Filtrar solo los uniformes para el cálculo de posición
+        const uniformElementsForShort1 = currentElements.filter(el => el.type === "uniform");
+
+        // Verificar que haya espacio para el short 1
+        if (
+          !hasSpaceForElement(shortsDimensions, uniformElementsForShort1, canvasConfig)
+        ) {
+          // No hay espacio en la página actual, crear una nueva página
+          addPage();
+          currentPageIndex++;
+          currentElements = []; // Resetear elementos para la nueva página vacía
+        }
+
+        // Filtrar de nuevo después de posible reset
+        const uniformElementsForShort1Pos = currentElements.filter(el => el.type === "uniform");
+
+        const short1Position = findValidPosition(
+          shortsDimensions,
+          uniformElementsForShort1Pos,
+          canvasConfig
+        );
+
+        const newShort1: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "shorts",
+          size: sizeConfig.size,
+          position: short1Position,
+          dimensions: shortsDimensions,
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#3b82f6",
+          imageUrl: shortConfig.url,
+        };
+
+        currentElements.push(newShort1);
+        addElement(newShort1, currentPageIndex);
+
+        // 4. Crear SHORT 2 (segundo molde del par)
+        // Filtrar solo los uniformes para el cálculo de posición
+        const uniformElementsForShort2 = currentElements.filter(el => el.type === "uniform");
+
+        // Verificar que haya espacio para el short 2
+        if (
+          !hasSpaceForElement(shortsDimensions, uniformElementsForShort2, canvasConfig)
+        ) {
+          // No hay espacio en la página actual, crear una nueva página
+          addPage();
+          currentPageIndex++;
+          currentElements = []; // Resetear elementos para la nueva página vacía
+        }
+
+        // Filtrar de nuevo después de posible reset
+        const uniformElementsForShort2Pos = currentElements.filter(el => el.type === "uniform");
+
+        const short2Position = findValidPosition(
+          shortsDimensions,
+          uniformElementsForShort2Pos,
+          canvasConfig
+        );
+
+        const newShort2: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "shorts",
+          size: sizeConfig.size,
+          position: short2Position,
+          dimensions: shortsDimensions,
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#3b82f6",
+          imageUrl: shortConfig.url,
+        };
+
+        currentElements.push(newShort2);
+        addElement(newShort2, currentPageIndex);
       }
 
       const totalPagesUsed = currentPageIndex + 1;
-      alert(`Se crearon ${rows.length} juegos de playeras (espalda + frente) exitosamente en ${totalPagesUsed} página(s)!`);
+      alert(`Se crearon ${rows.length} juegos completos (espalda + frente + 2 shorts) exitosamente en ${totalPagesUsed} página(s)!`);
     } catch (error) {
       console.error("Error al procesar el archivo Excel:", error);
       alert(
