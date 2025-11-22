@@ -25,6 +25,7 @@ import type {
 import {
   generateId,
   findValidPosition,
+  findValidPositionOnSide,
   hasSpaceForElement,
 } from "../utils/canvas";
 import { readExcelFile, validateExcelFile } from "../utils/excelReader";
@@ -259,6 +260,8 @@ export const Toolbar: React.FC = () => {
         const tallaExcel = row.talla || "m";
         const moldeSize = mapSizeToMoldeName(tallaExcel);
         const sizeConfig = getSizeConfig(tallaExcel);
+        // Talla para mostrar en el molde (usar la talla original del Excel en mayúsculas)
+        const tallaMostrar = tallaExcel.toUpperCase().trim();
 
         // Obtener la fuente de la fila (default "Arial" si no existe)
         const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
@@ -291,17 +294,19 @@ export const Toolbar: React.FC = () => {
         // Filtrar de nuevo después de posible reset
         const uniformElementsForEspalda = currentElements.filter(el => el.type === "uniform");
 
-        const jerseyEspalda = findValidPosition(
+        // Playeras van del lado izquierdo
+        const jerseyEspalda = findValidPositionOnSide(
           jerseyDimensions,
           uniformElementsForEspalda,
-          canvasConfig
+          canvasConfig,
+          'left'
         );
 
         const newJerseyEspalda: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
           part: "jersey",
-          size: sizeConfig.size,
+          size: tallaMostrar as any,
           position: jerseyEspalda,
           dimensions: jerseyDimensions,
           rotation: 0, // Sin rotación
@@ -326,7 +331,7 @@ export const Toolbar: React.FC = () => {
           id: generateId("text"),
           type: "text",
           part: "jersey",
-          size: sizeConfig.size,
+          size: tallaMostrar as any,
           position: textoPosition,
           dimensions: textoDimensions,
           rotation: 0,
@@ -359,7 +364,7 @@ export const Toolbar: React.FC = () => {
             id: generateId("text"),
             type: "text",
             part: "jersey",
-            size: sizeConfig.size,
+            size: tallaMostrar as any,
             position: numeroTextoPosition,
             dimensions: numeroTextoDimensions,
             rotation: 0,
@@ -397,17 +402,19 @@ export const Toolbar: React.FC = () => {
         // Filtrar de nuevo después de posible reset
         const uniformElementsForFrentePos = currentElements.filter(el => el.type === "uniform");
 
-        const jerseyFrente = findValidPosition(
+        // Playeras van del lado izquierdo
+        const jerseyFrente = findValidPositionOnSide(
           jerseyDimensions,
           uniformElementsForFrentePos,
-          canvasConfig
+          canvasConfig,
+          'left'
         );
 
         const newJerseyFrente: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
           part: "jersey",
-          size: sizeConfig.size,
+          size: tallaMostrar as any,
           position: jerseyFrente,
           dimensions: jerseyDimensions,
           rotation: 0, // Sin rotación
@@ -434,7 +441,7 @@ export const Toolbar: React.FC = () => {
             id: generateId("text"),
             type: "text",
             part: "jersey",
-            size: sizeConfig.size,
+            size: tallaMostrar as any,
             position: numeroFrenteTextoPosition,
             dimensions: numeroFrenteTextoDimensions,
             rotation: 0,
@@ -479,17 +486,19 @@ export const Toolbar: React.FC = () => {
         // Filtrar de nuevo después de posible reset
         const uniformElementsForShort1Pos = currentElements.filter(el => el.type === "uniform");
 
-        const short1Position = findValidPosition(
+        // Shorts van del lado derecho
+        const short1Position = findValidPositionOnSide(
           shortsDimensions,
           uniformElementsForShort1Pos,
-          canvasConfig
+          canvasConfig,
+          'right'
         );
 
         const newShort1: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
           part: "shorts",
-          size: sizeConfig.size,
+          size: tallaMostrar as any,
           position: short1Position,
           dimensions: shortsDimensions,
           rotation: 0,
@@ -520,17 +529,19 @@ export const Toolbar: React.FC = () => {
         // Filtrar de nuevo después de posible reset
         const uniformElementsForShort2Pos = currentElements.filter(el => el.type === "uniform");
 
-        const short2Position = findValidPosition(
+        // Shorts van del lado derecho
+        const short2Position = findValidPositionOnSide(
           shortsDimensions,
           uniformElementsForShort2Pos,
-          canvasConfig
+          canvasConfig,
+          'right'
         );
 
         const newShort2: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
           part: "shorts",
-          size: sizeConfig.size,
+          size: tallaMostrar as any,
           position: short2Position,
           dimensions: shortsDimensions,
           rotation: 0,

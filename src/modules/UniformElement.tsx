@@ -132,16 +132,14 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         {/* Texto de talla en la parte inferior del molde */}
         <Text
           x={0}
-          y={element.dimensions.height - 34}
+          y={element.dimensions.height - 11}
           width={element.dimensions.width}
-          text={element.size}
-          fontSize={24}
+          text={`Talla ${element.size}`}
+          fontSize={9}
           fontFamily="Arial"
           fontStyle="bold"
           fill="black"
           align="center"
-          stroke="white"
-          strokeWidth={3}
         />
       </Group>
     );
@@ -165,16 +163,14 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         {/* Texto de talla en la parte inferior del molde */}
         <Text
           x={0}
-          y={element.dimensions.height - 34}
+          y={element.dimensions.height - 11}
           width={element.dimensions.width}
-          text={element.size}
-          fontSize={24}
+          text={`Talla ${element.size}`}
+          fontSize={9}
           fontFamily="Arial"
           fontStyle="bold"
           fill="black"
           align="center"
-          stroke="white"
-          strokeWidth={3}
         />
       </Group>
 

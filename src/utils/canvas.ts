@@ -214,6 +214,92 @@ export const constrainToCanvas = (
 };
 
 /**
+ * Encuentra una posición válida en un lado específico del canvas
+ * side: 'left' = lado izquierdo, 'right' = lado derecho
+ */
+export const findValidPositionOnSide = (
+  dimensions: Dimensions,
+  existingElements: CanvasElement[],
+  canvasConfig: CanvasConfig,
+  side: 'left' | 'right'
+): Position => {
+  const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
+  const canvasHeight = cmToPixels(canvasConfig.height, canvasConfig.pixelsPerCm);
+  const elementGap = 5;
+
+  // Dividir el canvas en dos mitades
+  const midPoint = canvasWidth / 2;
+
+  // Definir límites según el lado
+  const minX = side === 'left' ? 0 : midPoint;
+  const maxX = side === 'left' ? midPoint - dimensions.width : canvasWidth - dimensions.width;
+  const maxY = canvasHeight - dimensions.height;
+
+  // Función de colisión
+  const hasCollision = (position: Position): boolean => {
+    for (const el of existingElements) {
+      if (!el.visible) continue;
+      const noOverlap =
+        position.x + dimensions.width + elementGap <= el.position.x ||
+        position.x >= el.position.x + el.dimensions.width + elementGap ||
+        position.y + dimensions.height + elementGap <= el.position.y ||
+        position.y >= el.position.y + el.dimensions.height + elementGap;
+      if (!noOverlap) return true;
+    }
+    return false;
+  };
+
+  // Función para verificar si está dentro del área permitida
+  const isInsideArea = (position: Position): boolean => {
+    return (
+      position.x >= minX &&
+      position.x <= maxX &&
+      position.y >= 0 &&
+      position.y <= maxY
+    );
+  };
+
+  // Generar posiciones candidatas basadas en los bordes de elementos existentes
+  const candidateX: number[] = [minX];
+  const candidateY: number[] = [0];
+
+  for (const el of existingElements) {
+    if (!el.visible) continue;
+    const nextX = el.position.x + el.dimensions.width + elementGap;
+    const nextY = el.position.y + el.dimensions.height + elementGap;
+    if (nextX >= minX && nextX <= maxX) candidateX.push(nextX);
+    if (nextY <= maxY) candidateY.push(nextY);
+  }
+
+  // Ordenar candidatos
+  const uniqueX = [...new Set(candidateX)].sort((a, b) => a - b);
+  const uniqueY = [...new Set(candidateY)].sort((a, b) => a - b);
+
+  // Buscar posición válida
+  for (const y of uniqueY) {
+    for (const x of uniqueX) {
+      const position = { x, y };
+      if (isInsideArea(position) && !hasCollision(position)) {
+        return position;
+      }
+    }
+  }
+
+  // Búsqueda fina si no se encontró
+  for (let y = 0; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const position = { x, y };
+      if (isInsideArea(position) && !hasCollision(position)) {
+        return position;
+      }
+    }
+  }
+
+  // Default: esquina del lado correspondiente
+  return { x: minX, y: 0 };
+};
+
+/**
  * Encuentra una posición válida para un nuevo elemento evitando colisiones
  * con elementos existentes
  */
