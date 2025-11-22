@@ -49,11 +49,11 @@ export const optimizeLayout = (
   // Usar el nuevo algoritmo MaxRects optimizado
   return optimizeLayoutMaxRects(elements, canvasConfig, {
     elementGap: 5,      // 0.5cm entre elementos
-    canvasMargin: 10,   // 1cm de margen horizontal
-    canvasMarginV: 0,   // 0px de margen vertical - moldes pegados al borde
+    canvasMargin: 0,    // 0px - sin margen horizontal
+    canvasMarginV: 0,   // 0px - sin margen vertical
     allowRotation: false, // No rotar uniformes por defecto
     sortStrategy: 'area',
-    heuristic: 'BSSF',  // Best Short Side Fit
+    heuristic: 'BL',    // Bottom-Left: espaciado uniforme horizontal y vertical
     ...options,
   });
 };
@@ -228,8 +228,8 @@ export const findValidPosition = (
     canvasConfig.height,
     canvasConfig.pixelsPerCm
   );
-  const marginH = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm); // Margen horizontal
-  const marginV = 0; // Sin margen vertical - moldes pueden estar pegados a los bordes
+  const marginH = 0; // Sin margen horizontal
+  const marginV = 0; // Sin margen vertical
 
   // Gap entre elementos (0.5cm = 5px)
   const elementGap = 5;
@@ -239,13 +239,15 @@ export const findValidPosition = (
   const startY = preferredPosition?.y ?? marginV;
 
   // Función auxiliar para verificar si una posición tiene colisión
-  // Considera el gap entre elementos en todas las direcciones
+  // Considera el gap entre elementos (5px = 0.5cm total entre moldes)
   const hasCollision = (position: Position): boolean => {
     // Verificar colisión con cada elemento existente considerando el gap
     for (const el of existingElements) {
       if (!el.visible) continue;
 
-      // Verificar si hay superposición considerando el gap en todas las direcciones
+      // Verificar si hay superposición considerando el gap
+      // El gap total entre dos elementos debe ser exactamente elementGap (5px)
+      // Solo aplicamos el gap en una dirección para evitar duplicación
       const noOverlap =
         position.x + dimensions.width + elementGap <= el.position.x || // Nuevo está a la izquierda
         position.x >= el.position.x + el.dimensions.width + elementGap || // Nuevo está a la derecha
@@ -277,23 +279,55 @@ export const findValidPosition = (
     return { x: startX, y: startY };
   }
 
-  // Estrategia 1: Buscar en una cuadrícula con espaciado igual al gap
-  // POSICIONAMIENTO HORIZONTAL: buscar de izquierda a derecha, luego siguiente fila
-  const spacing = elementGap;
+  // Estrategia 1: Buscar posiciones óptimas basadas en los bordes de elementos existentes
+  // Esto asegura que los elementos se coloquen exactamente con el gap correcto (5px = 0.5cm)
   const maxX = canvasWidth - dimensions.width - marginH;
   const maxY = canvasHeight - dimensions.height - marginV;
 
-  // Buscar en filas (horizontal): primero de izquierda a derecha, luego siguiente fila
-  for (let y = marginV; y <= maxY; y += spacing) {
-    for (let x = marginH; x <= maxX; x += spacing) {
+  // Generar posiciones candidatas basadas en los bordes de elementos existentes
+  const candidateX: number[] = [marginH]; // Empezar desde el margen
+  const candidateY: number[] = [marginV];
+
+  for (const el of existingElements) {
+    if (!el.visible) continue;
+    // Posición justo después de cada elemento existente (con gap de 5px)
+    candidateX.push(el.position.x + el.dimensions.width + elementGap);
+    candidateY.push(el.position.y + el.dimensions.height + elementGap);
+  }
+
+  // Ordenar y eliminar duplicados
+  const uniqueX = [...new Set(candidateX)].sort((a, b) => a - b).filter(x => x <= maxX);
+  const uniqueY = [...new Set(candidateY)].sort((a, b) => a - b).filter(y => y <= maxY);
+
+  // Función de colisión simplificada para posiciones candidatas (sin duplicar gap)
+  const hasCollisionSimple = (position: Position): boolean => {
+    for (const el of existingElements) {
+      if (!el.visible) continue;
+      // Solo verificar superposición directa, el gap ya está incluido en la posición candidata
+      const noOverlap =
+        position.x + dimensions.width <= el.position.x ||
+        position.x >= el.position.x + el.dimensions.width + elementGap ||
+        position.y + dimensions.height <= el.position.y ||
+        position.y >= el.position.y + el.dimensions.height + elementGap;
+
+      if (!noOverlap) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Buscar en las posiciones candidatas (horizontal first)
+  for (const y of uniqueY) {
+    for (const x of uniqueX) {
       const position = { x, y };
-      if (isInsideCanvas(position) && !hasCollision(position)) {
+      if (isInsideCanvas(position) && !hasCollisionSimple(position)) {
         return position;
       }
     }
   }
 
-  // Estrategia 2: Buscar con menor espaciado si no se encontró nada (también horizontal)
+  // Estrategia 2: Buscar con espaciado fino si no se encontró en candidatos
   const fineSpacing = 1;
   for (let y = marginV; y <= maxY; y += fineSpacing) {
     for (let x = marginH; x <= maxX; x += fineSpacing) {

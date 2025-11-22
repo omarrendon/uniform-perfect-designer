@@ -42,7 +42,7 @@ export const Header: React.FC = () => {
   const [layoutMetrics, setLayoutMetrics] = useState<{ efficiency: number; wastedSpace: number; overlap: boolean } | null>(null);
   const [layoutOptions, setLayoutOptions] = useState<Partial<LayoutOptions>>({
     elementGap: 5,
-    canvasMargin: 10,
+    canvasMargin: 0,
     canvasMarginV: 0,
     allowRotation: false,
     sortStrategy: 'area',

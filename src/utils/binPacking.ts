@@ -49,11 +49,11 @@ interface PlacementResult {
  */
 const DEFAULT_OPTIONS: LayoutOptions = {
   elementGap: 5,                // 0.5cm = 5px
-  canvasMargin: 10,             // 1cm = 10px (horizontal)
-  canvasMarginV: 0,             // 0px (vertical) - moldes pegados al borde
+  canvasMargin: 0,              // 0px - sin margen horizontal
+  canvasMarginV: 0,             // 0px - sin margen vertical
   allowRotation: false,         // Por defecto no rotar (uniformes tienen orientación)
   sortStrategy: 'area',
-  heuristic: 'BSSF',
+  heuristic: 'BL',              // Bottom-Left: prioriza posición arriba-izquierda para espaciado uniforme
 };
 
 /**
@@ -175,7 +175,7 @@ class MaxRectsBinPack {
 
   /**
    * Divide un rectángulo libre después de colocar un elemento
-   * Usa el método "Guillotine split" con la regla "Shorter Axis Split"
+   * Usa el método "MaxRects split" que maximiza el espacio aprovechable
    */
   private splitFreeRectangle(
     rectIndex: number,
@@ -186,7 +186,10 @@ class MaxRectsBinPack {
     const rect = this.freeRectangles[rectIndex];
     const newRects: FreeRectangle[] = [];
 
-    // Espacio a la derecha del elemento
+    // Crear hasta 4 rectángulos libres alrededor del elemento colocado
+    // Esto maximiza las opciones de colocación futura
+
+    // Rectángulo a la derecha (toda la altura del rectángulo original)
     if (rect.x + rect.width > position.x + width) {
       newRects.push({
         x: position.x + width,
@@ -196,13 +199,33 @@ class MaxRectsBinPack {
       });
     }
 
-    // Espacio debajo del elemento
+    // Rectángulo a la izquierda (si el elemento no está en el borde izquierdo)
+    if (position.x > rect.x) {
+      newRects.push({
+        x: rect.x,
+        y: rect.y,
+        width: position.x - rect.x,
+        height: rect.height,
+      });
+    }
+
+    // Rectángulo debajo (todo el ancho del rectángulo original)
     if (rect.y + rect.height > position.y + height) {
       newRects.push({
         x: rect.x,
         y: position.y + height,
         width: rect.width,
         height: rect.y + rect.height - (position.y + height),
+      });
+    }
+
+    // Rectángulo arriba (si el elemento no está en el borde superior)
+    if (position.y > rect.y) {
+      newRects.push({
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: position.y - rect.y,
       });
     }
 

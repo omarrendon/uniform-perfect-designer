@@ -114,7 +114,7 @@ export const Toolbar: React.FC = () => {
       imageUrl:
         part === "shorts"
           ? "/moldes/shorts-moldes.png"
-          : "/moldes/M CAB ESPALDA.png",
+          : "/moldes/PLAYERA TALLA M.png",
     };
 
     addElement(newUniform);
@@ -255,9 +255,12 @@ export const Toolbar: React.FC = () => {
         };
 
         // 1. Crear Jersey ESPALDA
+        // Filtrar solo los uniformes para el cálculo de posición (ignorar textos superpuestos)
+        const uniformElements = currentElements.filter(el => el.type === "uniform");
+
         // Verificar que haya espacio para el jersey espalda
         if (
-          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
+          !hasSpaceForElement(jerseyDimensions, uniformElements, canvasConfig)
         ) {
           // No hay espacio en la página actual, crear una nueva página
           addPage();
@@ -265,9 +268,12 @@ export const Toolbar: React.FC = () => {
           currentElements = []; // Resetear elementos para la nueva página vacía
         }
 
+        // Filtrar de nuevo después de posible reset
+        const uniformElementsForEspalda = currentElements.filter(el => el.type === "uniform");
+
         const jerseyEspalda = findValidPosition(
           jerseyDimensions,
-          currentElements,
+          uniformElementsForEspalda,
           canvasConfig
         );
 
@@ -355,9 +361,12 @@ export const Toolbar: React.FC = () => {
         }
 
         // 2. Crear Jersey FRENTE
+        // Filtrar solo los uniformes para el cálculo de posición (ignorar textos superpuestos)
+        const uniformElementsForFrente = currentElements.filter(el => el.type === "uniform");
+
         // Verificar que haya espacio para el jersey frente
         if (
-          !hasSpaceForElement(jerseyDimensions, currentElements, canvasConfig)
+          !hasSpaceForElement(jerseyDimensions, uniformElementsForFrente, canvasConfig)
         ) {
           // No hay espacio en la página actual, crear una nueva página
           addPage();
@@ -365,9 +374,12 @@ export const Toolbar: React.FC = () => {
           currentElements = []; // Resetear elementos para la nueva página vacía
         }
 
+        // Filtrar de nuevo después de posible reset
+        const uniformElementsForFrentePos = currentElements.filter(el => el.type === "uniform");
+
         const jerseyFrente = findValidPosition(
           jerseyDimensions,
-          currentElements,
+          uniformElementsForFrentePos,
           canvasConfig
         );
 
