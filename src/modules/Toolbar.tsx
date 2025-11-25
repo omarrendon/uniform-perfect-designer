@@ -25,7 +25,6 @@ import type {
 import {
   generateId,
   findValidPosition,
-  findValidPositionOnSide,
   hasSpaceForElement,
 } from "../utils/canvas";
 import { readExcelFile, validateExcelFile } from "../utils/excelReader";
@@ -250,6 +249,9 @@ export const Toolbar: React.FC = () => {
       let currentElements = pages[0] ? [...pages[0]] : [];
       let currentPageIndex = 0;
 
+      // Contadores para tracking
+      const shortsPerPage: { [pageIndex: number]: number } = {};
+
       // Por cada fila del Excel, crear un juego de playera (espalda + frente)
       for (const row of rows) {
         if (!row.nombre || row.nombre.trim() === "") {
@@ -277,30 +279,35 @@ export const Toolbar: React.FC = () => {
           height: sizeConfig.height,
         };
 
-        // 1. Crear Jersey ESPALDA
-        // Filtrar solo los uniformes para el cálculo de posición (ignorar textos superpuestos)
-        const uniformElements = currentElements.filter(el => el.type === "uniform");
+        const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
+        const elementGap = 5;
 
-        // Verificar que haya espacio para el jersey espalda
-        if (
-          !hasSpaceForElement(jerseyDimensions, uniformElements, canvasConfig)
-        ) {
-          // No hay espacio en la página actual, crear una nueva página
-          addPage();
-          currentPageIndex++;
-          currentElements = []; // Resetear elementos para la nueva página vacía
+        // 1. Crear Jersey ESPALDA (columna 1 - izquierda)
+        // Filtrar solo jerseys en la columna 1 (primera columna izquierda)
+        const jerseysCol1 = currentElements.filter(
+          el => el.type === "uniform" && el.part === "jersey" && el.position.x < jerseyDimensions.width + elementGap
+        );
+
+        let espaldaX = 0;
+        let espaldaY = 0;
+
+        if (jerseysCol1.length > 0) {
+          // Buscar el Y máximo en la columna 1
+          const maxY = Math.max(...jerseysCol1.map(j => j.position.y + j.dimensions.height));
+          espaldaY = maxY + elementGap;
+
+          // Verificar si cabe en la columna
+          if (espaldaY + jerseyDimensions.height > canvasHeight) {
+            // No cabe, crear nueva página
+            addPage();
+            currentPageIndex++;
+            currentElements = [];
+            espaldaX = 0;
+            espaldaY = 0;
+          }
         }
 
-        // Filtrar de nuevo después de posible reset
-        const uniformElementsForEspalda = currentElements.filter(el => el.type === "uniform");
-
-        // Playeras van del lado izquierdo
-        const jerseyEspalda = findValidPositionOnSide(
-          jerseyDimensions,
-          uniformElementsForEspalda,
-          canvasConfig,
-          'left'
-        );
+        const jerseyEspalda = { x: espaldaX, y: espaldaY };
 
         const newJerseyEspalda: UniformTemplate = {
           id: generateId("uniform"),
@@ -385,30 +392,34 @@ export const Toolbar: React.FC = () => {
           addElement(newTextoNumero, currentPageIndex);
         }
 
-        // 2. Crear Jersey FRENTE
-        // Filtrar solo los uniformes para el cálculo de posición (ignorar textos superpuestos)
-        const uniformElementsForFrente = currentElements.filter(el => el.type === "uniform");
+        // 2. Crear Jersey FRENTE (columna 2 - centro)
+        // Filtrar solo jerseys en la columna 2 (segunda columna)
+        const col2X = jerseyDimensions.width + elementGap;
+        const jerseysCol2 = currentElements.filter(
+          el => el.type === "uniform" && el.part === "jersey" &&
+          el.position.x >= col2X && el.position.x < col2X + jerseyDimensions.width + elementGap
+        );
 
-        // Verificar que haya espacio para el jersey frente
-        if (
-          !hasSpaceForElement(jerseyDimensions, uniformElementsForFrente, canvasConfig)
-        ) {
-          // No hay espacio en la página actual, crear una nueva página
-          addPage();
-          currentPageIndex++;
-          currentElements = []; // Resetear elementos para la nueva página vacía
+        let frenteX = col2X;
+        let frenteY = 0;
+
+        if (jerseysCol2.length > 0) {
+          // Buscar el Y máximo en la columna 2
+          const maxY = Math.max(...jerseysCol2.map(j => j.position.y + j.dimensions.height));
+          frenteY = maxY + elementGap;
+
+          // Verificar si cabe en la columna
+          if (frenteY + jerseyDimensions.height > canvasHeight) {
+            // No cabe, crear nueva página
+            addPage();
+            currentPageIndex++;
+            currentElements = [];
+            frenteX = col2X;
+            frenteY = 0;
+          }
         }
 
-        // Filtrar de nuevo después de posible reset
-        const uniformElementsForFrentePos = currentElements.filter(el => el.type === "uniform");
-
-        // Playeras van del lado izquierdo
-        const jerseyFrente = findValidPositionOnSide(
-          jerseyDimensions,
-          uniformElementsForFrentePos,
-          canvasConfig,
-          'left'
-        );
+        const jerseyFrente = { x: frenteX, y: frenteY };
 
         const newJerseyFrente: UniformTemplate = {
           id: generateId("uniform"),
@@ -462,7 +473,7 @@ export const Toolbar: React.FC = () => {
           addElement(newTextoNumeroFrente, currentPageIndex);
         }
 
-        // 3. Crear SHORT 1 (primer molde del par)
+        // 3. Crear PAR DE SHORTS (columna 3 - UNA SOLA columna vertical pegada a la derecha)
         // Obtener configuración del short (URL y dimensiones reales)
         const shortConfig = getShortConfig(tallaExcel);
         const shortsDimensions = {
@@ -470,30 +481,105 @@ export const Toolbar: React.FC = () => {
           height: shortConfig.height,
         };
 
-        // Filtrar solo los uniformes para el cálculo de posición
-        const uniformElementsForShort1 = currentElements.filter(el => el.type === "uniform");
+        // Calcular espacio necesario para el par (dos shorts verticalmente)
+        const pairHeight = shortsDimensions.height * 2 + elementGap;
 
-        // Verificar que haya espacio para el short 1
-        if (
-          !hasSpaceForElement(shortsDimensions, uniformElementsForShort1, canvasConfig)
-        ) {
-          // No hay espacio en la página actual, crear una nueva página
-          addPage();
-          currentPageIndex++;
-          currentElements = []; // Resetear elementos para la nueva página vacía
-        }
+        // Posición X FIJA: PEGADO AL BORDE DERECHO del canvas
+        // Esta X NUNCA cambia - todos los shorts van en esta misma X
+        const canvasWidth = canvasConfig.width * canvasConfig.pixelsPerCm;
+        const shortsColumnX = canvasWidth - shortsDimensions.width;
 
-        // Filtrar de nuevo después de posible reset
-        const uniformElementsForShort1Pos = currentElements.filter(el => el.type === "uniform");
+        // ⚡ CRÍTICO: OBTENER ESTADO FRESCO del store DESPUÉS de agregar jerseys
+        // Esto asegura que tengamos la información actualizada de todas las páginas
+        let storeState = useDesignerStore.getState();
+        let allPages = storeState.pages;
 
-        // Shorts van del lado derecho
-        const short1Position = findValidPositionOnSide(
-          shortsDimensions,
-          uniformElementsForShort1Pos,
-          canvasConfig,
-          'right'
+        console.log(`🔍 Estado actual ANTES de decidir dónde van shorts de ${row.nombre}:`);
+        console.log(`   - Página actual de jerseys: ${currentPageIndex}`);
+        console.log(`   - Total de páginas en store: ${allPages.length}`);
+
+        // ESTRATEGIA: Intentar colocar shorts en página actual primero,
+        // si no caben, intentar en página anterior (si existe y tiene espacio),
+        // si tampoco, crear nueva página
+
+        let shortsPageIndex = currentPageIndex;
+        let pairY = 0;
+        let foundSpace = false;
+
+        // Verificar página actual (con estado FRESCO)
+        const currentPageElements = allPages[currentPageIndex] || [];
+        const shortsInCurrentPage = currentPageElements.filter(
+          el => el.type === "uniform" && el.part === "shorts"
         );
 
+        console.log(`   - Shorts ya en página actual ${currentPageIndex}: ${shortsInCurrentPage.length} (${shortsInCurrentPage.length/2} pares)`);
+
+        if (shortsInCurrentPage.length > 0) {
+          const maxY = Math.max(...shortsInCurrentPage.map(s => s.position.y + s.dimensions.height));
+          pairY = maxY + elementGap;
+        }
+
+        console.log(`   - Posición Y propuesta: ${pairY}`);
+
+        // Calcular cuántos pares de shorts PUEDEN caber en una página
+        const maxPairsPerPage = Math.floor(canvasHeight / pairHeight);
+
+        // ESTRATEGIA MEJORADA: Buscar en TODAS las páginas desde la 0 hasta la actual
+        // Intentar llenar las páginas anteriores primero antes de usar la actual
+        console.log(`🔎 Buscando mejor página para shorts de ${row.nombre}...`);
+
+        // Buscar en todas las páginas existentes, empezando desde la 0
+        for (let pageIndex = 0; pageIndex <= currentPageIndex; pageIndex++) {
+          // Refrescar estado
+          storeState = useDesignerStore.getState();
+          allPages = storeState.pages;
+
+          const pageElements = allPages[pageIndex] || [];
+          const shortsInPage = pageElements.filter(
+            el => el.type === "uniform" && el.part === "shorts"
+          );
+
+          let pagePairY = 0;
+          if (shortsInPage.length > 0) {
+            const maxY = Math.max(...shortsInPage.map(s => s.position.y + s.dimensions.height));
+            pagePairY = maxY + elementGap;
+          }
+
+          const shortCountInPage = shortsInPage.length / 2;
+          console.log(`   Página ${pageIndex}: tiene ${shortCountInPage} pares, Y=${pagePairY}, necesita=${pagePairY + pairHeight}, max=${canvasHeight}`);
+
+          // ¿Cabe en esta página?
+          if (pagePairY + pairHeight <= canvasHeight) {
+            foundSpace = true;
+            shortsPageIndex = pageIndex;
+            pairY = pagePairY;
+            console.log(`   ✅ Usando página ${pageIndex} para shorts (será par #${shortCountInPage + 1}, max=${maxPairsPerPage})`);
+            break; // Usar la primera página donde cabe
+          }
+        }
+
+        // Si no encontró espacio en ninguna página existente, crear nueva
+        if (!foundSpace) {
+          console.log(`   📄 Creando NUEVA página ${currentPageIndex + 1} para shorts`);
+          addPage();
+          currentPageIndex++;
+          shortsPageIndex = currentPageIndex;
+          currentElements = [];
+          pairY = 0;
+        }
+
+        // ⚡ REFRESCAR estado una vez más antes de obtener zIndex
+        storeState = useDesignerStore.getState();
+        allPages = storeState.pages;
+
+        // Obtener zIndex correcto basado en la página donde van los shorts
+        let targetPageElements = allPages[shortsPageIndex] || [];
+        const baseZIndex = targetPageElements.length;
+
+        console.log(`   📊 Calculando zIndex: página ${shortsPageIndex} tiene ${targetPageElements.length} elementos, baseZIndex=${baseZIndex}`);
+
+        // Crear SHORT 1 (arriba, normal) - SIEMPRE en shortsColumnX
+        const short1Position = { x: shortsColumnX, y: pairY };
         const newShort1: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
@@ -502,40 +588,35 @@ export const Toolbar: React.FC = () => {
           position: short1Position,
           dimensions: shortsDimensions,
           rotation: 0,
-          zIndex: currentElements.length,
+          zIndex: baseZIndex,
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
           imageUrl: shortConfig.url,
         };
 
-        currentElements.push(newShort1);
-        addElement(newShort1, currentPageIndex);
-
-        // 4. Crear SHORT 2 (segundo molde del par)
-        // Filtrar solo los uniformes para el cálculo de posición
-        const uniformElementsForShort2 = currentElements.filter(el => el.type === "uniform");
-
-        // Verificar que haya espacio para el short 2
-        if (
-          !hasSpaceForElement(shortsDimensions, uniformElementsForShort2, canvasConfig)
-        ) {
-          // No hay espacio en la página actual, crear una nueva página
-          addPage();
-          currentPageIndex++;
-          currentElements = []; // Resetear elementos para la nueva página vacía
+        // Si los shorts van en página diferente a la actual, actualizar currentElements
+        if (shortsPageIndex === currentPageIndex) {
+          currentElements.push(newShort1);
         }
+        addElement(newShort1, shortsPageIndex);
+        console.log(`   📦 Short 1 agregado a página ${shortsPageIndex} en posición (${short1Position.x}, ${short1Position.y}), zIndex=${baseZIndex}`);
 
-        // Filtrar de nuevo después de posible reset
-        const uniformElementsForShort2Pos = currentElements.filter(el => el.type === "uniform");
+        // VERIFICACIÓN: Confirmar que se agregó
+        const verifyState1 = useDesignerStore.getState();
+        const verifyPage1 = verifyState1.pages[shortsPageIndex] || [];
+        const verifyShortsCount1 = verifyPage1.filter(el => el.type === "uniform" && el.part === "shorts").length;
+        console.log(`   ✓ VERIFICADO: Página ${shortsPageIndex} ahora tiene ${verifyShortsCount1} shorts totales`);
 
-        // Shorts van del lado derecho
-        const short2Position = findValidPositionOnSide(
-          shortsDimensions,
-          uniformElementsForShort2Pos,
-          canvasConfig,
-          'right'
-        );
+        // Refrescar el estado después de agregar Short 1
+        const updatedState = useDesignerStore.getState();
+        targetPageElements = updatedState.pages[shortsPageIndex] || [];
+
+        // Crear SHORT 2 (abajo, invertido 180°) - SIEMPRE en shortsColumnX
+        const short2Position = {
+          x: shortsColumnX,
+          y: pairY + shortsDimensions.height + elementGap,
+        };
 
         const newShort2: UniformTemplate = {
           id: generateId("uniform"),
@@ -544,17 +625,72 @@ export const Toolbar: React.FC = () => {
           size: tallaMostrar as any,
           position: short2Position,
           dimensions: shortsDimensions,
-          rotation: 0,
-          zIndex: currentElements.length,
+          rotation: 180, // Rotado 180° para quedar de cabeza
+          zIndex: targetPageElements.length, // Usar la longitud actualizada
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
           imageUrl: shortConfig.url,
         };
 
-        currentElements.push(newShort2);
-        addElement(newShort2, currentPageIndex);
+        // Si los shorts van en página diferente a la actual, actualizar currentElements
+        if (shortsPageIndex === currentPageIndex) {
+          currentElements.push(newShort2);
+        }
+        addElement(newShort2, shortsPageIndex);
+        console.log(`   📦 Short 2 agregado a página ${shortsPageIndex} en posición (${short2Position.x}, ${short2Position.y}), zIndex=${targetPageElements.length}`);
+
+        // VERIFICACIÓN: Confirmar que se agregó
+        const verifyState2 = useDesignerStore.getState();
+        const verifyPage2 = verifyState2.pages[shortsPageIndex] || [];
+        const verifyShortsCount2 = verifyPage2.filter(el => el.type === "uniform" && el.part === "shorts").length;
+        console.log(`   ✓ VERIFICADO: Página ${shortsPageIndex} ahora tiene ${verifyShortsCount2} shorts totales`);
+        console.log(`   ====================================================\n`);
+
+        // Incrementar contador de shorts por página
+        if (!shortsPerPage[shortsPageIndex]) {
+          shortsPerPage[shortsPageIndex] = 0;
+        }
+        shortsPerPage[shortsPageIndex] += 2; // Un par = 2 shorts
       }
+
+      // Mostrar resumen final
+      console.log('\n========== RESUMEN DE DISTRIBUCIÓN DE SHORTS ==========');
+      const finalState = useDesignerStore.getState();
+      const finalPages = finalState.pages;
+
+      for (let i = 0; i < finalPages.length; i++) {
+        const pageElements = finalPages[i] || [];
+        const shortsInPage = pageElements.filter(el => el.type === "uniform" && el.part === "shorts");
+        const pairsInPage = shortsInPage.length / 2;
+
+        // Calcular espacio usado y disponible
+        if (shortsInPage.length > 0) {
+          const maxY = Math.max(...shortsInPage.map(s => s.position.y + s.dimensions.height));
+          const spaceUsed = maxY;
+          const spaceAvailable = canvasConfig.height * canvasConfig.pixelsPerCm - maxY;
+          const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
+
+          // Obtener dimensiones del primer short para calcular cuántos más caben
+          const firstShort = shortsInPage[0];
+          const pairHeight = (firstShort.dimensions.height * 2) + 5; // 2 shorts + gap
+          const additionalPairsThatFit = Math.floor(spaceAvailable / pairHeight);
+          const maxPairsTheoretical = Math.floor(canvasHeight / pairHeight);
+
+          console.log(`📄 Página ${i}:`);
+          console.log(`   - Shorts REALES agregados: ${shortsInPage.length} (${pairsInPage} pares)`);
+          console.log(`   - Shorts TEÓRICOS que caben: ${maxPairsTheoretical * 2} (${maxPairsTheoretical} pares)`);
+          console.log(`   - Espacio usado: ${spaceUsed.toFixed(0)}px / ${canvasHeight.toFixed(0)}px (${(spaceUsed/canvasHeight*100).toFixed(1)}%)`);
+          console.log(`   - Espacio disponible: ${spaceAvailable.toFixed(0)}px (caben ${additionalPairsThatFit} pares más)`);
+
+          if (pairsInPage < maxPairsTheoretical) {
+            console.log(`   ⚠️ ADVERTENCIA: Faltan ${maxPairsTheoretical - pairsInPage} pares que deberían caber!`);
+          } else if (pairsInPage === maxPairsTheoretical) {
+            console.log(`   ✅ Página optimizada al máximo`);
+          }
+        }
+      }
+      console.log('=======================================================\n');
 
       const totalPagesUsed = currentPageIndex + 1;
       alert(`Se crearon ${rows.length} juegos completos (espalda + frente + 2 shorts) exitosamente en ${totalPagesUsed} página(s)!`);

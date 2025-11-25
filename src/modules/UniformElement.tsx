@@ -4,11 +4,6 @@ import { Group, Rect, Transformer, Image as KonvaImage, Text } from "react-konva
 import useImage from "use-image";
 import type { UniformTemplate } from "../types";
 import { useDesignerStore } from "../store/desingerStore";
-import {
-  constrainToCanvas,
-  CANVAS_MARGIN_CM,
-  cmToPixels,
-} from "../utils/canvas";
 import type Konva from "konva";
 
 interface UniformElementProps {
@@ -59,7 +54,6 @@ export const UniformElement: React.FC<UniformElementProps> = ({
 
   const canvasWidth = canvasConfig.width * canvasConfig.pixelsPerCm;
   const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
-  const margin = cmToPixels(CANVAS_MARGIN_CM, canvasConfig.pixelsPerCm);
 
   React.useEffect(() => {
     if (isSelected && transformerRef.current && groupRef.current) {
@@ -71,14 +65,12 @@ export const UniformElement: React.FC<UniformElementProps> = ({
     }
   }, [isSelected]);
 
-  // Función para limitar el arrastre en tiempo real
+  // Función para limitar el arrastre en tiempo real (sin margen)
   const dragBoundFunc = (pos: { x: number; y: number }) => {
-    const constrainedPos = constrainToCanvas(
-      pos,
-      element.dimensions,
-      canvasConfig
-    );
-    return constrainedPos;
+    // Limitar dentro del canvas sin margen
+    const x = Math.max(0, Math.min(pos.x, canvasWidth - element.dimensions.width));
+    const y = Math.max(0, Math.min(pos.y, canvasHeight - element.dimensions.height));
+    return { x, y };
   };
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
@@ -99,12 +91,10 @@ export const UniformElement: React.FC<UniformElementProps> = ({
     const newWidth = Math.max(20, element.dimensions.width * scaleX);
     const newHeight = Math.max(20, element.dimensions.height * scaleY);
 
-    // Verificar que las nuevas dimensiones no excedan el canvas
-    const constrainedPosition = constrainToCanvas(
-      { x: node.x(), y: node.y() },
-      { width: newWidth, height: newHeight },
-      canvasConfig
-    );
+    // Ajustar posición sin margen
+    const x = Math.max(0, Math.min(node.x(), canvasWidth - newWidth));
+    const y = Math.max(0, Math.min(node.y(), canvasHeight - newHeight));
+    const constrainedPosition = { x, y };
 
     // Reset scale
     node.scaleX(1);
@@ -145,12 +135,18 @@ export const UniformElement: React.FC<UniformElementProps> = ({
     );
   }
 
+  // Calcular offset para rotación desde el centro del elemento
+  const offsetX = element.rotation !== 0 ? element.dimensions.width / 2 : 0;
+  const offsetY = element.rotation !== 0 ? element.dimensions.height / 2 : 0;
+
   return (
     <>
       <Group
         ref={groupRef}
-        x={element.position.x}
-        y={element.position.y}
+        x={element.position.x + offsetX}
+        y={element.position.y + offsetY}
+        offsetX={offsetX}
+        offsetY={offsetY}
         rotation={element.rotation}
         draggable={!element.locked}
         dragBoundFunc={dragBoundFunc}
@@ -183,14 +179,14 @@ export const UniformElement: React.FC<UniformElementProps> = ({
               return oldBox;
             }
 
-            // Verificar que no exceda los límites del canvas con margen
-            if (newBox.x < margin || newBox.y < margin) {
+            // Verificar que no exceda los límites del canvas (sin margen)
+            if (newBox.x < 0 || newBox.y < 0) {
               return oldBox;
             }
 
             if (
-              newBox.x + newBox.width > canvasWidth - margin ||
-              newBox.y + newBox.height > canvasHeight - margin
+              newBox.x + newBox.width > canvasWidth ||
+              newBox.y + newBox.height > canvasHeight
             ) {
               return oldBox;
             }

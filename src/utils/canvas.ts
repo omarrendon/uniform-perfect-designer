@@ -183,11 +183,11 @@ export const isWithinCanvas = (
 /**
  * Margen de seguridad en cm que se debe respetar en los bordes del canvas
  */
-export const CANVAS_MARGIN_CM = 1;
+export const CANVAS_MARGIN_CM = 0;
 
 /**
  * Ajusta la posición del elemento para que esté dentro del canvas
- * respetando un margen de 1cm en todos los lados
+ * respetando el margen configurado en CANVAS_MARGIN_CM
  */
 export const constrainToCanvas = (
   position: Position,
@@ -214,6 +214,51 @@ export const constrainToCanvas = (
 };
 
 /**
+ * Verifica si hay espacio disponible en un lado específico del canvas
+ */
+export const hasSpaceForElementOnSide = (
+  dimensions: Dimensions,
+  existingElements: CanvasElement[],
+  canvasConfig: CanvasConfig,
+  side: 'left' | 'right'
+): boolean => {
+  const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
+  const canvasHeight = cmToPixels(canvasConfig.height, canvasConfig.pixelsPerCm);
+  const elementGap = 5;
+
+  const midPoint = canvasWidth / 2;
+  const minX = side === 'left' ? 0 : midPoint + elementGap;
+  const maxX = side === 'left' ? midPoint - dimensions.width - elementGap : canvasWidth - dimensions.width;
+  const maxY = canvasHeight - dimensions.height;
+
+  // Verificar colisiones
+  const hasCollision = (position: Position): boolean => {
+    for (const el of existingElements) {
+      if (!el.visible) continue;
+      const noOverlap =
+        position.x + dimensions.width + elementGap <= el.position.x ||
+        position.x >= el.position.x + el.dimensions.width + elementGap ||
+        position.y + dimensions.height + elementGap <= el.position.y ||
+        position.y >= el.position.y + el.dimensions.height + elementGap;
+      if (!noOverlap) return true;
+    }
+    return false;
+  };
+
+  // Buscar si existe al menos una posición válida
+  for (let y = 0; y <= maxY; y += elementGap) {
+    for (let x = minX; x <= maxX; x += elementGap) {
+      const position = { x, y };
+      if (!hasCollision(position)) {
+        return true; // Hay espacio disponible
+      }
+    }
+  }
+
+  return false; // No hay espacio disponible
+};
+
+/**
  * Encuentra una posición válida en un lado específico del canvas
  * side: 'left' = lado izquierdo, 'right' = lado derecho
  */
@@ -230,12 +275,12 @@ export const findValidPositionOnSide = (
   // Dividir el canvas en dos mitades
   const midPoint = canvasWidth / 2;
 
-  // Definir límites según el lado
-  const minX = side === 'left' ? 0 : midPoint;
-  const maxX = side === 'left' ? midPoint - dimensions.width : canvasWidth - dimensions.width;
+  // Definir límites según el lado (con margen para evitar superposición en el medio)
+  const minX = side === 'left' ? 0 : midPoint + elementGap;
+  const maxX = side === 'left' ? midPoint - dimensions.width - elementGap : canvasWidth - dimensions.width;
   const maxY = canvasHeight - dimensions.height;
 
-  // Función de colisión
+  // Función de colisión - considera TODOS los elementos existentes
   const hasCollision = (position: Position): boolean => {
     for (const el of existingElements) {
       if (!el.visible) continue;
@@ -249,7 +294,7 @@ export const findValidPositionOnSide = (
     return false;
   };
 
-  // Función para verificar si está dentro del área permitida
+  // Función para verificar si está dentro del área permitida del lado correspondiente
   const isInsideArea = (position: Position): boolean => {
     return (
       position.x >= minX &&
@@ -259,16 +304,30 @@ export const findValidPositionOnSide = (
     );
   };
 
-  // Generar posiciones candidatas basadas en los bordes de elementos existentes
+  // Generar posiciones candidatas basadas en los bordes de elementos existentes del mismo lado
   const candidateX: number[] = [minX];
   const candidateY: number[] = [0];
 
   for (const el of existingElements) {
     if (!el.visible) continue;
-    const nextX = el.position.x + el.dimensions.width + elementGap;
+
+    // Solo considerar elementos del mismo lado para generar candidatos X
+    const elIsOnSameSide = side === 'left'
+      ? el.position.x < midPoint
+      : el.position.x >= midPoint;
+
+    if (elIsOnSameSide) {
+      const nextX = el.position.x + el.dimensions.width + elementGap;
+      if (nextX >= minX && nextX <= maxX) {
+        candidateX.push(nextX);
+      }
+    }
+
+    // Considerar todos los elementos para candidatos Y
     const nextY = el.position.y + el.dimensions.height + elementGap;
-    if (nextX >= minX && nextX <= maxX) candidateX.push(nextX);
-    if (nextY <= maxY) candidateY.push(nextY);
+    if (nextY >= 0 && nextY <= maxY) {
+      candidateY.push(nextY);
+    }
   }
 
   // Ordenar candidatos
@@ -286,8 +345,8 @@ export const findValidPositionOnSide = (
   }
 
   // Búsqueda fina si no se encontró
-  for (let y = 0; y <= maxY; y += 1) {
-    for (let x = minX; x <= maxX; x += 1) {
+  for (let y = 0; y <= maxY; y += elementGap) {
+    for (let x = minX; x <= maxX; x += elementGap) {
       const position = { x, y };
       if (isInsideArea(position) && !hasCollision(position)) {
         return position;
