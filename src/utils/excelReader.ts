@@ -30,29 +30,41 @@ export const readExcelFile = async (
         const worksheet = workbook.Sheets[firstSheetName];
 
         // Convertir a JSON
-        const rawData = XLSX.utils.sheet_to_json<any>(worksheet);
+        const rawData = XLSX.utils.sheet_to_json<any>(worksheet, { defval: "" });
 
         // Normalizar los nombres de las columnas (convertir a minúsculas y quitar espacios)
         const jsonData = rawData.map((row: any) => {
           const normalizedRow: any = {};
           Object.keys(row).forEach((key) => {
-            const normalizedKey = key.toLowerCase().trim();
+            const normalizedKey = key.toLowerCase().trim().replace(/\s+/g, '_');
             normalizedRow[normalizedKey] = row[key];
           });
           return normalizedRow;
         });
 
+        // Filtrar filas completamente vacías
+        const filteredData = jsonData.filter((row: any) => {
+          return Object.values(row).some(val => val !== "" && val !== null && val !== undefined);
+        });
+
+        // Validar que tenga datos
+        if (filteredData.length === 0) {
+          reject(new Error('El archivo Excel está vacío o no contiene datos válidos'));
+          return;
+        }
+
         // Validar que tenga la columna "nombre"
-        if (jsonData.length > 0 && !("nombre" in jsonData[0])) {
+        if (!("nombre" in filteredData[0])) {
+          const availableColumns = Object.keys(filteredData[0]).join(', ');
           reject(
             new Error(
-              'El archivo debe contener una columna llamada "nombre" (puede estar en mayúsculas o minúsculas)'
+              `El archivo debe contener una columna llamada "nombre" (puede estar en mayúsculas o minúsculas). Columnas encontradas: ${availableColumns}`
             )
           );
           return;
         }
 
-        resolve(jsonData);
+        resolve(filteredData);
       } catch (error) {
         reject(error);
       }

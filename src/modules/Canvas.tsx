@@ -20,6 +20,7 @@ export const Canvas: React.FC = () => {
     setCurrentPage,
     getTotalPages,
     getPageHeight,
+    isCanvasHidden,
   } = useDesignerStore();
 
   const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
@@ -36,6 +37,24 @@ export const Canvas: React.FC = () => {
   };
 
   const totalPages = getTotalPages();
+
+  // Si el canvas está oculto, mostrar mensaje de carga
+  if (isCanvasHidden) {
+    return (
+      <div className="flex-1 flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-gray-500 text-lg mb-2">
+              Cargando uniformes...
+            </div>
+            <div className="text-gray-400 text-sm">
+              El canvas se mostrará cuando termine la carga
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">

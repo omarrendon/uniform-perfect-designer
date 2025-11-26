@@ -273,6 +273,9 @@ import type {
   Project,
   Size,
   SizeConfig,
+  SizeSpanish,
+  SizeImages,
+  UniformSizesConfig,
 } from "../types";
 import { findValidPosition } from "../utils/canvas";
 
@@ -305,6 +308,15 @@ interface DesignerState {
   sizeConfigs: SizeConfig[];
   updateSizeConfig: (size: Size, config: Partial<SizeConfig>) => void;
 
+  // Uniform sizes configuration (imágenes por talla)
+  uniformSizesConfig: UniformSizesConfig; // Imágenes ORIGINALES (para PDF)
+  uniformSizesConfigCompressed: UniformSizesConfig; // Imágenes COMPRIMIDAS (para canvas)
+  setUniformSizeImages: (size: SizeSpanish, images: Partial<SizeImages>) => void;
+  getUniformSizeImages: (size: SizeSpanish) => SizeImages | undefined;
+  getUniformSizeImagesCompressed: (size: SizeSpanish) => SizeImages | undefined;
+  isSizeComplete: (size: SizeSpanish) => boolean;
+  clearUniformSizesConfig: () => void;
+
   // History (Undo/Redo)
   history: HistoryState[];
   historyIndex: number;
@@ -325,6 +337,8 @@ interface DesignerState {
   toggleGrid: () => void;
   zoom: number;
   setZoom: (zoom: number) => void;
+  isCanvasHidden: boolean;
+  setCanvasHidden: (hidden: boolean) => void;
 }
 
 const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
@@ -354,11 +368,14 @@ export const useDesignerStore = create<DesignerState>()(
         elements: [], // Computed property basado en currentPage
         selectedElementId: null,
         sizeConfigs: DEFAULT_SIZE_CONFIGS,
+        uniformSizesConfig: {}, // Configuración de imágenes ORIGINALES por talla
+        uniformSizesConfigCompressed: {}, // Configuración de imágenes COMPRIMIDAS por talla
         history: [],
         historyIndex: -1,
         currentProject: null,
         showGrid: true,
         zoom: 1,
+        isCanvasHidden: false,
 
         // Canvas configuration
         setCanvasConfig: config =>
@@ -634,12 +651,49 @@ export const useDesignerStore = create<DesignerState>()(
           set(() => ({
             zoom: Math.max(0.1, Math.min(3, zoom)),
           })),
+
+        setCanvasHidden: (hidden: boolean) =>
+          set(() => ({
+            isCanvasHidden: hidden,
+          })),
+
+        // Uniform sizes configuration
+        setUniformSizeImages: (size: SizeSpanish, images: Partial<SizeImages>) =>
+          set(state => ({
+            uniformSizesConfig: {
+              ...state.uniformSizesConfig,
+              [size]: {
+                ...state.uniformSizesConfig[size],
+                ...images,
+              },
+            },
+          })),
+
+        getUniformSizeImages: (size: SizeSpanish) => {
+          return get().uniformSizesConfig[size];
+        },
+
+        getUniformSizeImagesCompressed: (size: SizeSpanish) => {
+          return get().uniformSizesConfigCompressed[size];
+        },
+
+        isSizeComplete: (size: SizeSpanish) => {
+          const images = get().uniformSizesConfig[size];
+          return !!(images?.jerseyFront && images?.jerseyBack && images?.shorts);
+        },
+
+        clearUniformSizesConfig: () =>
+          set(() => ({
+            uniformSizesConfig: {},
+            uniformSizesConfigCompressed: {},
+          })),
       }),
       {
-        name: "designer-storage-v6", // Dimensiones exactas de benito.pdf (159x380 cm)
+        name: "designer-storage-v7", // uniformSizesConfig NO se persiste (solo en memoria)
         partialize: state => ({
           canvasConfig: state.canvasConfig,
           sizeConfigs: state.sizeConfigs,
+          // uniformSizesConfig: NO se guarda en localStorage para evitar problemas de espacio
           showGrid: state.showGrid,
         }),
       }

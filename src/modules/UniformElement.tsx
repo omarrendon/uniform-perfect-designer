@@ -1,7 +1,7 @@
-import React, { useRef } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { Group, Rect, Transformer, Image as KonvaImage, Text } from "react-konva";
 
-import useImage from "use-image";
+import { loadImage } from "../utils/imageCache";
 import type { UniformTemplate } from "../types";
 import { useDesignerStore } from "../store/desingerStore";
 import type Konva from "konva";
@@ -12,7 +12,17 @@ interface UniformElementProps {
 }
 
 const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
-  const [image] = useImage(element.imageUrl || "");
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    if (element.imageUrl) {
+      loadImage(element.imageUrl, (img) => {
+        setImage(img);
+      });
+    } else {
+      setImage(null);
+    }
+  }, [element.imageUrl]);
 
   // Si hay imagen, mostrarla sin rotación (la rotación se aplica al Group)
   if (image) {

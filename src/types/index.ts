@@ -1,6 +1,31 @@
 // Tipos principales de la aplicación
 
-export type Size = 'XS' | 'S' | 'M' | 'L' | 'XL';
+export type Size = 'XS' | 'S' | 'M' | 'L' | 'XL' | '2XL' | '3XL';
+
+// Tallas en español
+export type SizeSpanish = 'XCH' | 'CH' | 'M' | 'G' | 'XG' | '2XG' | '3XG';
+
+// Mapeo de tallas español a inglés
+export const SIZE_MAP: Record<SizeSpanish, Size> = {
+  'XCH': 'XS',
+  'CH': 'S',
+  'M': 'M',
+  'G': 'L',
+  'XG': 'XL',
+  '2XG': '2XL',
+  '3XG': '3XL',
+};
+
+// Configuración de imágenes por talla
+export interface SizeImages {
+  jerseyFront?: string;  // URL o base64 de playera delantera
+  jerseyBack?: string;   // URL o base64 de playera trasera
+  shorts?: string;       // URL o base64 de short
+}
+
+export interface UniformSizesConfig {
+  [key: string]: SizeImages; // Key es la talla en español (XCH, CH, M, G, XG, 2XG, 3XG)
+}
 
 export interface SizeConfig {
   size: Size;

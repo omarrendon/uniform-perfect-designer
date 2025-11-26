@@ -9,11 +9,13 @@ import {
   ZoomOut,
   Maximize,
   Settings,
+  Shirt,
 } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
 import { exportCanvas } from "../utils/export";
 import { Button } from "../components/Button";
 import { ExportLoadingOverlay } from "../components/ExportLoadingOverlay";
+import { UniformSizesModal } from "../components/UniformSizesModal";
 import { optimizeLayoutAdvanced, calculateLayoutMetrics, type LayoutOptions } from "../utils/binPacking";
 
 export const Header: React.FC = () => {
@@ -36,6 +38,7 @@ export const Header: React.FC = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
+  const [showSizesModal, setShowSizesModal] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
@@ -56,6 +59,46 @@ export const Header: React.FC = () => {
       if (format === "pdf") {
         // Mostrar loading
         setIsExporting(true);
+
+        // CRÍTICO: Intercambiar temporalmente las imágenes comprimidas por las originales
+        // para que el PDF tenga alta calidad
+        const { pages: allPages, uniformSizesConfig: originalImages, uniformSizesConfigCompressed: compressedImages } = useDesignerStore.getState();
+
+        // Crear un mapeo de URLs comprimidas a originales
+        const urlMapping: Map<string, string> = new Map();
+
+        for (const tallaKey of Object.keys(originalImages)) {
+          const orig = originalImages[tallaKey];
+          const comp = compressedImages[tallaKey];
+
+          if (orig && comp) {
+            if (orig.jerseyFront && comp.jerseyFront) {
+              urlMapping.set(comp.jerseyFront, orig.jerseyFront);
+            }
+            if (orig.jerseyBack && comp.jerseyBack) {
+              urlMapping.set(comp.jerseyBack, orig.jerseyBack);
+            }
+            if (orig.shorts && comp.shorts) {
+              urlMapping.set(comp.shorts, orig.shorts);
+            }
+          }
+        }
+
+        // Intercambiar URLs en todos los elementos de todas las páginas
+        const modifiedPages = allPages.map(page =>
+          page.map(element => {
+            if (element.type === 'uniform' && element.imageUrl) {
+              const originalUrl = urlMapping.get(element.imageUrl);
+              if (originalUrl) {
+                return { ...element, imageUrl: originalUrl };
+              }
+            }
+            return element;
+          })
+        );
+
+        // Actualizar el store con las URLs originales
+        useDesignerStore.setState({ pages: modifiedPages });
 
         // Exportación PDF multipágina
         const totalPages = getTotalPages();
@@ -94,6 +137,9 @@ export const Header: React.FC = () => {
         // Restaurar la página original
         setCurrentPage(originalPage);
         await new Promise(resolve => setTimeout(resolve, 100));
+
+        // CRÍTICO: Restaurar las URLs comprimidas en el store (volver al estado original)
+        useDesignerStore.setState({ pages: allPages });
 
         // Crear PDFs separados para cada página
         if (pageImages.length > 0) {
@@ -153,6 +199,19 @@ export const Header: React.FC = () => {
       }
     } catch (error) {
       console.error("Error al exportar:", error);
+
+      // CRÍTICO: En caso de error, también restaurar las URLs comprimidas
+      if (format === "pdf") {
+        const { pages: originalPages } = useDesignerStore.getState();
+        // Intentar restaurar si había un swap de URLs previo
+        try {
+          // Aquí simplemente forzamos una recarga del estado
+          useDesignerStore.setState({ pages: originalPages });
+        } catch (restoreError) {
+          console.error("Error al restaurar URLs:", restoreError);
+        }
+      }
+
       setIsExporting(false);
       setExportProgress({ current: 0, total: 0 });
       alert("Error al exportar el diseño");
@@ -380,6 +439,22 @@ export const Header: React.FC = () => {
             }}
           >
             <Settings className="w-4 h-4" />
+          </Button>
+
+          <div style={{ width: '1px', height: '24px', backgroundColor: '#4b5563', margin: '0 4px' }} />
+
+          {/* Configuración de Tallas */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowSizesModal(true)}
+            title="Configurar Tallas de Uniformes"
+            style={{
+              color: '#e5e7eb',
+              backgroundColor: 'transparent',
+            }}
+          >
+            <Shirt className="w-4 h-4" />
           </Button>
         </div>
 
@@ -652,6 +727,12 @@ export const Header: React.FC = () => {
         isVisible={isExporting}
         currentPage={exportProgress.current}
         totalPages={exportProgress.total}
+      />
+
+      {/* Uniform Sizes Modal */}
+      <UniformSizesModal
+        isOpen={showSizesModal}
+        onClose={() => setShowSizesModal(false)}
       />
     </>
   );

@@ -21,6 +21,7 @@ import type {
   TextElement,
   UniformTemplate,
   CanvasElement,
+  SizeSpanish,
 } from "../types";
 import {
   generateId,
@@ -28,6 +29,10 @@ import {
   hasSpaceForElement,
 } from "../utils/canvas";
 import { readExcelFile, validateExcelFile } from "../utils/excelReader";
+import { ErrorModal } from "../components/ErrorModal";
+import { BulkLoadingOverlay } from "../components/BulkLoadingOverlay";
+import { loadImage } from "../utils/imageCache";
+import { compressImageForCanvas } from "../utils/imageCompressorForCanvas";
 import {
   loadGoogleFont,
   getValidFontOrFallback,
@@ -46,9 +51,23 @@ export const Toolbar: React.FC = () => {
     sendToBack,
     sizeConfigs,
     canvasConfig,
+    isSizeComplete,
+    setCanvasHidden,
   } = useDesignerStore();
 
   const [activeSection, setActiveSection] = useState<"add" | "edit">("add");
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<{
+    title: string;
+    message: string;
+    details?: string[];
+  }>({
+    title: "",
+    message: "",
+    details: [],
+  });
+  const [showBulkLoading, setShowBulkLoading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
   const selectedElement = elements.find(el => el.id === selectedElementId);
 
@@ -173,58 +192,103 @@ export const Toolbar: React.FC = () => {
         return;
       }
 
+      // VALIDACIÓN: Verificar que todas las tallas del Excel tengan imágenes configuradas
+      const tallasEnExcel = new Set<string>();
+      const tallasSinConfiguracion: string[] = [];
+
+      // Mapeo de tallas Excel a tallas en español
+      const excelToSpanish: Record<string, SizeSpanish> = {
+        'xs': 'XCH',
+        'xch': 'XCH',
+        's': 'CH',
+        'ch': 'CH',
+        'm': 'M',
+        'l': 'G',
+        'g': 'G',
+        'xl': 'XG',
+        'xg': 'XG',
+        '2xl': '2XG',
+        '2xg': '2XG',
+        '3xl': '3XG',
+        '3xg': '3XG',
+      };
+
+      // Recopilar todas las tallas únicas del Excel
+      rows.forEach(row => {
+        const tallaExcel = (row.talla || '').toLowerCase().trim();
+        if (tallaExcel) {
+          tallasEnExcel.add(tallaExcel);
+        }
+      });
+
+      // Verificar cada talla si tiene configuración completa
+      const currentConfig = useDesignerStore.getState().uniformSizesConfig;
+      tallasEnExcel.forEach(tallaExcel => {
+        const tallaSpanish = excelToSpanish[tallaExcel];
+        if (!tallaSpanish) {
+          tallasSinConfiguracion.push(`"${tallaExcel}" - Talla no reconocida`);
+        } else if (!isSizeComplete(tallaSpanish)) {
+          const images = currentConfig[tallaSpanish];
+          const faltantes: string[] = [];
+          if (!images?.jerseyFront) faltantes.push('Playera Delantera');
+          if (!images?.jerseyBack) faltantes.push('Playera Trasera');
+          if (!images?.shorts) faltantes.push('Short');
+
+          tallasSinConfiguracion.push(
+            `Talla "${tallaExcel.toUpperCase()}" - Faltan: ${faltantes.join(', ')}`
+          );
+        }
+      });
+
+      // Si hay tallas sin configuración, mostrar error y detener
+      if (tallasSinConfiguracion.length > 0) {
+        setErrorDetails({
+          title: "Tallas sin configurar",
+          message: "El archivo Excel contiene tallas que no tienen imágenes configuradas. Por favor, configura las imágenes de todas las tallas antes de continuar.",
+          details: tallasSinConfiguracion,
+        });
+        setShowErrorModal(true);
+        return;
+      }
+
       // Obtener el estado actual
       const { canvasConfig, addPage } = useDesignerStore.getState();
 
-      // Función para mapear talla del Excel a nombre de archivo (para espalda)
-      const mapSizeToMoldeName = (tallaExcel: string): string => {
+      // Función para obtener el molde de frente según la talla
+      // USA IMÁGENES COMPRIMIDAS para el canvas (originales se usan en PDF)
+      const getMoldeFrenteUrl = (tallaExcel: string): string => {
         const talla = tallaExcel.toLowerCase().trim();
-        const sizeMap: Record<string, string> = {
-          xs: "XS",
-          s: "S",
-          m: "M",
-          l: "L",
-          xl: "XL",
-          "2xl": "2XL",
-          "3xl": "3XL",
-        };
-        return sizeMap[talla] || "M"; // Default a M si no se reconoce
+        const tallaSpanish = excelToSpanish[talla];
+        if (!tallaSpanish) return "";
+
+        const { uniformSizesConfigCompressed } = useDesignerStore.getState();
+        const images = uniformSizesConfigCompressed[tallaSpanish];
+        return images?.jerseyFront || "";
       };
 
-      // Función para obtener el molde de frente según la talla
-      // Solo CH, M y G usan las imágenes TALLA, las demás usan CAB FRENTE
-      const getMoldeFrenteUrl = (tallaExcel: string, moldeSize: string): string => {
+      // Función para obtener el molde de espalda según la talla
+      // USA IMÁGENES COMPRIMIDAS para el canvas (originales se usan en PDF)
+      const getMoldeEspaldaUrl = (tallaExcel: string): string => {
         const talla = tallaExcel.toLowerCase().trim();
-        // Solo estas tallas específicas usan los moldes TALLA
-        if (talla === "ch") {
-          return "/moldes/TALLA CH.png";
-        } else if (talla === "m") {
-          return "/moldes/TALLA M.png";
-        } else if (talla === "g") {
-          return "/moldes/TALLA G.png";
-        }
-        // Las demás tallas usan los moldes CAB FRENTE originales
-        return `/moldes/${moldeSize} CAB FRENTE.png`;
+        const tallaSpanish = excelToSpanish[talla];
+        if (!tallaSpanish) return "";
+
+        const { uniformSizesConfigCompressed } = useDesignerStore.getState();
+        const images = uniformSizesConfigCompressed[tallaSpanish];
+        return images?.jerseyBack || "";
       };
 
       // Función para obtener el molde de short según la talla
-      // Retorna la URL y las dimensiones originales de la imagen (sin escalar)
+      // USA IMÁGENES COMPRIMIDAS para el canvas (originales se usan en PDF)
       const getShortConfig = (tallaExcel: string): { url: string; width: number; height: number } => {
         const talla = tallaExcel.toLowerCase().trim();
-        // Dimensiones originales de las imágenes de shorts
-        if (talla === "xs" || talla === "ch" || talla === "s") {
-          return { url: "/moldes/XS SHORT.png", width: 312, height: 218 };
-        } else if (talla === "m") {
-          return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
-        } else if (talla === "l" || talla === "g") {
-          return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
-        } else if (talla === "xl") {
-          return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
-        } else if (talla === "2xl" || talla === "3xl") {
-          return { url: "/moldes/2 XL SHORT.png", width: 399, height: 278 };
-        }
-        // Default a XL SHORT
-        return { url: "/moldes/XL SHORT.png", width: 380, height: 265 };
+        const tallaSpanish = excelToSpanish[talla];
+        if (!tallaSpanish) return { url: "", width: 380, height: 265 };
+
+        const { uniformSizesConfigCompressed } = useDesignerStore.getState();
+        const images = uniformSizesConfigCompressed[tallaSpanish];
+        // Usar dimensiones por defecto, se ajustarán según sizeConfig
+        return { url: images?.shorts || "", width: 380, height: 265 };
       };
 
       // Función para obtener la configuración de talla
@@ -242,6 +306,95 @@ export const Toolbar: React.FC = () => {
         ); // Default M
       };
 
+      // OCULTAR EL CANVAS para evitar renderizados intermedios
+      setCanvasHidden(true);
+
+      // Mostrar loading overlay
+      setShowBulkLoading(true);
+      setBulkProgress({ current: 0, total: rows.length });
+
+      // Pequeño delay para que el loading se muestre antes de empezar el procesamiento
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Pre-cargar todas las imágenes en el caché ANTES de empezar a crear elementos
+      // Esto evita que se intenten cargar múltiples veces durante el renderizado
+      console.log('Pre-cargando imágenes en caché...');
+      const imagesToPreload = new Set<string>();
+
+      // Recopilar todas las URLs de imágenes únicas que se usarán
+      const currentUniformConfig = useDesignerStore.getState().uniformSizesConfig;
+      rows.forEach(row => {
+        const tallaExcel = (row.talla || 'm').toLowerCase().trim();
+        const tallaSpanish = excelToSpanish[tallaExcel];
+        if (tallaSpanish && currentUniformConfig[tallaSpanish]) {
+          const images = currentUniformConfig[tallaSpanish];
+          if (images.jerseyFront) imagesToPreload.add(images.jerseyFront);
+          if (images.jerseyBack) imagesToPreload.add(images.jerseyBack);
+          if (images.shorts) imagesToPreload.add(images.shorts);
+        }
+      });
+
+      // COMPRIMIR imágenes para el canvas (mantiene originales para PDF)
+      console.log(`Comprimiendo ${imagesToPreload.size} imágenes para el canvas...`);
+      const storeState = useDesignerStore.getState();
+      const uniformSizesConfigOriginal = storeState.uniformSizesConfig;
+      const compressedConfig: any = {};
+
+      for (const tallaSpanish of Object.keys(uniformSizesConfigOriginal) as SizeSpanish[]) {
+        const images = uniformSizesConfigOriginal[tallaSpanish];
+        if (images) {
+          compressedConfig[tallaSpanish] = {};
+
+          if (images.jerseyFront) {
+            compressedConfig[tallaSpanish].jerseyFront = await compressImageForCanvas(images.jerseyFront);
+          }
+          if (images.jerseyBack) {
+            compressedConfig[tallaSpanish].jerseyBack = await compressImageForCanvas(images.jerseyBack);
+          }
+          if (images.shorts) {
+            compressedConfig[tallaSpanish].shorts = await compressImageForCanvas(images.shorts);
+          }
+
+          // Pausa entre cada talla
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+
+      // Guardar imágenes comprimidas en el store
+      useDesignerStore.setState({ uniformSizesConfigCompressed: compressedConfig });
+      console.log(`✓ Imágenes comprimidas para canvas (originales intactas para PDF)`);
+
+      // Pre-cargar las imágenes COMPRIMIDAS en el caché
+      console.log(`Pre-cargando imágenes comprimidas en caché...`);
+      let preloadCount = 0;
+      for (const url of imagesToPreload) {
+        // Buscar la versión comprimida
+        let compressedUrl = url;
+        for (const tallaSpanish of Object.keys(compressedConfig) as SizeSpanish[]) {
+          const imgs = compressedConfig[tallaSpanish];
+          if (imgs.jerseyFront === url || imgs.jerseyBack === url || imgs.shorts === url) {
+            // Usar la versión comprimida
+            compressedUrl = imgs.jerseyFront === url ? imgs.jerseyFront :
+                           imgs.jerseyBack === url ? imgs.jerseyBack : imgs.shorts;
+            break;
+          }
+        }
+
+        await new Promise<void>((resolve) => {
+          loadImage(compressedUrl, () => {
+            preloadCount++;
+            resolve();
+          });
+        });
+        // Pausa entre cada imagen pre-cargada: 200ms
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      console.log(`✓ Todas las imágenes pre-cargadas en caché`);
+
+      // Pausa después de pre-cargar: 500ms
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Obtener todas las páginas actuales
       const { pages } = useDesignerStore.getState();
 
@@ -253,14 +406,17 @@ export const Toolbar: React.FC = () => {
       const shortsPerPage: { [pageIndex: number]: number } = {};
 
       // Por cada fila del Excel, crear un juego de playera (espalda + frente)
-      for (const row of rows) {
+      let processedCount = 0;
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+
         if (!row.nombre || row.nombre.trim() === "") {
           continue; // Saltar filas sin nombre
         }
 
         // Obtener la talla de la fila (default "M" si no existe)
         const tallaExcel = row.talla || "m";
-        const moldeSize = mapSizeToMoldeName(tallaExcel);
         const sizeConfig = getSizeConfig(tallaExcel);
         // Talla para mostrar en el molde (usar la talla original del Excel en mayúsculas)
         const tallaMostrar = tallaExcel.toUpperCase().trim();
@@ -321,7 +477,7 @@ export const Toolbar: React.FC = () => {
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: `/moldes/${moldeSize} CAB ESPALDA.png`,
+          imageUrl: getMoldeEspaldaUrl(tallaExcel),
         };
 
         currentElements.push(newJerseyEspalda);
@@ -433,7 +589,7 @@ export const Toolbar: React.FC = () => {
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: getMoldeFrenteUrl(tallaExcel, moldeSize),
+          imageUrl: getMoldeFrenteUrl(tallaExcel),
         };
 
         currentElements.push(newJerseyFrente);
@@ -494,10 +650,6 @@ export const Toolbar: React.FC = () => {
         let storeState = useDesignerStore.getState();
         let allPages = storeState.pages;
 
-        console.log(`🔍 Estado actual ANTES de decidir dónde van shorts de ${row.nombre}:`);
-        console.log(`   - Página actual de jerseys: ${currentPageIndex}`);
-        console.log(`   - Total de páginas en store: ${allPages.length}`);
-
         // ESTRATEGIA: Intentar colocar shorts en página actual primero,
         // si no caben, intentar en página anterior (si existe y tiene espacio),
         // si tampoco, crear nueva página
@@ -512,21 +664,13 @@ export const Toolbar: React.FC = () => {
           el => el.type === "uniform" && el.part === "shorts"
         );
 
-        console.log(`   - Shorts ya en página actual ${currentPageIndex}: ${shortsInCurrentPage.length} (${shortsInCurrentPage.length/2} pares)`);
-
         if (shortsInCurrentPage.length > 0) {
           const maxY = Math.max(...shortsInCurrentPage.map(s => s.position.y + s.dimensions.height));
           pairY = maxY + elementGap;
         }
 
-        console.log(`   - Posición Y propuesta: ${pairY}`);
-
-        // Calcular cuántos pares de shorts PUEDEN caber en una página
-        const maxPairsPerPage = Math.floor(canvasHeight / pairHeight);
-
         // ESTRATEGIA MEJORADA: Buscar en TODAS las páginas desde la 0 hasta la actual
         // Intentar llenar las páginas anteriores primero antes de usar la actual
-        console.log(`🔎 Buscando mejor página para shorts de ${row.nombre}...`);
 
         // Buscar en todas las páginas existentes, empezando desde la 0
         for (let pageIndex = 0; pageIndex <= currentPageIndex; pageIndex++) {
@@ -545,22 +689,17 @@ export const Toolbar: React.FC = () => {
             pagePairY = maxY + elementGap;
           }
 
-          const shortCountInPage = shortsInPage.length / 2;
-          console.log(`   Página ${pageIndex}: tiene ${shortCountInPage} pares, Y=${pagePairY}, necesita=${pagePairY + pairHeight}, max=${canvasHeight}`);
-
           // ¿Cabe en esta página?
           if (pagePairY + pairHeight <= canvasHeight) {
             foundSpace = true;
             shortsPageIndex = pageIndex;
             pairY = pagePairY;
-            console.log(`   ✅ Usando página ${pageIndex} para shorts (será par #${shortCountInPage + 1}, max=${maxPairsPerPage})`);
             break; // Usar la primera página donde cabe
           }
         }
 
         // Si no encontró espacio en ninguna página existente, crear nueva
         if (!foundSpace) {
-          console.log(`   📄 Creando NUEVA página ${currentPageIndex + 1} para shorts`);
           addPage();
           currentPageIndex++;
           shortsPageIndex = currentPageIndex;
@@ -575,8 +714,6 @@ export const Toolbar: React.FC = () => {
         // Obtener zIndex correcto basado en la página donde van los shorts
         let targetPageElements = allPages[shortsPageIndex] || [];
         const baseZIndex = targetPageElements.length;
-
-        console.log(`   📊 Calculando zIndex: página ${shortsPageIndex} tiene ${targetPageElements.length} elementos, baseZIndex=${baseZIndex}`);
 
         // Crear SHORT 1 (arriba, normal) - SIEMPRE en shortsColumnX
         const short1Position = { x: shortsColumnX, y: pairY };
@@ -600,13 +737,6 @@ export const Toolbar: React.FC = () => {
           currentElements.push(newShort1);
         }
         addElement(newShort1, shortsPageIndex);
-        console.log(`   📦 Short 1 agregado a página ${shortsPageIndex} en posición (${short1Position.x}, ${short1Position.y}), zIndex=${baseZIndex}`);
-
-        // VERIFICACIÓN: Confirmar que se agregó
-        const verifyState1 = useDesignerStore.getState();
-        const verifyPage1 = verifyState1.pages[shortsPageIndex] || [];
-        const verifyShortsCount1 = verifyPage1.filter(el => el.type === "uniform" && el.part === "shorts").length;
-        console.log(`   ✓ VERIFICADO: Página ${shortsPageIndex} ahora tiene ${verifyShortsCount1} shorts totales`);
 
         // Refrescar el estado después de agregar Short 1
         const updatedState = useDesignerStore.getState();
@@ -638,20 +768,26 @@ export const Toolbar: React.FC = () => {
           currentElements.push(newShort2);
         }
         addElement(newShort2, shortsPageIndex);
-        console.log(`   📦 Short 2 agregado a página ${shortsPageIndex} en posición (${short2Position.x}, ${short2Position.y}), zIndex=${targetPageElements.length}`);
-
-        // VERIFICACIÓN: Confirmar que se agregó
-        const verifyState2 = useDesignerStore.getState();
-        const verifyPage2 = verifyState2.pages[shortsPageIndex] || [];
-        const verifyShortsCount2 = verifyPage2.filter(el => el.type === "uniform" && el.part === "shorts").length;
-        console.log(`   ✓ VERIFICADO: Página ${shortsPageIndex} ahora tiene ${verifyShortsCount2} shorts totales`);
-        console.log(`   ====================================================\n`);
 
         // Incrementar contador de shorts por página
         if (!shortsPerPage[shortsPageIndex]) {
           shortsPerPage[shortsPageIndex] = 0;
         }
         shortsPerPage[shortsPageIndex] += 2; // Un par = 2 shorts
+
+        // Actualizar progreso
+        processedCount++;
+        setBulkProgress({ current: processedCount, total: rows.length });
+
+        // PROCESAMIENTO POR LOTES: Cada 5 uniformes, hacer una pausa LARGA
+        // para permitir limpieza de memoria
+        if (processedCount % 5 === 0) {
+          // Pausa de 3 segundos cada 5 uniformes
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        } else {
+          // Pausa pequeña entre uniformes del mismo lote
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
       // Mostrar resumen final
@@ -693,12 +829,32 @@ export const Toolbar: React.FC = () => {
       console.log('=======================================================\n');
 
       const totalPagesUsed = currentPageIndex + 1;
+
+      // Ocultar loading
+      setShowBulkLoading(false);
+
+      // MOSTRAR EL CANVAS nuevamente
+      setCanvasHidden(false);
+
       alert(`Se crearon ${rows.length} juegos completos (espalda + frente + 2 shorts) exitosamente en ${totalPagesUsed} página(s)!`);
     } catch (error) {
       console.error("Error al procesar el archivo Excel:", error);
-      alert(
-        "Error al procesar el archivo Excel. Verifica que tenga la columna 'nombre'."
-      );
+
+      // Ocultar loading en caso de error
+      setShowBulkLoading(false);
+
+      // MOSTRAR EL CANVAS en caso de error
+      setCanvasHidden(false);
+
+      // Mostrar error específico si está disponible
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+
+      setErrorDetails({
+        title: "Error al procesar Excel",
+        message: "Ocurrió un error al procesar el archivo Excel.",
+        details: [errorMessage],
+      });
+      setShowErrorModal(true);
     }
 
     // Limpiar el input para permitir cargar el mismo archivo de nuevo
@@ -763,6 +919,22 @@ export const Toolbar: React.FC = () => {
           />
         )}
       </div>
+
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        title={errorDetails.title}
+        message={errorDetails.message}
+        details={errorDetails.details}
+      />
+
+      {/* Bulk Loading Overlay */}
+      <BulkLoadingOverlay
+        isVisible={showBulkLoading}
+        currentUniform={bulkProgress.current}
+        totalUniforms={bulkProgress.total}
+      />
     </div>
   );
 };
