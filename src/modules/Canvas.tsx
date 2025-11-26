@@ -19,13 +19,14 @@ export const Canvas: React.FC = () => {
     currentPage,
     setCurrentPage,
     getTotalPages,
+    getPageHeight,
   } = useDesignerStore();
 
   const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
-  const canvasHeight = cmToPixels(
-    canvasConfig.height,
-    canvasConfig.pixelsPerCm
-  );
+
+  // Usar altura ajustada para la página actual
+  const currentPageHeight = getPageHeight(currentPage);
+  const canvasHeight = cmToPixels(currentPageHeight, canvasConfig.pixelsPerCm);
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     // Deseleccionar si se hace clic en el fondo
@@ -109,7 +110,7 @@ export const Canvas: React.FC = () => {
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs">
               <span className="font-semibold text-gray-700">Tamaño:</span>
-              <span className="text-gray-600">{canvasConfig.width} × {canvasConfig.height} cm</span>
+              <span className="text-gray-600">{canvasConfig.width} × {currentPageHeight.toFixed(1)} cm</span>
             </div>
             <div className="flex items-center gap-2 text-xs">
               <span className="font-semibold text-gray-700">Zoom:</span>

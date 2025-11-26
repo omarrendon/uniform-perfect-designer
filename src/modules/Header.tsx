@@ -13,7 +13,7 @@ import {
 import { useDesignerStore } from "../store/desingerStore";
 import { exportCanvas } from "../utils/export";
 import { Button } from "../components/Button";
-import { LoadingModal } from "../components/LoadingModal";
+import { ExportLoadingOverlay } from "../components/ExportLoadingOverlay";
 import { optimizeLayoutAdvanced, calculateLayoutMetrics, type LayoutOptions } from "../utils/binPacking";
 
 export const Header: React.FC = () => {
@@ -98,21 +98,25 @@ export const Header: React.FC = () => {
         // Crear PDFs separados para cada página
         if (pageImages.length > 0) {
           const { default: jsPDF } = await import('jspdf');
+          const { getPageHeight } = useDesignerStore.getState();
 
           const canvasWidthCm = canvasConfig.width;
-          const canvasHeightCm = canvasConfig.height;
           const timestamp = Date.now();
 
           // Crear un PDF separado para cada página
           for (let i = 0; i < pageImages.length; i++) {
+            // Obtener altura ajustada para cada página
+            const pageHeightCm = getPageHeight(i);
+
             const pdf = new jsPDF({
-              orientation: canvasWidthCm > canvasHeightCm ? 'landscape' : 'portrait',
+              orientation: canvasWidthCm > pageHeightCm ? 'landscape' : 'portrait',
               unit: 'cm',
-              format: [canvasWidthCm, canvasHeightCm],
+              format: [canvasWidthCm, pageHeightCm],
             });
 
             // Agregar la imagen a este PDF (PNG para mayor calidad)
-            pdf.addImage(pageImages[i], 'PNG', 0, 0, canvasWidthCm, canvasHeightCm);
+            // La imagen debe recortarse a la altura real de la página
+            pdf.addImage(pageImages[i], 'PNG', 0, 0, canvasWidthCm, pageHeightCm);
 
             // Guardar con nombre único (incluye número de página si hay más de una)
             const fileName = pageImages.length > 1
@@ -214,21 +218,83 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold text-gray-800">
-            Diseño de Uniformes
+      <header
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          width: '100vw',
+          margin: 0,
+          zIndex: 100,
+          minHeight: '64px',
+          backgroundColor: '#1f2937',
+          borderBottom: '1px solid #374151',
+          borderRadius: '0 0 12px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
+        {/* Logo y Título */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          minWidth: 'fit-content',
+        }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            backgroundColor: '#3b82f6',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 'bold',
+            color: 'white',
+            fontSize: '20px',
+            flexShrink: 0,
+          }}>
+            U
+          </div>
+          <h1 style={{
+            fontSize: 'clamp(16px, 4vw, 20px)',
+            fontWeight: '700',
+            color: 'white',
+            letterSpacing: '-0.025em',
+            whiteSpace: 'nowrap',
+          }}>
+            Uniform Designer
           </h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Barra de herramientas central */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          backgroundColor: '#374151',
+          padding: '6px',
+          borderRadius: '8px',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+        }}>
           {/* Undo/Redo */}
           <Button
             size="sm"
             variant="ghost"
             onClick={undo}
             disabled={!canUndo()}
-            title="Deshacer"
+            title="Deshacer (Ctrl+Z)"
+            style={{
+              color: !canUndo() ? '#6b7280' : '#e5e7eb',
+              backgroundColor: 'transparent',
+            }}
           >
             <Undo className="w-4 h-4" />
           </Button>
@@ -237,23 +303,41 @@ export const Header: React.FC = () => {
             variant="ghost"
             onClick={redo}
             disabled={!canRedo()}
-            title="Rehacer"
+            title="Rehacer (Ctrl+Y)"
+            style={{
+              color: !canRedo() ? '#6b7280' : '#e5e7eb',
+              backgroundColor: 'transparent',
+            }}
           >
             <Redo className="w-4 h-4" />
           </Button>
 
-          <div className="w-px h-6 bg-gray-300 mx-2" />
-          {/* Zoom */}
+          <div style={{ width: '1px', height: '24px', backgroundColor: '#4b5563', margin: '0 4px' }} />
+
+          {/* Zoom Controls */}
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setZoom(zoom - 0.1)}
             disabled={zoom <= 0.1}
             title="Alejar"
+            style={{
+              color: zoom <= 0.1 ? '#6b7280' : '#e5e7eb',
+              backgroundColor: 'transparent',
+            }}
           >
             <ZoomOut className="w-4 h-4" />
           </Button>
-          <span className="text-sm font-medium w-16 text-center">
+          <span style={{
+            fontSize: '13px',
+            fontWeight: '600',
+            color: '#e5e7eb',
+            minWidth: '52px',
+            textAlign: 'center',
+            backgroundColor: '#1f2937',
+            padding: '4px 8px',
+            borderRadius: '4px',
+          }}>
             {Math.round(zoom * 100)}%
           </span>
           <Button
@@ -262,6 +346,10 @@ export const Header: React.FC = () => {
             onClick={() => setZoom(zoom + 0.1)}
             disabled={zoom >= 3}
             title="Acercar"
+            style={{
+              color: zoom >= 3 ? '#6b7280' : '#e5e7eb',
+              backgroundColor: 'transparent',
+            }}
           >
             <ZoomIn className="w-4 h-4" />
           </Button>
@@ -269,12 +357,16 @@ export const Header: React.FC = () => {
             size="sm"
             variant="ghost"
             onClick={() => setZoom(1)}
-            title="Zoom 100%"
+            title="Restablecer Zoom (100%)"
+            style={{
+              color: '#e5e7eb',
+              backgroundColor: 'transparent',
+            }}
           >
             <Maximize className="w-4 h-4" />
           </Button>
 
-          <div className="w-px h-6 bg-gray-300 mx-2" />
+          <div style={{ width: '1px', height: '24px', backgroundColor: '#4b5563', margin: '0 4px' }} />
 
           {/* Optimize Layout */}
           <Button
@@ -282,26 +374,85 @@ export const Header: React.FC = () => {
             variant="ghost"
             onClick={handleOptimizeLayout}
             title="Optimizar disposición"
+            style={{
+              color: '#e5e7eb',
+              backgroundColor: 'transparent',
+            }}
           >
             <Settings className="w-4 h-4" />
           </Button>
+        </div>
 
-          <div className="w-px h-6 bg-gray-300 mx-2" />
-
-          {/* Save/Load */}
+        {/* Acciones principales */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          minWidth: 'fit-content',
+          flexWrap: 'wrap',
+          marginRight: '72px',
+        }}>
           <Button
             size="sm"
-            variant="outline"
             onClick={() => setShowSaveModal(true)}
+            style={{
+              backgroundColor: '#374151',
+              color: 'white',
+              border: '1px solid #4b5563',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontWeight: '500',
+              fontSize: 'clamp(12px, 2vw, 14px)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#4b5563';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#374151';
+            }}
           >
-            <Save className="w-4 h-4 mr-2" />
-            Guardar
+            <Save style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+            <span style={{ display: 'inline' }}>Guardar</span>
           </Button>
 
-          {/* Export */}
-          <Button size="sm" onClick={() => setShowExportModal(true)}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
+          <Button
+            size="sm"
+            onClick={() => setShowExportModal(true)}
+            style={{
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              padding: '8px 20px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontWeight: '600',
+              fontSize: 'clamp(12px, 2vw, 14px)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#2563eb';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#3b82f6';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 1px 3px 0 rgba(0, 0, 0, 0.1)';
+            }}
+          >
+            <Download style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+            <span style={{ display: 'inline' }}>Exportar</span>
           </Button>
         </div>
       </header>
@@ -496,12 +647,11 @@ export const Header: React.FC = () => {
         </div>
       )}
 
-      {/* Loading Modal */}
-      <LoadingModal
-        isOpen={isExporting}
+      {/* Export Loading Overlay */}
+      <ExportLoadingOverlay
+        isVisible={isExporting}
         currentPage={exportProgress.current}
         totalPages={exportProgress.total}
-        message={exportProgress.total > 0 ? "Capturando páginas del diseño..." : "Exportando..."}
       />
     </>
   );
