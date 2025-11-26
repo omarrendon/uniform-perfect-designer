@@ -869,7 +869,7 @@ export const Toolbar: React.FC = () => {
   }, [selectedElement]);
 
   return (
-    <div className="w-1/4 min-w-[300px] max-w-[400px] bg-white border-r border-gray-200 flex flex-col shadow-lg">
+    <div className="w-1/4 min-w-[300px] max-w-[400px] bg-white flex flex-col shadow-lg" style={{ border: '1px solid red' }}>
       {/* Header con pestañas */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4">
         <div className="flex gap-2">

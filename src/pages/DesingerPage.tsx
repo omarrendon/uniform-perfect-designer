@@ -3,7 +3,7 @@ import { useHistory } from "../hooks/useHistory";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useAutoSave } from "../hooks/useAutoSave";
 import { Header } from "../modules/Header";
-import { Toolbar } from "../modules/Toolbar";
+// import { Toolbar } from "../modules/Toolbar"; // Movido al Header como dropdowns
 import { Canvas } from "../modules/Canvas";
 
 export const DesignerPage: React.FC = () => {
@@ -18,7 +18,7 @@ export const DesignerPage: React.FC = () => {
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
       <Header />
       <div className="flex-1 flex overflow-hidden">
-        <Toolbar />
+        {/* <Toolbar /> */}
         <Canvas />
       </div>
     </div>

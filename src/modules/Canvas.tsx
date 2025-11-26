@@ -57,8 +57,8 @@ export const Canvas: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
-      <div className="flex-1 flex items-center justify-center overflow-auto relative">
+    <div className="flex-1 flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 w-full">
+      <div className="flex-1 flex items-center justify-center overflow-auto relative w-full">
         <div
           className="bg-white shadow-2xl rounded-lg relative overflow-hidden"
           style={{
