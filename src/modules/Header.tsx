@@ -12,7 +12,6 @@ import {
   Shirt,
   Plus,
   Type,
-  FileUp,
   Copy,
   Trash2,
   Eye,
@@ -435,12 +434,12 @@ export const Header: React.FC = () => {
 
   const selectedElement = elements.find(el => el.id === selectedElementId);
 
-  const handleOptimizeLayout = () => {
-    // Calcular métricas actuales antes de optimizar
-    const currentMetrics = calculateLayoutMetrics(elements, canvasConfig);
-    setLayoutMetrics(currentMetrics);
-    setShowOptimizeModal(true);
-  };
+  // const handleOptimizeLayout = () => {
+  //   // Calcular métricas actuales antes de optimizar
+  //   const currentMetrics = calculateLayoutMetrics(elements, canvasConfig);
+  //   setLayoutMetrics(currentMetrics);
+  //   setShowOptimizeModal(true);
+  // };
 
   const applyOptimization = () => {
     const result = optimizeLayoutAdvanced(

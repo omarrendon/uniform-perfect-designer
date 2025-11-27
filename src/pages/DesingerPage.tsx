@@ -17,8 +17,7 @@ export const DesignerPage: React.FC = () => {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
       <Header />
-      <div className="flex-1 flex overflow-hidden">
-        {/* <Toolbar /> */}
+      <div className="flex-1 flex overflow-hidden" style={{ marginTop: "64px" }}>
         <Canvas />
       </div>
     </div>
