@@ -63,6 +63,8 @@ export interface UniformTemplate extends UniformElement {
   baseColor: string;
   imageUrl?: string;
   imageMask?: string;
+  originalImageUrl?: string; // URL de la imagen original para exportar en alta calidad
+  side?: 'front' | 'back' | 'right' | 'left'; // Lado del uniforme
 }
 
 export interface TextElement extends UniformElement {

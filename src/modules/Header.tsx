@@ -21,6 +21,9 @@ import {
   ArrowUp,
   ArrowDown,
   Edit3,
+  Upload,
+  Image as ImageIcon,
+  // Sheet,
 } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
 import { exportCanvas } from "../utils/export";
@@ -62,6 +65,9 @@ export const Header: React.FC = () => {
     bringToFront,
     sendToBack,
     sizeConfigs,
+    setBulkImages,
+    processBulkImages,
+    bulkImageUpload,
   } = useDesignerStore();
 
   const [showExportModal, setShowExportModal] = useState(false);
@@ -93,10 +99,18 @@ export const Header: React.FC = () => {
   const saveDropdownRef = useRef<HTMLDivElement>(null);
   const addDropdownRef = useRef<HTMLDivElement>(null);
   const editDropdownRef = useRef<HTMLDivElement>(null);
+  const uploadDropdownRef = useRef<HTMLDivElement>(null);
   const [showOptimizeDropdown, setShowOptimizeDropdown] = useState(false);
   const [showSaveDropdown, setShowSaveDropdown] = useState(false);
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const [showEditDropdown, setShowEditDropdown] = useState(false);
+  const [showUploadDropdown, setShowUploadDropdown] = useState(false);
+
+  // Refs para los inputs de archivos
+  const jerseyFrontsInputRef = useRef<HTMLInputElement>(null);
+  const jerseyBacksInputRef = useRef<HTMLInputElement>(null);
+  const shortsRightsInputRef = useRef<HTMLInputElement>(null);
+  const shortsLeftsInputRef = useRef<HTMLInputElement>(null);
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -131,6 +145,12 @@ export const Header: React.FC = () => {
       ) {
         setShowEditDropdown(false);
       }
+      if (
+        uploadDropdownRef.current &&
+        !uploadDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowUploadDropdown(false);
+      }
     };
 
     if (
@@ -138,7 +158,8 @@ export const Header: React.FC = () => {
       showOptimizeDropdown ||
       showSaveDropdown ||
       showAddDropdown ||
-      showEditDropdown
+      showEditDropdown ||
+      showUploadDropdown
     ) {
       document.addEventListener("mousedown", handleClickOutside);
     }
@@ -152,6 +173,7 @@ export const Header: React.FC = () => {
     showSaveDropdown,
     showAddDropdown,
     showEditDropdown,
+    showUploadDropdown,
   ]);
 
   const handleExport = async (format: "png" | "pdf") => {
@@ -491,6 +513,28 @@ export const Header: React.FC = () => {
     );
     setShowOptimizeModal(false);
   };
+
+  // Handlers para carga masiva de imágenes
+  const handleFileUpload = (
+    type: "jerseyFronts" | "jerseyBacks" | "shortsRights" | "shortsLefts",
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      setBulkImages(type, Array.from(files));
+    }
+  };
+
+  const handleProcessImages = async () => {
+    setShowUploadDropdown(false);
+    await processBulkImages();
+  };
+
+  const canProcess =
+    (bulkImageUpload.jerseyFronts.length > 0 &&
+      bulkImageUpload.jerseyBacks.length > 0) ||
+    (bulkImageUpload.shortsRights.length > 0 &&
+      bulkImageUpload.shortsLefts.length > 0);
 
   return (
     <>
@@ -1481,6 +1525,274 @@ export const Header: React.FC = () => {
           >
             <Shirt className="w-4 h-4" />
           </Button>
+
+          <div
+            style={{
+              width: "1px",
+              height: "24px",
+              backgroundColor: "#4b5563",
+              margin: "0 4px",
+            }}
+          />
+
+          {/* Carga Masiva de Imágenes */}
+          <div ref={uploadDropdownRef} style={{ position: "relative" }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowUploadDropdown(!showUploadDropdown)}
+              title="Carga Masiva de Imágenes"
+              style={{
+                color: "#e5e7eb",
+                backgroundColor: showUploadDropdown ? "#374151" : "transparent",
+              }}
+            >
+              <Upload className="w-4 h-4" />
+            </Button>
+
+            {/* Upload Dropdown Menu */}
+            {showUploadDropdown && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  backgroundColor: "#1f2937",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  minWidth: "320px",
+                  maxWidth: "380px",
+                  boxShadow:
+                    "0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2)",
+                  border: "1px solid #374151",
+                  zIndex: 1000,
+                  animation: "slideDown 0.2s ease-out",
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    color: "#f9fafb",
+                    marginBottom: "12px",
+                  }}
+                >
+                  Carga Masiva de Imágenes
+                </h3>
+
+                {/* Inputs ocultos */}
+                <input
+                  ref={jerseyFrontsInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={e => handleFileUpload("jerseyFronts", e)}
+                />
+                <input
+                  ref={jerseyBacksInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={e => handleFileUpload("jerseyBacks", e)}
+                />
+                <input
+                  ref={shortsRightsInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={e => handleFileUpload("shortsRights", e)}
+                />
+                <input
+                  ref={shortsLeftsInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={e => handleFileUpload("shortsLefts", e)}
+                />
+
+                {/* Sección Playeras */}
+                <div style={{ marginBottom: "16px" }}>
+                  <h4
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      color: "#e5e7eb",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Playeras
+                  </h4>
+
+                  <button
+                    onClick={() => jerseyFrontsInputRef.current?.click()}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      backgroundColor: "#374151",
+                      color: "#e5e7eb",
+                      border: "1px solid #4b5563",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      marginBottom: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = "#4b5563";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = "#374151";
+                    }}
+                  >
+                    <ImageIcon style={{ width: "14px", height: "14px" }} />
+                    Cargar Frentes ({bulkImageUpload.jerseyFronts.length})
+                  </button>
+
+                  <button
+                    onClick={() => jerseyBacksInputRef.current?.click()}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      backgroundColor: "#374151",
+                      color: "#e5e7eb",
+                      border: "1px solid #4b5563",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = "#4b5563";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = "#374151";
+                    }}
+                  >
+                    <ImageIcon style={{ width: "14px", height: "14px" }} />
+                    Cargar Traseras ({bulkImageUpload.jerseyBacks.length})
+                  </button>
+                </div>
+
+                {/* Sección Shorts */}
+                <div style={{ marginBottom: "16px" }}>
+                  <h4
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      color: "#e5e7eb",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Shorts
+                  </h4>
+
+                  <button
+                    onClick={() => shortsRightsInputRef.current?.click()}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      backgroundColor: "#374151",
+                      color: "#e5e7eb",
+                      border: "1px solid #4b5563",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      marginBottom: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = "#4b5563";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = "#374151";
+                    }}
+                  >
+                    <ImageIcon style={{ width: "14px", height: "14px" }} />
+                    Cargar Derechos ({bulkImageUpload.shortsRights.length})
+                  </button>
+
+                  <button
+                    onClick={() => shortsLeftsInputRef.current?.click()}
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      backgroundColor: "#374151",
+                      color: "#e5e7eb",
+                      border: "1px solid #4b5563",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = "#4b5563";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = "#374151";
+                    }}
+                  >
+                    <ImageIcon style={{ width: "14px", height: "14px" }} />
+                    Cargar Izquierdos ({bulkImageUpload.shortsLefts.length})
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    height: "1px",
+                    backgroundColor: "#374151",
+                    margin: "12px 0",
+                  }}
+                />
+
+                {/* Botón Procesar */}
+                <button
+                  onClick={handleProcessImages}
+                  disabled={!canProcess}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    backgroundColor: canProcess ? "#3b82f6" : "#374151",
+                    color: canProcess ? "white" : "#6b7280",
+                    border: "none",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    cursor: canProcess ? "pointer" : "not-allowed",
+                    transition: "all 0.15s",
+                  }}
+                  onMouseEnter={e => {
+                    if (canProcess) {
+                      e.currentTarget.style.backgroundColor = "#2563eb";
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (canProcess) {
+                      e.currentTarget.style.backgroundColor = "#3b82f6";
+                    }
+                  }}
+                >
+                  Procesar Imágenes
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Acciones principales */}

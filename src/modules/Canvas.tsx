@@ -11,7 +11,7 @@ import { Pagination } from "../components/Pagination";
 export const Canvas: React.FC = () => {
   const stageRef = useRef<Konva.Stage>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
+  const [autoScale, setAutoScale] = useState(1);
 
   const {
     canvasConfig,
@@ -32,23 +32,34 @@ export const Canvas: React.FC = () => {
   const currentPageHeight = getPageHeight(currentPage);
   const canvasHeight = cmToPixels(currentPageHeight, canvasConfig.pixelsPerCm);
 
-  // Detectar el ancho del contenedor
+  // Calcular escala automática para que el canvas quepa en la pantalla sin scroll
   useEffect(() => {
-    const updateContainerWidth = () => {
+    const calculateAutoScale = () => {
       if (containerRef.current) {
-        const width = containerRef.current.offsetWidth - 40; // Restar padding
-        setContainerWidth(width);
+        const containerWidth = containerRef.current.offsetWidth - 40; // Restar padding
+        const containerHeight = containerRef.current.offsetHeight - 40; // Restar padding
+
+        const targetWidth = canvasWidth * zoom;
+        const targetHeight = canvasHeight * zoom;
+
+        const scaleX = containerWidth / targetWidth;
+        const scaleY = containerHeight / targetHeight;
+
+        // Usar la escala menor para que quepa todo, pero no más de 1 (no agrandar)
+        const newScale = Math.min(scaleX, scaleY, 1);
+        setAutoScale(newScale);
       }
     };
 
-    updateContainerWidth();
-    window.addEventListener('resize', updateContainerWidth);
+    calculateAutoScale();
+    window.addEventListener('resize', calculateAutoScale);
 
-    return () => window.removeEventListener('resize', updateContainerWidth);
-  }, []);
+    return () => window.removeEventListener('resize', calculateAutoScale);
+  }, [canvasWidth, canvasHeight, zoom]);
 
-  // Calcular el ancho efectivo del canvas (el menor entre el ancho del contenedor y el ancho calculado)
-  const effectiveCanvasWidth = containerWidth > 0 ? Math.min(containerWidth, canvasWidth * zoom) : canvasWidth * zoom;
+  // Dimensiones finales del canvas con escala automática
+  const displayWidth = canvasWidth * zoom * autoScale;
+  const displayHeight = canvasHeight * zoom * autoScale;
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     // Deseleccionar si se hace clic en el fondo
@@ -81,41 +92,48 @@ export const Canvas: React.FC = () => {
     <div
       style={{
         flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'linear-gradient(to bottom right, rgb(249, 250, 251), rgb(243, 244, 246))',
-        width: '100%',
-        height: '100%',
+        display: "flex",
+        flexDirection: "column",
+        background:
+          "linear-gradient(to bottom right, rgb(249, 250, 251), rgb(243, 244, 246))",
+        width: "100%",
+        height: "100%",
+        border: "1px solid red",
+        alignItems: "flex-start",
+        marginTop: "30px",
       }}
     >
-      {/* Contenedor principal con referencia para medir el ancho */}
+      {/* Contenedor principal */}
       <div
         ref={containerRef}
         style={{
           flex: 1,
-          width: '100%',
-          height: '100%',
-          overflowX: 'auto',
-          overflowY: 'auto',
-          position: 'relative',
-          padding: '20px 20px 20px 10px',
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+          position: "relative",
+          padding: "20px 20px 20px 10px",
+          border: "1px solid blue",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         {/* Canvas con ancho completo */}
         <div
           className="bg-white shadow-2xl rounded-lg relative overflow-hidden"
           style={{
-            width: canvasWidth * zoom,
-            height: canvasHeight * zoom,
-            border: '1px solid #d1d5db',
+            width: displayWidth,
+            height: displayHeight,
+            border: "1px solid #d1d5db",
           }}
         >
           <Stage
             ref={stageRef}
-            width={canvasWidth * zoom}
-            height={canvasHeight * zoom}
-            scaleX={zoom}
-            scaleY={zoom}
+            width={displayWidth}
+            height={displayHeight}
+            scaleX={zoom * autoScale}
+            scaleY={zoom * autoScale}
             onClick={handleStageClick}
             onTap={handleStageClick}
           >
@@ -171,31 +189,63 @@ export const Canvas: React.FC = () => {
         {/* Información del canvas - Posicionada en la esquina superior derecha */}
         <div
           style={{
-            position: 'absolute',
-            top: '32px',
-            right: '32px',
-            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(8px)',
-            padding: '12px 16px',
-            borderRadius: '12px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            border: '1px solid rgb(229, 231, 235)',
+            position: "absolute",
+            top: "32px",
+            right: "32px",
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(8px)",
+            padding: "12px 16px",
+            borderRadius: "12px",
+            boxShadow:
+              "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+            border: "1px solid rgb(229, 231, 235)",
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-              <span style={{ fontWeight: '600', color: 'rgb(55, 65, 81)' }}>Tamaño:</span>
-              <span style={{ color: 'rgb(107, 114, 128)' }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "12px",
+              }}
+            >
+              <span style={{ fontWeight: "600", color: "rgb(55, 65, 81)" }}>
+                Tamaño:
+              </span>
+              <span style={{ color: "rgb(107, 114, 128)" }}>
                 {canvasConfig.width} × {currentPageHeight.toFixed(1)} cm
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-              <span style={{ fontWeight: '600', color: 'rgb(55, 65, 81)' }}>Zoom:</span>
-              <span style={{ color: 'rgb(107, 114, 128)' }}>{Math.round(zoom * 100)}%</span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "12px",
+              }}
+            >
+              <span style={{ fontWeight: "600", color: "rgb(55, 65, 81)" }}>
+                Zoom:
+              </span>
+              <span style={{ color: "rgb(107, 114, 128)" }}>
+                {Math.round(zoom * 100)}%
+              </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-              <span style={{ fontWeight: '600', color: 'rgb(55, 65, 81)' }}>Elementos:</span>
-              <span style={{ color: 'rgb(107, 114, 128)' }}>{elements.length}</span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "12px",
+              }}
+            >
+              <span style={{ fontWeight: "600", color: "rgb(55, 65, 81)" }}>
+                Elementos:
+              </span>
+              <span style={{ color: "rgb(107, 114, 128)" }}>
+                {elements.length}
+              </span>
             </div>
           </div>
         </div>

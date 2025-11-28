@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { X, Upload, Check, AlertCircle } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { X, Upload, Check, AlertCircle, FileUp } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
 import type { SizeSpanish } from "../types";
+import { validateExcelFile } from "../utils/excelReader";
 
 interface UniformSizesModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   onClose,
 }) => {
   const [currentSize, setCurrentSize] = useState<SizeSpanish>('M');
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const excelInputRef = useRef<HTMLInputElement>(null);
   const { uniformSizesConfig, setUniformSizeImages, isSizeComplete } = useDesignerStore();
 
   if (!isOpen) return null;
@@ -47,6 +50,36 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
       setUniformSizeImages(currentSize, { [type]: base64String });
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleExcelFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validar que sea un archivo Excel
+    if (!validateExcelFile(file)) {
+      alert('Por favor selecciona un archivo Excel válido (.xlsx o .xls)');
+      return;
+    }
+
+    setExcelFile(file);
+  };
+
+  const handleProcessExcel = async () => {
+    if (!excelFile) {
+      alert('Por favor selecciona un archivo Excel primero');
+      return;
+    }
+
+    // Cerrar el modal
+    onClose();
+
+    // Informar al usuario
+    alert(`Archivo Excel "${excelFile.name}" seleccionado.\n\nNOTA: La funcionalidad completa de procesamiento de Excel se encuentra en el componente Toolbar y será integrada próximamente.\n\nPor ahora, asegúrate de haber configurado las imágenes para todas las tallas que uses en el Excel.`);
+
+    // TODO: Extraer la lógica de handleExcelUpload del Toolbar.tsx a una función reutilizable
+    // y llamarla aquí para procesar el archivo Excel
+    console.log('Excel file ready to process:', excelFile.name);
   };
 
   const currentImages = uniformSizesConfig[currentSize] || {};
@@ -507,7 +540,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
           borderTop: '1px solid #e5e7eb',
           backgroundColor: '#f9fafb',
         }}>
-          <div style={{ marginBottom: '12px' }}>
+          <div style={{ marginBottom: '16px' }}>
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
               💡 Solo las tallas con las 3 imágenes estarán disponibles en la carga masiva
             </p>
@@ -515,12 +548,96 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               ⚠️ Las imágenes se mantienen en memoria durante la sesión actual. Al refrescar la página deberás cargarlas nuevamente.
             </p>
           </div>
+
+          {/* Sección de carga de Excel */}
+          <div style={{
+            marginBottom: '16px',
+            padding: '16px',
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            border: '2px dashed #d1d5db',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <FileUp style={{ width: '24px', height: '24px', color: '#10b981' }} />
+              <div>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937', marginBottom: '2px' }}>
+                  Cargar Datos desde Excel
+                </h4>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                  Sube un archivo .xlsx o .xls con los datos de los uniformes
+                </p>
+              </div>
+            </div>
+
+            <input
+              ref={excelInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleExcelFileChange}
+              style={{ display: 'none' }}
+            />
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => excelInputRef.current?.click()}
+                style={{
+                  flex: 1,
+                  padding: '8px 16px',
+                  backgroundColor: excelFile ? '#f3f4f6' : '#10b981',
+                  color: excelFile ? '#374151' : 'white',
+                  border: excelFile ? '1px solid #d1d5db' : 'none',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {excelFile ? `📄 ${excelFile.name}` : 'Seleccionar Archivo'}
+              </button>
+
+              {excelFile && (
+                <button
+                  onClick={handleProcessExcel}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  Procesar
+                </button>
+              )}
+            </div>
+
+            <div style={{
+              marginTop: '12px',
+              padding: '10px',
+              backgroundColor: '#eff6ff',
+              borderRadius: '6px',
+              border: '1px solid #bfdbfe',
+            }}>
+              <p style={{ fontSize: '11px', color: '#1e40af', marginBottom: '4px' }}>
+                <strong>Columnas requeridas:</strong> nombre, talla
+              </p>
+              <p style={{ fontSize: '11px', color: '#1e40af' }}>
+                <strong>Columnas opcionales:</strong> numero_trasero, numero_frente, fuente
+              </p>
+            </div>
+          </div>
+
           <button
             onClick={onClose}
             style={{
               width: '100%',
               padding: '10px 24px',
-              backgroundColor: '#3b82f6',
+              backgroundColor: '#6b7280',
               color: 'white',
               border: 'none',
               borderRadius: '8px',

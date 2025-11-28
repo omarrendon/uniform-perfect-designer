@@ -339,6 +339,17 @@ interface DesignerState {
   setZoom: (zoom: number) => void;
   isCanvasHidden: boolean;
   setCanvasHidden: (hidden: boolean) => void;
+
+  // Bulk Image Upload
+  bulkImageUpload: {
+    jerseyFronts: File[];
+    jerseyBacks: File[];
+    shortsRights: File[];
+    shortsLefts: File[];
+  };
+  setBulkImages: (type: 'jerseyFronts' | 'jerseyBacks' | 'shortsRights' | 'shortsLefts', files: File[]) => void;
+  processBulkImages: () => Promise<void>;
+  clearBulkImages: () => void;
 }
 
 const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
@@ -376,6 +387,14 @@ export const useDesignerStore = create<DesignerState>()(
         showGrid: true,
         zoom: 1,
         isCanvasHidden: false,
+
+        // Bulk Image Upload initial state
+        bulkImageUpload: {
+          jerseyFronts: [],
+          jerseyBacks: [],
+          shortsRights: [],
+          shortsLefts: [],
+        },
 
         // Canvas configuration
         setCanvasConfig: config =>
@@ -686,6 +705,203 @@ export const useDesignerStore = create<DesignerState>()(
           set(() => ({
             uniformSizesConfig: {},
             uniformSizesConfigCompressed: {},
+          })),
+
+        // Bulk Image Upload functions
+        setBulkImages: (type, files) =>
+          set(state => ({
+            bulkImageUpload: {
+              ...state.bulkImageUpload,
+              [type]: Array.from(files),
+            },
+          })),
+
+        processBulkImages: async () => {
+          const { bulkImageUpload, addElement, canvasConfig, pages, setCanvasHidden } = get();
+          const { jerseyFronts, jerseyBacks, shortsRights, shortsLefts } = bulkImageUpload;
+
+          // Validación
+          if (jerseyFronts.length !== jerseyBacks.length) {
+            alert(`Error: El número de frentes (${jerseyFronts.length}) debe ser igual al número de traseras (${jerseyBacks.length})`);
+            return;
+          }
+
+          if (shortsRights.length !== shortsLefts.length) {
+            alert(`Error: El número de shorts derechos (${shortsRights.length}) debe ser igual al número de izquierdos (${shortsLefts.length})`);
+            return;
+          }
+
+          // Ocultar canvas mientras procesamos
+          setCanvasHidden(true);
+
+          try {
+            const allElements: CanvasElement[] = [];
+            const BATCH_SIZE = 10;
+
+            // Función auxiliar para cargar dimensiones de una imagen
+            const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
+              return new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+
+                img.onload = () => {
+                  resolve({ width: img.width, height: img.height });
+                  URL.revokeObjectURL(url);
+                };
+
+                img.onerror = () => {
+                  URL.revokeObjectURL(url);
+                  reject(new Error(`No se pudo cargar la imagen: ${file.name}`));
+                };
+
+                img.src = url;
+              });
+            };
+
+            // Función auxiliar para crear un elemento uniform
+            const createUniformElement = async (
+              file: File,
+              part: 'jersey' | 'shorts',
+              side: 'front' | 'back' | 'right' | 'left',
+              index: number
+            ) => {
+              const dimensions = await getImageDimensions(file);
+              const imageUrl = URL.createObjectURL(file);
+
+              return {
+                id: `${part}-${side}-${index}-${Date.now()}`,
+                type: 'uniform' as const,
+                part,
+                side,
+                size: 'M' as Size, // Talla por defecto
+                position: { x: 0, y: 0 }, // Se calculará con bin-packing
+                dimensions: {
+                  width: dimensions.width / canvasConfig.pixelsPerCm,
+                  height: dimensions.height / canvasConfig.pixelsPerCm,
+                },
+                rotation: 0,
+                zIndex: allElements.length,
+                locked: false,
+                visible: true,
+                baseColor: '#ffffff',
+                imageUrl,
+                originalImageUrl: imageUrl, // Misma URL para original
+              };
+            };
+
+            // Procesar playeras en lotes
+            for (let i = 0; i < jerseyFronts.length; i += BATCH_SIZE) {
+              const batch = Math.min(BATCH_SIZE, jerseyFronts.length - i);
+
+              for (let j = 0; j < batch; j++) {
+                const idx = i + j;
+
+                // Crear frente
+                const frontElement = await createUniformElement(
+                  jerseyFronts[idx],
+                  'jersey',
+                  'front',
+                  idx
+                );
+                allElements.push(frontElement);
+
+                // Crear trasera
+                const backElement = await createUniformElement(
+                  jerseyBacks[idx],
+                  'jersey',
+                  'back',
+                  idx
+                );
+                allElements.push(backElement);
+              }
+
+              // Pausa entre lotes
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            // Procesar shorts en lotes
+            for (let i = 0; i < shortsRights.length; i += BATCH_SIZE) {
+              const batch = Math.min(BATCH_SIZE, shortsRights.length - i);
+
+              for (let j = 0; j < batch; j++) {
+                const idx = i + j;
+
+                // Crear derecho
+                const rightElement = await createUniformElement(
+                  shortsRights[idx],
+                  'shorts',
+                  'right',
+                  idx
+                );
+                allElements.push(rightElement);
+
+                // Crear izquierdo
+                const leftElement = await createUniformElement(
+                  shortsLefts[idx],
+                  'shorts',
+                  'left',
+                  idx
+                );
+                allElements.push(leftElement);
+              }
+
+              // Pausa entre lotes
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            // Agregar todos los elementos al canvas
+            // Primero, aplicar bin-packing para calcular posiciones
+            const { optimizeLayoutAdvanced } = await import('../utils/binPacking');
+
+            const result = optimizeLayoutAdvanced(
+              allElements,
+              canvasConfig,
+              {
+                elementGap: 5,
+                canvasMargin: 0,
+                canvasMarginV: 0,
+                allowRotation: false,
+                sortStrategy: 'area',
+                heuristic: 'BSSF',
+              }
+            );
+
+            // Crear páginas adicionales si es necesario
+            const currentPages = pages.length;
+            for (let i = currentPages; i < result.pagesUsed; i++) {
+              get().addPage();
+            }
+
+            // Agregar elementos a sus respectivas páginas
+            result.pages.forEach((pageElements, pageIndex) => {
+              pageElements.forEach(element => {
+                addElement(element, pageIndex);
+              });
+            });
+
+            // Limpiar estado temporal
+            get().clearBulkImages();
+
+            // Mostrar canvas
+            setCanvasHidden(false);
+
+            alert(`¡Carga completada!\n\nElementos procesados: ${allElements.length}\nPáginas utilizadas: ${result.pagesUsed}\nEficiencia: ${result.efficiency.toFixed(1)}%`);
+
+          } catch (error) {
+            console.error('Error al procesar imágenes:', error);
+            alert('Error al procesar las imágenes. Por favor, intenta de nuevo.');
+            setCanvasHidden(false);
+          }
+        },
+
+        clearBulkImages: () =>
+          set(() => ({
+            bulkImageUpload: {
+              jerseyFronts: [],
+              jerseyBacks: [],
+              shortsRights: [],
+              shortsLefts: [],
+            },
           })),
       }),
       {
