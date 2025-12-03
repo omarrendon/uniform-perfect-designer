@@ -103,7 +103,7 @@ export const processExcelFile = async (
       const tallaSpanish = excelToSpanish[talla];
       if (!tallaSpanish) return "";
 
-      const { uniformSizesConfigCompressed } = useDesignerStore.getState();
+      const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
       const images = uniformSizesConfigCompressed[tallaSpanish];
       return images?.jerseyFront || "";
     };
@@ -113,7 +113,7 @@ export const processExcelFile = async (
       const tallaSpanish = excelToSpanish[talla];
       if (!tallaSpanish) return "";
 
-      const { uniformSizesConfigCompressed } = useDesignerStore.getState();
+      const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
       const images = uniformSizesConfigCompressed[tallaSpanish];
       return images?.jerseyBack || "";
     };
@@ -146,7 +146,7 @@ export const processExcelFile = async (
         };
       }
 
-      const { uniformSizesConfigCompressed } = useDesignerStore.getState();
+      const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
       const images = uniformSizesConfigCompressed[tallaSpanish];
 
       // Obtener dimensiones reales de ambas imágenes
@@ -253,6 +253,12 @@ export const processExcelFile = async (
     const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
     const elementGap = 5;
 
+    // ============================================================
+    // DEFINIR QUÉ TALLAS USAN QUÉ LAYOUT
+    // ============================================================
+    const tallasLayoutOriginal = ['XS', 'S', 'M', 'L'];      // 2 columnas horizontales
+    const tallasLayoutOpcionA = ['XL', '2XL'];               // Playeras horizontales + shorts verticales
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
 
@@ -274,353 +280,623 @@ export const processExcelFile = async (
         height: sizeConfig.height,
       };
 
-      // Crear Jersey ESPALDA (columna 1)
-      const jerseysCol1 = currentElements.filter(
-        el => el.type === "uniform" && el.part === "jersey" && el.position.x < jerseyDimensions.width + elementGap
-      );
+      const shortsConfig = await getShortsConfig(tallaExcel);
+      const shortsDimensions = {
+        width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
+        height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / (shortsConfig.left.width / shortsConfig.left.height),
+      };
 
-      let espaldaX = 0;
-      let espaldaY = 0;
+      // Determinar qué layout usar
+      const usarLayoutOriginal = tallasLayoutOriginal.includes(tallaMostrar);
+      const usarLayoutOpcionA = tallasLayoutOpcionA.includes(tallaMostrar);
 
-      if (jerseysCol1.length > 0) {
-        const maxY = Math.max(...jerseysCol1.map(j => j.position.y + j.dimensions.height));
-        espaldaY = maxY + elementGap;
+      if (usarLayoutOriginal) {
+        // ============================================================
+        // LAYOUT ORIGINAL (XS-L): 2 columnas lado a lado
+        // Columna 1: Par de playeras (frente + espalda) apilados verticalmente
+        // Columna 2: Par de shorts (izq + der) apilados verticalmente
+      processedCount++;
 
-        if (espaldaY + jerseyDimensions.height > canvasHeight) {
+        // Buscar Y disponible para columna de jerseys
+        const jerseysCol1 = currentElements.filter(
+          el => el.type === "uniform" && el.part === "jersey" && el.position.x < jerseyDimensions.width + elementGap
+        );
+
+        let jerseyPairY = 0;
+        if (jerseysCol1.length > 0) {
+          jerseyPairY = Math.max(...jerseysCol1.map(j => j.position.y + j.dimensions.height)) + elementGap;
+        }
+
+        // Buscar Y disponible para columna de shorts
+        const shortsCol2 = currentElements.filter(
+          el => el.type === "uniform" && el.part === "shorts"
+        );
+
+        let shortsPairY = 0;
+        if (shortsCol2.length > 0) {
+          shortsPairY = Math.max(...shortsCol2.map(s => s.position.y + s.dimensions.height)) + elementGap;
+        }
+
+        // Usar el máximo Y para mantener alineación entre columnas
+        const uniformY = Math.max(jerseyPairY, shortsPairY);
+
+        // Calcular altura necesaria para el par más alto
+        const jerseyPairHeight = jerseyDimensions.height * 2 + elementGap;
+        const shortsPairHeight = shortsDimensions.height * 2 + elementGap;
+        const maxPairHeight = Math.max(jerseyPairHeight, shortsPairHeight);
+
+        // Verificar si cabe el uniforme completo
+        if (uniformY + maxPairHeight > canvasHeight) {
           addPage();
           currentPageIndex++;
           currentElements = [];
-          espaldaX = 0;
-          espaldaY = 0;
         }
-      }
 
-      const jerseyEspalda = { x: espaldaX, y: espaldaY };
+        // Recalcular Y después de posible cambio de página
+        const finalUniformY = currentElements.length === 0 ? 0 : uniformY;
 
-      const newJerseyEspalda: UniformTemplate = {
-        id: generateId("uniform"),
-        type: "uniform",
-        part: "jersey",
-        size: tallaMostrar as any,
-        position: jerseyEspalda,
-        dimensions: jerseyDimensions,
-        rotation: 0,
-        zIndex: currentElements.length,
-        locked: false,
-        visible: true,
-        baseColor: "#ffffff",
-        imageUrl: getMoldeEspaldaUrl(tallaExcel),
-      };
+        // --- CREAR JERSEY FRENTE (columna 1, arriba) ---
+        const jerseyFrentePos = { x: 0, y: finalUniformY };
 
-      currentElements.push(newJerseyEspalda);
-      addElement(newJerseyEspalda, currentPageIndex);
-
-      // Crear texto en la espalda
-      if (row.numero_trasero) {
-        const numeroEspaldaText: TextElement = {
-          id: generateId("text"),
-          type: "text",
+        const newJerseyFrente: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
           part: "jersey",
           size: tallaMostrar as any,
-          position: {
-            x: jerseyEspalda.x + jerseyDimensions.width / 2 - 30,
-            y: jerseyEspalda.y + jerseyDimensions.height * 0.35,
-          },
-          dimensions: { width: 60, height: 40 },
+          position: jerseyFrentePos,
+          dimensions: jerseyDimensions,
           rotation: 0,
           zIndex: currentElements.length,
           locked: false,
           visible: true,
-          content: String(row.numero_trasero),
-          fontFamily: fonteFila,
-          fontSize: 40,
-          fontColor: "#000000",
-          textAlign: "center",
-          fontWeight: "bold",
-          opacity: 1,
-          side: "back",
+          baseColor: "#ffffff",
+          imageUrl: getMoldeFrenteUrl(tallaExcel),
         };
 
-        currentElements.push(numeroEspaldaText);
-        addElement(numeroEspaldaText, currentPageIndex);
-      }
+        currentElements.push(newJerseyFrente);
+        addElement(newJerseyFrente, currentPageIndex);
 
-      // Nombre en la espalda
-      if (row.nombre) {
-        const nombreEspaldaText: TextElement = {
+        // Número en el frente
+        if (row.numero_frente) {
+          const numeroFrenteText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: tallaMostrar as any,
+            position: {
+              x: jerseyFrentePos.x + jerseyDimensions.width / 2 - 15,
+              y: jerseyFrentePos.y + jerseyDimensions.height * 0.45,
+            },
+            dimensions: { width: 30, height: 25 },
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero_frente),
+            fontFamily: fonteFila,
+            fontSize: 24,
+            fontColor: "#000000",
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "front",
+          };
+
+          currentElements.push(numeroFrenteText);
+          addElement(numeroFrenteText, currentPageIndex);
+        }
+
+        // --- CREAR JERSEY ESPALDA (columna 1, abajo del frente) ---
+        const jerseyEspaldaPos = {
+          x: 0,
+          y: finalUniformY + jerseyDimensions.height + elementGap
+        };
+
+        const newJerseyEspalda: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "jersey",
+          size: tallaMostrar as any,
+          position: jerseyEspaldaPos,
+          dimensions: jerseyDimensions,
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: getMoldeEspaldaUrl(tallaExcel),
+        };
+
+        currentElements.push(newJerseyEspalda);
+        addElement(newJerseyEspalda, currentPageIndex);
+
+        // Número trasero
+        if (row.numero_trasero) {
+          const numeroEspaldaText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: tallaMostrar as any,
+            position: {
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 30,
+              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.35,
+            },
+            dimensions: { width: 60, height: 40 },
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero_trasero),
+            fontFamily: fonteFila,
+            fontSize: 40,
+            fontColor: "#000000",
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "back",
+          };
+
+          currentElements.push(numeroEspaldaText);
+          addElement(numeroEspaldaText, currentPageIndex);
+        }
+
+        // Nombre en la espalda
+        if (row.nombre) {
+          const nombreEspaldaText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: tallaMostrar as any,
+            position: {
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 60,
+              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.6,
+            },
+            dimensions: { width: 120, height: 30 },
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.nombre).toUpperCase(),
+            fontFamily: fonteFila,
+            fontSize: 16,
+            fontColor: "#000000",
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "back",
+          };
+
+          currentElements.push(nombreEspaldaText);
+          addElement(nombreEspaldaText, currentPageIndex);
+        }
+
+        // Talla en la espalda
+        const tallaEspaldaText: TextElement = {
           id: generateId("text"),
           type: "text",
           part: "jersey",
           size: tallaMostrar as any,
           position: {
-            x: jerseyEspalda.x + jerseyDimensions.width / 2 - 60,
-            y: jerseyEspalda.y + jerseyDimensions.height * 0.6,
+            x: jerseyEspaldaPos.x + jerseyDimensions.width * 0.8,
+            y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.1,
           },
-          dimensions: { width: 120, height: 30 },
+          dimensions: { width: 40, height: 20 },
           rotation: 0,
           zIndex: currentElements.length,
           locked: false,
           visible: true,
-          content: String(row.nombre).toUpperCase(),
-          fontFamily: fonteFila,
+          content: tallaMostrar,
+          fontFamily: "Arial",
           fontSize: 16,
-          fontColor: "#000000",
+          fontColor: "#666666",
           textAlign: "center",
           fontWeight: "bold",
           opacity: 1,
           side: "back",
         };
 
-        currentElements.push(nombreEspaldaText);
-        addElement(nombreEspaldaText, currentPageIndex);
-      }
+        currentElements.push(tallaEspaldaText);
+        addElement(tallaEspaldaText, currentPageIndex);
 
-      // Talla en la espalda
-      const tallaEspaldaText: TextElement = {
-        id: generateId("text"),
-        type: "text",
-        part: "jersey",
-        size: tallaMostrar as any,
-        position: {
-          x: jerseyEspalda.x + jerseyDimensions.width * 0.8,
-          y: jerseyEspalda.y + jerseyDimensions.height * 0.1,
-        },
-        dimensions: { width: 40, height: 20 },
-        rotation: 0,
-        zIndex: currentElements.length,
-        locked: false,
-        visible: true,
-        content: tallaMostrar,
-        fontFamily: "Arial",
-        fontSize: 16,
-        fontColor: "#666666",
-        textAlign: "center",
-        fontWeight: "bold",
-        opacity: 1,
-        side: "back",
-      };
+        // --- CREAR SHORT IZQUIERDO (columna 2, arriba) ---
+        const shortLeftPos = {
+          x: jerseyDimensions.width + elementGap,
+          y: finalUniformY
+        };
 
-      currentElements.push(tallaEspaldaText);
-      addElement(tallaEspaldaText, currentPageIndex);
-
-      // Crear Jersey FRENTE (columna 2)
-      const jerseysCol2 = currentElements.filter(
-        el => el.type === "uniform" && el.part === "jersey" &&
-        el.position.x >= jerseyDimensions.width + elementGap &&
-        el.position.x < (jerseyDimensions.width + elementGap) * 2
-      );
-
-      let frenteX = jerseyDimensions.width + elementGap;
-      let frenteY = 0;
-
-      if (jerseysCol2.length > 0) {
-        const maxY = Math.max(...jerseysCol2.map(j => j.position.y + j.dimensions.height));
-        frenteY = maxY + elementGap;
-
-        if (frenteY + jerseyDimensions.height > canvasHeight) {
-          addPage();
-          currentPageIndex++;
-          currentElements = [];
-          frenteX = jerseyDimensions.width + elementGap;
-          frenteY = 0;
-        }
-      }
-
-      const jerseyFrente = { x: frenteX, y: frenteY };
-
-      const newJerseyFrente: UniformTemplate = {
-        id: generateId("uniform"),
-        type: "uniform",
-        part: "jersey",
-        size: tallaMostrar as any,
-        position: jerseyFrente,
-        dimensions: jerseyDimensions,
-        rotation: 0,
-        zIndex: currentElements.length,
-        locked: false,
-        visible: true,
-        baseColor: "#ffffff",
-        imageUrl: getMoldeFrenteUrl(tallaExcel),
-      };
-
-      currentElements.push(newJerseyFrente);
-      addElement(newJerseyFrente, currentPageIndex);
-
-      // Número en el frente
-      if (row.numero_frente) {
-        const numeroFrenteText: TextElement = {
-          id: generateId("text"),
-          type: "text",
-          part: "jersey",
+        const newShortLeft: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "shorts",
           size: tallaMostrar as any,
-          position: {
-            x: jerseyFrente.x + jerseyDimensions.width / 2 - 15,
-            y: jerseyFrente.y + jerseyDimensions.height * 0.45,
-          },
-          dimensions: { width: 30, height: 25 },
+          position: shortLeftPos,
+          dimensions: shortsDimensions,
           rotation: 0,
           zIndex: currentElements.length,
           locked: false,
           visible: true,
-          content: String(row.numero_frente),
-          fontFamily: fonteFila,
-          fontSize: 24,
-          fontColor: "#000000",
+          baseColor: "#ffffff",
+          imageUrl: shortsConfig.left.url,
+          side: "left",
+        };
+
+        currentElements.push(newShortLeft);
+        addElement(newShortLeft, currentPageIndex);
+
+        // Talla en el short izquierdo
+        const tallaShortLeftText: TextElement = {
+          id: generateId("text"),
+          type: "text",
+          part: "shorts",
+          size: tallaMostrar as any,
+          position: {
+            x: shortLeftPos.x + shortsDimensions.width / 2 - 20,
+            y: shortLeftPos.y + shortsDimensions.height * 0.15,
+          },
+          dimensions: { width: 40, height: 20 },
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          content: tallaMostrar,
+          fontFamily: "Arial",
+          fontSize: 14,
+          fontColor: "#666666",
           textAlign: "center",
           fontWeight: "bold",
           opacity: 1,
           side: "front",
         };
 
-        currentElements.push(numeroFrenteText);
-        addElement(numeroFrenteText, currentPageIndex);
-      }
+        currentElements.push(tallaShortLeftText);
+        addElement(tallaShortLeftText, currentPageIndex);
 
-      // Crear PAR DE SHORTS (columna 3)
-      const shortsConfig = await getShortsConfig(tallaExcel);
+        // --- CREAR SHORT DERECHO (columna 2, abajo, invertido 180°) ---
+        const shortRightPos = {
+          x: jerseyDimensions.width + elementGap,
+          y: finalUniformY + shortsDimensions.height + elementGap
+        };
 
-      // Calcular dimensiones proporcionales basadas en el sizeConfig del jersey
-      // Los shorts deben escalarse proporcionalmente al jersey
-      const realShortWidth = shortsConfig.left.width;
-      const realShortHeight = shortsConfig.left.height;
+        const newShortRight: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "shorts",
+          size: tallaMostrar as any,
+          position: shortRightPos,
+          dimensions: shortsDimensions,
+          rotation: 180,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: shortsConfig.right.url,
+          side: "right",
+        };
 
-      // Usar medidas PRECISAS de moldes reales si están disponibles
-      // Si no, usar fórmula antigua como fallback (45% del ancho del jersey)
-      const aspectRatio = realShortWidth / realShortHeight;
+        currentElements.push(newShortRight);
+        addElement(newShortRight, currentPageIndex);
 
-      const shortsDimensions = {
-        width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
-        height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / aspectRatio,
-      };
+        // Talla en el short derecho (rotado 180°)
+        const tallaShortRightText: TextElement = {
+          id: generateId("text"),
+          type: "text",
+          part: "shorts",
+          size: tallaMostrar as any,
+          position: {
+            x: shortRightPos.x + shortsDimensions.width / 2 - 20,
+            y: shortRightPos.y + shortsDimensions.height * 0.85,
+          },
+          dimensions: { width: 40, height: 20 },
+          rotation: 180,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          content: tallaMostrar,
+          fontFamily: "Arial",
+          fontSize: 14,
+          fontColor: "#666666",
+          textAlign: "center",
+          fontWeight: "bold",
+          opacity: 1,
+          side: "front",
+        };
 
-      // Calcular espacio necesario para el par (dos shorts verticalmente)
-      const pairHeight = shortsDimensions.height * 2 + elementGap;
+        currentElements.push(tallaShortRightText);
+        addElement(tallaShortRightText, currentPageIndex);
 
-      const shortsCol3 = currentElements.filter(
-        el => el.type === "uniform" && el.part === "shorts"
-      );
+      } else if (usarLayoutOpcionA) {
+        // ============================================================
+        // LAYOUT OPCIÓN A (XL-2XL): 3 filas
+        // Fila 1: Playeras horizontales (frente izq + espalda der)
+        // Fila 2: Short izquierdo solo
+        // Fila 3: Short derecho solo
+        // ============================================================
 
-      let shortX = (jerseyDimensions.width + elementGap) * 2;
-      let pairY = 0;
+        // Buscar Y disponible (buscar el máximo Y de TODOS los elementos)
+        let currentY = 0;
+        if (currentElements.length > 0) {
+          currentY = Math.max(...currentElements.map(el => el.position.y + el.dimensions.height)) + elementGap;
+        }
 
-      if (shortsCol3.length > 0) {
-        const maxY = Math.max(...shortsCol3.map(s => s.position.y + s.dimensions.height));
-        pairY = maxY + elementGap;
+        // Calcular altura total necesaria (playeras en fila + 2 shorts verticales)
+        const totalHeight = jerseyDimensions.height + (shortsDimensions.height * 2) + (elementGap * 2);
 
-        // Verificar si cabe el PAR completo
-        if (pairY + pairHeight > canvasHeight) {
+        // Verificar si cabe el uniforme completo
+        if (currentY + totalHeight > canvasHeight) {
           addPage();
           currentPageIndex++;
           currentElements = [];
-          shortX = (jerseyDimensions.width + elementGap) * 2;
-          pairY = 0;
+          currentY = 0;
         }
+
+        // --- FILA 1: PLAYERAS HORIZONTALES ---
+        
+        // JERSEY FRENTE (izquierda)
+        const jerseyFrentePos = { x: 0, y: currentY };
+
+        const newJerseyFrente: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "jersey",
+          size: tallaMostrar as any,
+          position: jerseyFrentePos,
+          dimensions: jerseyDimensions,
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: getMoldeFrenteUrl(tallaExcel),
+        };
+
+        currentElements.push(newJerseyFrente);
+        addElement(newJerseyFrente, currentPageIndex);
+
+        // Número en el frente
+        if (row.numero_frente) {
+          const numeroFrenteText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: tallaMostrar as any,
+            position: {
+              x: jerseyFrentePos.x + jerseyDimensions.width / 2 - 15,
+              y: jerseyFrentePos.y + jerseyDimensions.height * 0.45,
+            },
+            dimensions: { width: 30, height: 25 },
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero_frente),
+            fontFamily: fonteFila,
+            fontSize: 24,
+            fontColor: "#000000",
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "front",
+          };
+
+          currentElements.push(numeroFrenteText);
+          addElement(numeroFrenteText, currentPageIndex);
+        }
+
+        // JERSEY ESPALDA (derecha, al lado del frente)
+        const jerseyEspaldaPos = {
+          x: jerseyDimensions.width + elementGap,
+          y: currentY
+        };
+
+        const newJerseyEspalda: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "jersey",
+          size: tallaMostrar as any,
+          position: jerseyEspaldaPos,
+          dimensions: jerseyDimensions,
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: getMoldeEspaldaUrl(tallaExcel),
+        };
+
+        currentElements.push(newJerseyEspalda);
+        addElement(newJerseyEspalda, currentPageIndex);
+
+        // Número trasero
+        if (row.numero_trasero) {
+          const numeroEspaldaText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: tallaMostrar as any,
+            position: {
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 30,
+              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.35,
+            },
+            dimensions: { width: 60, height: 40 },
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero_trasero),
+            fontFamily: fonteFila,
+            fontSize: 40,
+            fontColor: "#000000",
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "back",
+          };
+
+          currentElements.push(numeroEspaldaText);
+          addElement(numeroEspaldaText, currentPageIndex);
+        }
+
+        // Nombre en la espalda
+        if (row.nombre) {
+          const nombreEspaldaText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "jersey",
+            size: tallaMostrar as any,
+            position: {
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 60,
+              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.6,
+            },
+            dimensions: { width: 120, height: 30 },
+            rotation: 0,
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.nombre).toUpperCase(),
+            fontFamily: fonteFila,
+            fontSize: 16,
+            fontColor: "#000000",
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "back",
+          };
+
+          currentElements.push(nombreEspaldaText);
+          addElement(nombreEspaldaText, currentPageIndex);
+        }
+
+        // Talla en la espalda
+        const tallaEspaldaText: TextElement = {
+          id: generateId("text"),
+          type: "text",
+          part: "jersey",
+          size: tallaMostrar as any,
+          position: {
+            x: jerseyEspaldaPos.x + jerseyDimensions.width * 0.8,
+            y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.1,
+          },
+          dimensions: { width: 40, height: 20 },
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          content: tallaMostrar,
+          fontFamily: "Arial",
+          fontSize: 16,
+          fontColor: "#666666",
+          textAlign: "center",
+          fontWeight: "bold",
+          opacity: 1,
+          side: "back",
+        };
+
+        currentElements.push(tallaEspaldaText);
+        addElement(tallaEspaldaText, currentPageIndex);
+
+        // --- FILA 2: SHORT IZQUIERDO (solo, 0°) ---
+        const shortLeftY = currentY + jerseyDimensions.height + elementGap;
+        const shortLeftPos = { x: 0, y: shortLeftY };
+
+        const newShortLeft: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "shorts",
+          size: tallaMostrar as any,
+          position: shortLeftPos,
+          dimensions: shortsDimensions,
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: shortsConfig.left.url,
+          side: "left",
+        };
+
+        currentElements.push(newShortLeft);
+        addElement(newShortLeft, currentPageIndex);
+
+        // Talla en el short izquierdo
+        const tallaShortLeftText: TextElement = {
+          id: generateId("text"),
+          type: "text",
+          part: "shorts",
+          size: tallaMostrar as any,
+          position: {
+            x: shortLeftPos.x + shortsDimensions.width / 2 - 20,
+            y: shortLeftPos.y + shortsDimensions.height * 0.15,
+          },
+          dimensions: { width: 40, height: 20 },
+          rotation: 0,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          content: tallaMostrar,
+          fontFamily: "Arial",
+          fontSize: 14,
+          fontColor: "#666666",
+          textAlign: "center",
+          fontWeight: "bold",
+          opacity: 1,
+          side: "front",
+        };
+
+        currentElements.push(tallaShortLeftText);
+        addElement(tallaShortLeftText, currentPageIndex);
+
+        // --- FILA 3: SHORT DERECHO (solo, 180°) ---
+        const shortRightY = shortLeftY + shortsDimensions.height + elementGap;
+        const shortRightPos = { x: 0, y: shortRightY };
+
+        const newShortRight: UniformTemplate = {
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "shorts",
+          size: tallaMostrar as any,
+          position: shortRightPos,
+          dimensions: shortsDimensions,
+          rotation: 180,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: shortsConfig.right.url,
+          side: "right",
+        };
+
+        currentElements.push(newShortRight);
+        addElement(newShortRight, currentPageIndex);
+
+        // Talla en el short derecho (rotado 180°)
+        const tallaShortRightText: TextElement = {
+          id: generateId("text"),
+          type: "text",
+          part: "shorts",
+          size: tallaMostrar as any,
+          position: {
+            x: shortRightPos.x + shortsDimensions.width / 2 - 20,
+            y: shortRightPos.y + shortsDimensions.height * 0.85,
+          },
+          dimensions: { width: 40, height: 20 },
+          rotation: 180,
+          zIndex: currentElements.length,
+          locked: false,
+          visible: true,
+          content: tallaMostrar,
+          fontFamily: "Arial",
+          fontSize: 14,
+          fontColor: "#666666",
+          textAlign: "center",
+          fontWeight: "bold",
+          opacity: 1,
+          side: "front",
+        };
+
+        currentElements.push(tallaShortRightText);
+        addElement(tallaShortRightText, currentPageIndex);
       }
 
-      // Crear SHORT IZQUIERDO (arriba, normal, 0°)
-      const shortLeftPos = { x: shortX, y: pairY };
-
-      const newShortLeft: UniformTemplate = {
-        id: generateId("uniform"),
-        type: "uniform",
-        part: "shorts",
-        size: tallaMostrar as any,
-        position: shortLeftPos,
-        dimensions: shortsDimensions,
-        rotation: 0,
-        zIndex: currentElements.length,
-        locked: false,
-        visible: true,
-        baseColor: "#ffffff",
-        imageUrl: shortsConfig.left.url,
-        side: "left",
-      };
-
-      currentElements.push(newShortLeft);
-      addElement(newShortLeft, currentPageIndex);
-
-      // Talla en el short izquierdo
-      const tallaShortLeftText: TextElement = {
-        id: generateId("text"),
-        type: "text",
-        part: "shorts",
-        size: tallaMostrar as any,
-        position: {
-          x: shortLeftPos.x + shortsDimensions.width / 2 - 20,
-          y: shortLeftPos.y + shortsDimensions.height * 0.15,
-        },
-        dimensions: { width: 40, height: 20 },
-        rotation: 0,
-        zIndex: currentElements.length,
-        locked: false,
-        visible: true,
-        content: tallaMostrar,
-        fontFamily: "Arial",
-        fontSize: 14,
-        fontColor: "#666666",
-        textAlign: "center",
-        fontWeight: "bold",
-        opacity: 1,
-        side: "front",
-      };
-
-      currentElements.push(tallaShortLeftText);
-      addElement(tallaShortLeftText, currentPageIndex);
-
-      // Crear SHORT DERECHO (abajo, invertido, 180°)
-      const shortRightPos = {
-        x: shortX,
-        y: pairY + shortsDimensions.height + elementGap,
-      };
-
-      const newShortRight: UniformTemplate = {
-        id: generateId("uniform"),
-        type: "uniform",
-        part: "shorts",
-        size: tallaMostrar as any,
-        position: shortRightPos,
-        dimensions: shortsDimensions,
-        rotation: 180,
-        zIndex: currentElements.length,
-        locked: false,
-        visible: true,
-        baseColor: "#ffffff",
-        imageUrl: shortsConfig.right.url,
-        side: "right",
-      };
-
-      currentElements.push(newShortRight);
-      addElement(newShortRight, currentPageIndex);
-
-      // Talla en el short derecho (rotado 180° también)
-      const tallaShortRightText: TextElement = {
-        id: generateId("text"),
-        type: "text",
-        part: "shorts",
-        size: tallaMostrar as any,
-        position: {
-          x: shortRightPos.x + shortsDimensions.width / 2 - 20,
-          y: shortRightPos.y + shortsDimensions.height * 0.85,
-        },
-        dimensions: { width: 40, height: 20 },
-        rotation: 180,
-        zIndex: currentElements.length,
-        locked: false,
-        visible: true,
-        content: tallaMostrar,
-        fontFamily: "Arial",
-        fontSize: 14,
-        fontColor: "#666666",
-        textAlign: "center",
-        fontWeight: "bold",
-        opacity: 1,
-        side: "front",
-      };
-
-      currentElements.push(tallaShortRightText);
-      addElement(tallaShortRightText, currentPageIndex);
-
-      processedCount++;
       onProgress(processedCount, rows.length);
 
       // Pausa entre uniformes

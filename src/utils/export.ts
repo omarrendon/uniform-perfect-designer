@@ -1,6 +1,83 @@
-import { toPng, toJpeg } from 'html-to-image';
+import { toPng } from 'html-to-image';
 import jsPDF from 'jspdf';
 import type { ExportOptions } from '../types';
+import { useDesignerStore } from '../store/desingerStore';
+
+/**
+ * Reemplaza temporalmente las imágenes comprimidas por las originales para exportación
+ * @returns Función para restaurar las imágenes comprimidas
+ */
+const swapToOriginalImages = async (element: HTMLElement): Promise<() => void> => {
+  const { uniformSizesConfig, uniformSizesConfigCompressed } = useDesignerStore.getState();
+
+  // Crear mapeo de URLs comprimidas → originales
+  const urlMapping = new Map<string, string>();
+
+  Object.keys(uniformSizesConfig).forEach(size => {
+    const original = uniformSizesConfig[size];
+    const compressed = uniformSizesConfigCompressed[size];
+
+    if (original && compressed) {
+      // Mapear cada tipo de imagen
+      if (original.jerseyFront && compressed.jerseyFront) {
+        urlMapping.set(compressed.jerseyFront, original.jerseyFront);
+      }
+      if (original.jerseyBack && compressed.jerseyBack) {
+        urlMapping.set(compressed.jerseyBack, original.jerseyBack);
+      }
+      if (original.shortsLeft && compressed.shortsLeft) {
+        urlMapping.set(compressed.shortsLeft, original.shortsLeft);
+      }
+      if (original.shortsRight && compressed.shortsRight) {
+        urlMapping.set(compressed.shortsRight, original.shortsRight);
+      }
+    }
+  });
+
+  // Encontrar todas las imágenes en el elemento
+  const images = element.querySelectorAll('img');
+  const originalSrcs: { img: HTMLImageElement; src: string }[] = [];
+  const imagesToLoad: Promise<void>[] = [];
+
+  images.forEach(img => {
+    const currentSrc = img.src;
+    const originalSrc = urlMapping.get(currentSrc);
+
+    if (originalSrc) {
+      // Guardar src original para restaurar después
+      originalSrcs.push({ img, src: currentSrc });
+
+      // Crear promesa para esperar a que la imagen original cargue
+      const loadPromise = new Promise<void>((resolve) => {
+        const newImg = new Image();
+        newImg.onload = () => {
+          img.src = originalSrc;
+          resolve();
+        };
+        newImg.onerror = () => {
+          console.warn(`No se pudo cargar imagen original: ${originalSrc}`);
+          resolve(); // Continuar aunque falle
+        };
+        newImg.src = originalSrc;
+      });
+
+      imagesToLoad.push(loadPromise);
+    }
+  });
+
+  // Esperar a que todas las imágenes originales carguen
+  await Promise.all(imagesToLoad);
+
+  console.log(`✓ Reemplazadas ${originalSrcs.length} imágenes por versiones originales`);
+
+  // Retornar función de restauración
+  return () => {
+    originalSrcs.forEach(({ img, src }) => {
+      img.src = src;
+    });
+    console.log(`✓ Restauradas ${originalSrcs.length} imágenes comprimidas`);
+  };
+};
 
 /**
  * Exporta el canvas como imagen PNG
@@ -9,13 +86,20 @@ export const exportAsPNG = async (
   element: HTMLElement,
   options: Partial<ExportOptions> = {}
 ): Promise<void> => {
+  let restoreImages: (() => void) | null = null;
+
   try {
+    // Reemplazar imágenes comprimidas por originales
+    console.log('📸 Preparando imágenes originales para exportación PNG...');
+    restoreImages = await swapToOriginalImages(element);
+
+    // Exportar con imágenes originales
     const dataUrl = await toPng(element, {
       backgroundColor: options.transparent
         ? 'transparent'
         : options.backgroundColor || '#ffffff',
       quality: options.quality || 1,
-      pixelRatio: 2,
+      pixelRatio: 24, // 600 DPI para impresión ultra profesional (10 × 2.54 × 24 = 609.6 DPI)
     });
 
     // Descargar la imagen
@@ -26,6 +110,11 @@ export const exportAsPNG = async (
   } catch (error) {
     console.error('Error al exportar PNG:', error);
     throw error;
+  } finally {
+    // Restaurar imágenes comprimidas
+    if (restoreImages) {
+      restoreImages();
+    }
   }
 };
 
@@ -38,11 +127,18 @@ export const exportAsPDF = async (
   element: HTMLElement,
   options: Partial<ExportOptions> = {}
 ): Promise<void> => {
+  let restoreImages: (() => void) | null = null;
+
   try {
-    const dataUrl = await toJpeg(element, {
+    // Reemplazar imágenes comprimidas por originales
+    console.log('📸 Preparando imágenes originales para exportación PDF...');
+    restoreImages = await swapToOriginalImages(element);
+
+    // Exportar con imágenes originales
+    const dataUrl = await toPng(element, {
       backgroundColor: options.backgroundColor || '#ffffff',
-      quality: options.quality || 0.95,
-      pixelRatio: 2,
+      quality: options.quality || 1.0,
+      pixelRatio: 24, // 600 DPI para impresión ultra profesional (10 × 2.54 × 24 = 609.6 DPI)
     });
 
     const img = new Image();
@@ -64,12 +160,17 @@ export const exportAsPDF = async (
       format: [canvasWidthCm, canvasHeightCm],
     });
 
-    // Agregar la imagen ocupando todo el espacio del PDF
-    pdf.addImage(dataUrl, 'JPEG', 0, 0, canvasWidthCm, canvasHeightCm);
+    // Agregar la imagen ocupando todo el espacio del PDF (PNG sin compresión con pérdida)
+    pdf.addImage(dataUrl, 'PNG', 0, 0, canvasWidthCm, canvasHeightCm);
     pdf.save(`uniform-design-${Date.now()}.pdf`);
   } catch (error) {
     console.error('Error al exportar PDF:', error);
     throw error;
+  } finally {
+    // Restaurar imágenes comprimidas
+    if (restoreImages) {
+      restoreImages();
+    }
   }
 };
 
@@ -98,28 +199,50 @@ export const exportMultiPagePDF = async (
       format: [canvasWidthCm, canvasHeightCm],
     });
 
+    console.log(`📸 Procesando ${pages.length} páginas con imágenes originales...`);
+
     // Procesar cada página
     for (let i = 0; i < pages.length; i++) {
       const pageElement = pages[i];
+      let restoreImages: (() => void) | null = null;
 
-      // Convertir la página a imagen
-      const dataUrl = await toJpeg(pageElement, {
-        backgroundColor: options.backgroundColor || '#ffffff',
-        quality: options.quality || 0.95,
-        pixelRatio: 2,
-      });
+      try {
+        // Reemplazar imágenes comprimidas por originales para esta página
+        console.log(`   Página ${i + 1}/${pages.length}: Preparando imágenes originales...`);
+        restoreImages = await swapToOriginalImages(pageElement);
 
-      // Si no es la primera página, agregar una nueva página al PDF
-      if (i > 0) {
-        pdf.addPage([canvasWidthCm, canvasHeightCm]);
+        // Convertir la página a imagen con imágenes originales
+        const dataUrl = await toPng(pageElement, {
+          backgroundColor: options.backgroundColor || '#ffffff',
+          quality: options.quality || 1.0,
+          pixelRatio: 24, // 600 DPI para impresión ultra profesional (10 × 2.54 × 24 = 609.6 DPI)
+        });
+
+        // Restaurar imágenes comprimidas inmediatamente después de capturar
+        if (restoreImages) {
+          restoreImages();
+          restoreImages = null;
+        }
+
+        // Si no es la primera página, agregar una nueva página al PDF
+        if (i > 0) {
+          pdf.addPage([canvasWidthCm, canvasHeightCm]);
+        }
+
+        // Agregar la imagen a la página actual (PNG sin compresión con pérdida)
+        pdf.addImage(dataUrl, 'PNG', 0, 0, canvasWidthCm, canvasHeightCm);
+        console.log(`   ✓ Página ${i + 1}/${pages.length} procesada`);
+      } finally {
+        // Asegurar que se restauren las imágenes incluso si hay error
+        if (restoreImages) {
+          restoreImages();
+        }
       }
-
-      // Agregar la imagen a la página actual
-      pdf.addImage(dataUrl, 'JPEG', 0, 0, canvasWidthCm, canvasHeightCm);
     }
 
     // Guardar el PDF
     pdf.save(`uniform-design-${Date.now()}.pdf`);
+    console.log('✓ PDF multipágina exportado exitosamente');
   } catch (error) {
     console.error('Error al exportar PDF multipágina:', error);
     throw error;
