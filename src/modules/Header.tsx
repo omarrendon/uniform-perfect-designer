@@ -206,8 +206,11 @@ export const Header: React.FC = () => {
             if (orig.jerseyBack && comp.jerseyBack) {
               urlMapping.set(comp.jerseyBack, orig.jerseyBack);
             }
-            if (orig.shorts && comp.shorts) {
-              urlMapping.set(comp.shorts, orig.shorts);
+            if (orig.shortsLeft && comp.shortsLeft) {
+              urlMapping.set(comp.shortsLeft, orig.shortsLeft);
+            }
+            if (orig.shortsRight && comp.shortsRight) {
+              urlMapping.set(comp.shortsRight, orig.shortsRight);
             }
           }
         }
@@ -371,8 +374,9 @@ export const Header: React.FC = () => {
     const dimensions =
       part === "shorts"
         ? {
-            width: sizeConfig.width * 0.45,
-            height: sizeConfig.height * 2.2,
+            // Usar medidas PRECISAS de moldes reales si están disponibles
+            width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
+            height: sizeConfig.shortsHeight || sizeConfig.height * 2.2,
           }
         : {
             width: sizeConfig.width,
@@ -438,9 +442,10 @@ export const Header: React.FC = () => {
     width: sizeConfig.width,
     height: sizeConfig.height,
   };
+  // Usar medidas PRECISAS de moldes reales si están disponibles
   const shortsDimensions = {
-    width: sizeConfig.width * 0.45,
-    height: sizeConfig.height * 2.2,
+    width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
+    height: sizeConfig.shortsHeight || sizeConfig.height * 2.2,
   };
 
   const canAddJersey = hasSpaceForElement(

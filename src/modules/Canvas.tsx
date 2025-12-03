@@ -98,22 +98,18 @@ export const Canvas: React.FC = () => {
           "linear-gradient(to bottom right, rgb(249, 250, 251), rgb(243, 244, 246))",
         width: "100%",
         height: "100%",
-        border: "1px solid red",
-        alignItems: "flex-start",
         marginTop: "30px",
       }}
     >
-      {/* Contenedor principal */}
+      {/* Contenedor principal del canvas */}
       <div
         ref={containerRef}
         style={{
           flex: 1,
           width: "100%",
-          height: "100%",
           overflow: "hidden",
           position: "relative",
-          padding: "20px 20px 20px 10px",
-          border: "1px solid blue",
+          padding: "20px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

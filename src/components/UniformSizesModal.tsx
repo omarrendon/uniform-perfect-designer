@@ -3,6 +3,8 @@ import { X, Upload, Check, AlertCircle, FileUp } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
 import type { SizeSpanish } from "../types";
 import { validateExcelFile } from "../utils/excelReader";
+import { processExcelFile } from "../utils/excelProcessor";
+import type { ExcelProcessorCallbacks } from "../utils/excelProcessor";
 
 interface UniformSizesModalProps {
   isOpen: boolean;
@@ -27,12 +29,14 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
 }) => {
   const [currentSize, setCurrentSize] = useState<SizeSpanish>('M');
   const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
   const excelInputRef = useRef<HTMLInputElement>(null);
   const { uniformSizesConfig, setUniformSizeImages, isSizeComplete } = useDesignerStore();
 
   if (!isOpen) return null;
 
-  const handleImageUpload = (type: 'jerseyFront' | 'jerseyBack' | 'shorts', event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (type: 'jerseyFront' | 'jerseyBack' | 'shortsLeft' | 'shortsRight', event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -71,15 +75,47 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
       return;
     }
 
-    // Cerrar el modal
-    onClose();
+    // Definir callbacks para manejar el proceso
+    const callbacks: ExcelProcessorCallbacks = {
+      onError: (title, message, details) => {
+        setIsProcessing(false);
 
-    // Informar al usuario
-    alert(`Archivo Excel "${excelFile.name}" seleccionado.\n\nNOTA: La funcionalidad completa de procesamiento de Excel se encuentra en el componente Toolbar y será integrada próximamente.\n\nPor ahora, asegúrate de haber configurado las imágenes para todas las tallas que uses en el Excel.`);
+        // Mostrar error al usuario
+        let errorText = `❌ ${title}\n\n${message}`;
+        if (details && details.length > 0) {
+          errorText += '\n\nDetalles:\n' + details.join('\n');
+        }
+        alert(errorText);
+      },
 
-    // TODO: Extraer la lógica de handleExcelUpload del Toolbar.tsx a una función reutilizable
-    // y llamarla aquí para procesar el archivo Excel
-    console.log('Excel file ready to process:', excelFile.name);
+      onProgress: (current, total) => {
+        setProcessingProgress({ current, total });
+      },
+
+      onStart: () => {
+        setIsProcessing(true);
+        setProcessingProgress({ current: 0, total: 0 });
+        // No cerrar el modal para mostrar el progreso
+      },
+
+      onComplete: (summary) => {
+        setIsProcessing(false);
+
+        // Mostrar mensaje de éxito
+        alert(
+          `✅ ¡Carga completada exitosamente!\n\n` +
+          `📊 Elementos procesados: ${summary.totalElements}\n` +
+          `📄 Páginas utilizadas: ${summary.pagesUsed}\n\n` +
+          `Los uniformes ya están listos en el canvas.`
+        );
+
+        // Cerrar el modal después de completar
+        onClose();
+      },
+    };
+
+    // Procesar el archivo Excel
+    await processExcelFile(excelFile, callbacks);
   };
 
   const currentImages = uniformSizesConfig[currentSize] || {};
@@ -87,7 +123,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
 
   // Contar cuántas tallas están completas
   const completedSizes = SIZES.filter(size => isSizeComplete(size)).length;
-  const totalImages = completedSizes * 3;
+  const totalImages = completedSizes * 4;
 
   return (
     <div
@@ -172,7 +208,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
             marginBottom: '8px',
           }}>
             <span style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>
-              Progreso total: {totalImages}/21 imágenes
+              Progreso total: {totalImages}/28 imágenes
             </span>
             <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#3b82f6' }}>
               {completedSizes}/7 tallas completas
@@ -191,7 +227,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                 height: '100%',
                 borderRadius: '9999px',
                 transition: 'width 0.3s ease',
-                width: `${(totalImages / 21) * 100}%`,
+                width: `${(totalImages / 28) * 100}%`,
               }}
             />
           </div>
@@ -265,7 +301,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               }}>
                 <Check style={{ width: '16px', height: '16px', color: '#10b981' }} />
                 <span style={{ fontSize: '14px', color: '#065f46', fontWeight: '500' }}>
-                  Completo (3/3 imágenes)
+                  Completo (4/4 imágenes)
                 </span>
               </div>
             ) : (
@@ -280,7 +316,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               }}>
                 <AlertCircle style={{ width: '16px', height: '16px', color: '#f59e0b' }} />
                 <span style={{ fontSize: '14px', color: '#92400e', fontWeight: '500' }}>
-                  Faltan {3 - Object.values(currentImages).filter(Boolean).length} imágenes
+                  Faltan {4 - Object.values(currentImages).filter(Boolean).length} imágenes
                 </span>
               </div>
             )}
@@ -452,7 +488,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               </div>
             </div>
 
-            {/* Short */}
+            {/* Short Izquierdo */}
             <div>
               <label style={{
                 display: 'block',
@@ -461,22 +497,22 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                 color: '#374151',
                 marginBottom: '8px',
               }}>
-                Short
+                Short Izquierdo
               </label>
               <div style={{
                 border: '2px dashed #d1d5db',
                 borderRadius: '12px',
                 padding: '16px',
                 textAlign: 'center',
-                backgroundColor: currentImages.shorts ? '#f9fafb' : 'white',
+                backgroundColor: currentImages.shortsLeft ? '#f9fafb' : 'white',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}>
-                {currentImages.shorts ? (
+                {currentImages.shortsLeft ? (
                   <div>
                     <img
-                      src={currentImages.shorts}
-                      alt="Short"
+                      src={currentImages.shortsLeft}
+                      alt="Short Izquierdo"
                       style={{
                         width: '100%',
                         height: '150px',
@@ -501,7 +537,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                       <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => handleImageUpload('shorts', e)}
+                        onChange={(e) => handleImageUpload('shortsLeft', e)}
                         style={{ display: 'none' }}
                       />
                     </label>
@@ -524,7 +560,87 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={(e) => handleImageUpload('shorts', e)}
+                      onChange={(e) => handleImageUpload('shortsLeft', e)}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Short Derecho */}
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '600',
+                color: '#374151',
+                marginBottom: '8px',
+              }}>
+                Short Derecho
+              </label>
+              <div style={{
+                border: '2px dashed #d1d5db',
+                borderRadius: '12px',
+                padding: '16px',
+                textAlign: 'center',
+                backgroundColor: currentImages.shortsRight ? '#f9fafb' : 'white',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}>
+                {currentImages.shortsRight ? (
+                  <div>
+                    <img
+                      src={currentImages.shortsRight}
+                      alt="Short Derecho"
+                      style={{
+                        width: '100%',
+                        height: '150px',
+                        objectFit: 'contain',
+                        marginBottom: '12px',
+                        borderRadius: '8px',
+                      }}
+                    />
+                    <label
+                      style={{
+                        display: 'inline-block',
+                        padding: '8px 16px',
+                        backgroundColor: '#3b82f6',
+                        color: 'white',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cambiar imagen
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload('shortsRight', e)}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label style={{ cursor: 'pointer', display: 'block' }}>
+                    <Upload style={{
+                      width: '48px',
+                      height: '48px',
+                      color: '#9ca3af',
+                      margin: '0 auto 12px',
+                    }} />
+                    <p style={{
+                      fontSize: '14px',
+                      color: '#6b7280',
+                      marginBottom: '8px',
+                    }}>
+                      Haz clic para subir
+                    </p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload('shortsRight', e)}
                       style={{ display: 'none' }}
                     />
                   </label>
@@ -542,7 +658,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
         }}>
           <div style={{ marginBottom: '16px' }}>
             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
-              💡 Solo las tallas con las 3 imágenes estarán disponibles en la carga masiva
+              💡 Solo las tallas con las 4 imágenes estarán disponibles en la carga masiva
             </p>
             <p style={{ fontSize: '12px', color: '#f59e0b', fontWeight: '500' }}>
               ⚠️ Las imágenes se mantienen en memoria durante la sesión actual. Al refrescar la página deberás cargarlas nuevamente.
@@ -650,6 +766,93 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
             Cerrar
           </button>
         </div>
+
+        {/* Loading Overlay */}
+        {isProcessing && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '16px',
+              zIndex: 10,
+            }}
+          >
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '32px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              maxWidth: '400px',
+              width: '90%',
+            }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  margin: '0 auto 16px',
+                  border: '4px solid #e5e7eb',
+                  borderTopColor: '#3b82f6',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }} />
+                <h3 style={{
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: '#1f2937',
+                  marginBottom: '8px',
+                }}>
+                  Procesando Excel...
+                </h3>
+                <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                  Por favor espera mientras procesamos los datos
+                </p>
+              </div>
+
+              {processingProgress.total > 0 && (
+                <div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px',
+                  }}>
+                    <span style={{ fontSize: '14px', color: '#374151', fontWeight: '500' }}>
+                      Progreso
+                    </span>
+                    <span style={{ fontSize: '14px', color: '#3b82f6', fontWeight: '600' }}>
+                      {processingProgress.current} / {processingProgress.total}
+                    </span>
+                  </div>
+                  <div style={{
+                    width: '100%',
+                    backgroundColor: '#e5e7eb',
+                    borderRadius: '9999px',
+                    height: '8px',
+                    overflow: 'hidden',
+                  }}>
+                    <div
+                      style={{
+                        background: 'linear-gradient(to right, #3b82f6, #2563eb)',
+                        height: '100%',
+                        borderRadius: '9999px',
+                        transition: 'width 0.3s ease',
+                        width: `${(processingProgress.current / processingProgress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

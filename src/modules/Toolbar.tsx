@@ -78,10 +78,10 @@ export const Toolbar: React.FC = () => {
     width: sizeConfig.width,
     height: sizeConfig.height,
   };
-  // Los shorts verticales: ancho reducido, alto aumentado
+  // Usar medidas PRECISAS de moldes reales si están disponibles
   const shortsDimensions = {
-    width: sizeConfig.width * 0.45,
-    height: sizeConfig.height * 2.2,
+    width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
+    height: sizeConfig.shortsHeight || sizeConfig.height * 2.2,
   };
 
   const canAddJersey = hasSpaceForElement(
@@ -104,9 +104,9 @@ export const Toolbar: React.FC = () => {
     const dimensions =
       part === "shorts"
         ? {
-            // Shorts verticales: ancho reducido, alto aumentado
-            width: sizeConfig.width * 0.45,
-            height: sizeConfig.height * 2.2,
+            // Usar medidas PRECISAS de moldes reales si están disponibles
+            width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
+            height: sizeConfig.shortsHeight || sizeConfig.height * 2.2,
           }
         : {
             // Jersey: dimensiones normales con rotación 0°
@@ -232,7 +232,8 @@ export const Toolbar: React.FC = () => {
           const faltantes: string[] = [];
           if (!images?.jerseyFront) faltantes.push('Playera Delantera');
           if (!images?.jerseyBack) faltantes.push('Playera Trasera');
-          if (!images?.shorts) faltantes.push('Short');
+          if (!images?.shortsLeft) faltantes.push('Short Izquierdo');
+          if (!images?.shortsRight) faltantes.push('Short Derecho');
 
           tallasSinConfiguracion.push(
             `Talla "${tallaExcel.toUpperCase()}" - Faltan: ${faltantes.join(', ')}`
@@ -278,17 +279,52 @@ export const Toolbar: React.FC = () => {
         return images?.jerseyBack || "";
       };
 
+      // Función auxiliar para obtener dimensiones reales de una imagen desde base64/URL
+      const getImageDimensions = (imageUrl: string): Promise<{ width: number; height: number }> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            resolve({ width: img.width, height: img.height });
+          };
+          img.onerror = () => {
+            // Si falla, usar dimensiones por defecto
+            resolve({ width: 380, height: 265 });
+          };
+          img.src = imageUrl;
+        });
+      };
+
       // Función para obtener el molde de short según la talla
       // USA IMÁGENES COMPRIMIDAS para el canvas (originales se usan en PDF)
-      const getShortConfig = (tallaExcel: string): { url: string; width: number; height: number } => {
+      const getShortsConfig = async (tallaExcel: string): Promise<{
+        left: { url: string; width: number; height: number };
+        right: { url: string; width: number; height: number };
+      }> => {
         const talla = tallaExcel.toLowerCase().trim();
         const tallaSpanish = excelToSpanish[talla];
-        if (!tallaSpanish) return { url: "", width: 380, height: 265 };
+        if (!tallaSpanish) {
+          return {
+            left: { url: "", width: 380, height: 265 },
+            right: { url: "", width: 380, height: 265 }
+          };
+        }
 
         const { uniformSizesConfigCompressed } = useDesignerStore.getState();
         const images = uniformSizesConfigCompressed[tallaSpanish];
-        // Usar dimensiones por defecto, se ajustarán según sizeConfig
-        return { url: images?.shorts || "", width: 380, height: 265 };
+
+        // Obtener dimensiones reales de ambas imágenes
+        const leftDimensions = images?.shortsLeft
+          ? await getImageDimensions(images.shortsLeft)
+          : { width: 380, height: 265 };
+
+        const rightDimensions = images?.shortsRight
+          ? await getImageDimensions(images.shortsRight)
+          : { width: 380, height: 265 };
+
+        return {
+          left: { url: images?.shortsLeft || "", ...leftDimensions },
+          right: { url: images?.shortsRight || "", ...rightDimensions }
+        };
       };
 
       // Función para obtener la configuración de talla
@@ -330,7 +366,8 @@ export const Toolbar: React.FC = () => {
           const images = currentUniformConfig[tallaSpanish];
           if (images.jerseyFront) imagesToPreload.add(images.jerseyFront);
           if (images.jerseyBack) imagesToPreload.add(images.jerseyBack);
-          if (images.shorts) imagesToPreload.add(images.shorts);
+          if (images.shortsLeft) imagesToPreload.add(images.shortsLeft);
+          if (images.shortsRight) imagesToPreload.add(images.shortsRight);
         }
       });
 
@@ -351,8 +388,11 @@ export const Toolbar: React.FC = () => {
           if (images.jerseyBack) {
             compressedConfig[tallaSpanish].jerseyBack = await compressImageForCanvas(images.jerseyBack);
           }
-          if (images.shorts) {
-            compressedConfig[tallaSpanish].shorts = await compressImageForCanvas(images.shorts);
+          if (images.shortsLeft) {
+            compressedConfig[tallaSpanish].shortsLeft = await compressImageForCanvas(images.shortsLeft);
+          }
+          if (images.shortsRight) {
+            compressedConfig[tallaSpanish].shortsRight = await compressImageForCanvas(images.shortsRight);
           }
 
           // Pausa entre cada talla
@@ -630,11 +670,22 @@ export const Toolbar: React.FC = () => {
         }
 
         // 3. Crear PAR DE SHORTS (columna 3 - UNA SOLA columna vertical pegada a la derecha)
-        // Obtener configuración del short (URL y dimensiones reales)
-        const shortConfig = getShortConfig(tallaExcel);
+        // Obtener configuración de ambos shorts (URL y dimensiones reales)
+        const shortsConfig = await getShortsConfig(tallaExcel);
+
+        // Calcular dimensiones proporcionales basadas en el sizeConfig del jersey
+        // Los shorts deben escalarse proporcionalmente al jersey
+        const realShortWidth = shortsConfig.left.width;
+        const realShortHeight = shortsConfig.left.height;
+
+        // Escalar los shorts para que sean proporcionales al jersey en el canvas
+        // Usar medidas PRECISAS de moldes reales si están disponibles
+        // Si no, usar fórmula antigua como fallback (45% del ancho del jersey)
+        const aspectRatio = realShortWidth / realShortHeight;
+
         const shortsDimensions = {
-          width: shortConfig.width,
-          height: shortConfig.height,
+          width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
+          height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / aspectRatio,
         };
 
         // Calcular espacio necesario para el par (dos shorts verticalmente)
@@ -715,7 +766,7 @@ export const Toolbar: React.FC = () => {
         let targetPageElements = allPages[shortsPageIndex] || [];
         const baseZIndex = targetPageElements.length;
 
-        // Crear SHORT 1 (arriba, normal) - SIEMPRE en shortsColumnX
+        // Crear SHORT IZQUIERDO (arriba, normal) - SIEMPRE en shortsColumnX
         const short1Position = { x: shortsColumnX, y: pairY };
         const newShort1: UniformTemplate = {
           id: generateId("uniform"),
@@ -729,7 +780,8 @@ export const Toolbar: React.FC = () => {
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: shortConfig.url,
+          imageUrl: shortsConfig.left.url,
+          side: "left",
         };
 
         // Si los shorts van en página diferente a la actual, actualizar currentElements
@@ -742,7 +794,7 @@ export const Toolbar: React.FC = () => {
         const updatedState = useDesignerStore.getState();
         targetPageElements = updatedState.pages[shortsPageIndex] || [];
 
-        // Crear SHORT 2 (abajo, invertido 180°) - SIEMPRE en shortsColumnX
+        // Crear SHORT DERECHO (abajo, invertido 180°) - SIEMPRE en shortsColumnX
         const short2Position = {
           x: shortsColumnX,
           y: pairY + shortsDimensions.height + elementGap,
@@ -760,7 +812,8 @@ export const Toolbar: React.FC = () => {
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: shortConfig.url,
+          imageUrl: shortsConfig.right.url,
+          side: "right",
         };
 
         // Si los shorts van en página diferente a la actual, actualizar currentElements

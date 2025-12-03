@@ -353,19 +353,51 @@ interface DesignerState {
 }
 
 const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
-  width: 159, // cm - ancho para impresión (basado en benito.pdf)
-  height: 380, // cm - alto para impresión (basado en benito.pdf)
+  width: 158.529, // cm - ancho máximo para impresión
+  height: 490, // cm - alto máximo para impresión
   pixelsPerCm: 10,
 };
 
 const DEFAULT_SIZE_CONFIGS: SizeConfig[] = [
-  // Medidas realistas en píxeles (dividir entre 10 para obtener cm)
-  // pixelsPerCm = 10, entonces 500px = 50cm
-  { size: "XS", width: 400, height: 600 },  // XS: 40cm × 60cm
-  { size: "S", width: 450, height: 650 },   // S:  45cm × 65cm
-  { size: "M", width: 500, height: 700 },   // M:  50cm × 70cm (base)
-  { size: "L", width: 550, height: 750 },   // L:  55cm × 75cm
-  { size: "XL", width: 600, height: 800 },  // XL: 60cm × 80cm
+  // Medidas PRECISAS basadas en moldes reales en escala 1:1
+  // pixelsPerCm = 10, entonces 480px = 48.0cm
+  // Todas las medidas extraídas de PDFs moldes a 150 DPI con 95% cobertura
+  // SHORTS: Medidas reales verificadas SIN dividir (medidas exactas del molde)
+  {
+    size: "XS",
+    width: 513.19, height: 714.38,     // Playera: 51.319cm × 71.438cm (medida real verificada)
+    shortsWidth: 780.66, shortsHeight: 544.3 // Shorts:  78.066cm × 54.43cm (medida real verificada SIN dividir)
+  },
+  {
+    size: "S",
+    width: 540.98, height: 752.76,     // Playera: 54.098cm × 75.276cm (medida real verificada)
+    shortsWidth: 821.74, shortsHeight: 572.95 // Shorts:  82.174cm × 57.295cm (medida real verificada)
+  },
+  {
+    size: "M",
+    width: 568.63, height: 791.56,     // Playera: 56.863cm × 79.156cm (medida real verificada)
+    shortsWidth: 863.6, shortsHeight: 602.38 // Shorts:  86.36cm × 60.238cm (medida real verificada)
+  },
+  {
+    size: "L",
+    width: 599.34, height: 834,        // Playera: 59.934cm × 83.4cm (medida real verificada)
+    shortsWidth: 906.75, shortsHeight: 632.46 // Shorts:  90.675cm × 63.246cm (medida real verificada)
+  },
+  {
+    size: "XL",
+    width: 629.26, height: 875.66,     // Playera: 62.926cm × 87.566cm (medida real verificada)
+    shortsWidth: 952.04, shortsHeight: 664.04 // Shorts:  95.204cm × 66.404cm (medida real verificada)
+  },
+  {
+    size: "2XL",
+    width: 660.7, height: 919.41,      // Playera: 66.07cm × 91.941cm (medida real verificada)
+    shortsWidth: 999.61, shortsHeight: 697.21 // Shorts:  99.961cm × 69.721cm (medida real verificada)
+  },
+  {
+    size: "3XL",
+    width: 693.69, height: 965.34,     // Playera: 69.369cm × 96.534cm (medida real verificada)
+    shortsWidth: 1049, shortsHeight: 732 // Shorts:  104.9cm × 73.2cm (estimado por tendencia)
+  },
 ];
 
 export const useDesignerStore = create<DesignerState>()(
@@ -698,7 +730,7 @@ export const useDesignerStore = create<DesignerState>()(
 
         isSizeComplete: (size: SizeSpanish) => {
           const images = get().uniformSizesConfig[size];
-          return !!(images?.jerseyFront && images?.jerseyBack && images?.shorts);
+          return !!(images?.jerseyFront && images?.jerseyBack && images?.shortsLeft && images?.shortsRight);
         },
 
         clearUniformSizesConfig: () =>

@@ -18,9 +18,10 @@ export const SIZE_MAP: Record<SizeSpanish, Size> = {
 
 // Configuración de imágenes por talla
 export interface SizeImages {
-  jerseyFront?: string;  // URL o base64 de playera delantera
-  jerseyBack?: string;   // URL o base64 de playera trasera
-  shorts?: string;       // URL o base64 de short
+  jerseyFront?: string;   // URL o base64 de playera delantera
+  jerseyBack?: string;    // URL o base64 de playera trasera
+  shortsLeft?: string;    // URL o base64 de short izquierdo
+  shortsRight?: string;   // URL o base64 de short derecho
 }
 
 export interface UniformSizesConfig {
@@ -29,8 +30,10 @@ export interface UniformSizesConfig {
 
 export interface SizeConfig {
   size: Size;
-  width: number;
-  height: number;
+  width: number;  // Ancho de playera en píxeles (pixelsPerCm = 10)
+  height: number; // Alto de playera en píxeles (pixelsPerCm = 10)
+  shortsWidth?: number;  // Ancho de shorts en píxeles (opcional, precisión de moldes)
+  shortsHeight?: number; // Alto de shorts en píxeles (opcional, precisión de moldes)
 }
 
 export interface Position {
