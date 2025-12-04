@@ -364,6 +364,8 @@ export const processExcelFile = async (
       const colorNumeroEspalda = parseColor(row.color_numero_espalda, "#000000");
       const tamanoNombreEspalda = parseFontSize(row.tamano_nombre_espalda, 16);
       const colorNombreEspalda = parseColor(row.color_nombre_espalda, "#000000");
+      const tamanoNumeroShort = parseFontSize(row.tamano_numero_short, 30);
+      const colorNumeroShort = parseColor(row.color_numero_short, "#000000");
 
       // Debug: Ver qué valores se están leyendo del Excel
       console.log(`[${row.nombre}] Valores Excel:`, {
@@ -461,9 +463,9 @@ export const processExcelFile = async (
         addElement(newJerseyFrente, currentPageIndex);
 
         // Número en el frente (pecho derecho, 10cm más arriba, ajustado según dígitos)
-        if (row.numero_frente) {
+        if (row.numero) {
           // Ajustar posición según cantidad de dígitos
-          const numeroStr = String(row.numero_frente);
+          const numeroStr = String(row.numero);
           const cantidadDigitos = numeroStr.length;
           const ajusteDigitos = cantidadDigitos === 1 ? 20 : -20; // 1 dígito: +2cm, 2+ dígitos: -2cm
 
@@ -481,7 +483,7 @@ export const processExcelFile = async (
             zIndex: currentElements.length,
             locked: false,
             visible: true,
-            content: String(row.numero_frente),
+            content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: tamanoNumeroFrente,
             fontColor: colorNumeroFrente,
@@ -520,7 +522,7 @@ export const processExcelFile = async (
         addElement(newJerseyEspalda, currentPageIndex);
 
         // Número trasero (10cm a la izquierda)
-        if (row.numero_trasero) {
+        if (row.numero) {
           const numeroEspaldaText: TextElement = {
             id: generateId("text"),
             type: "text",
@@ -535,7 +537,7 @@ export const processExcelFile = async (
             zIndex: currentElements.length,
             locked: false,
             visible: true,
-            content: String(row.numero_trasero),
+            content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: tamanoNumeroEspalda,
             fontColor: colorNumeroEspalda,
@@ -549,7 +551,7 @@ export const processExcelFile = async (
           addElement(numeroEspaldaText, currentPageIndex);
         }
 
-        // Nombre en la espalda (16cm abajo, 6cm a la izquierda)
+        // Nombre en la espalda (13cm abajo desde la parte superior, 6cm a la izquierda)
         if (row.nombre) {
           const nombreEspaldaText: TextElement = {
             id: generateId("text"),
@@ -558,7 +560,7 @@ export const processExcelFile = async (
             size: tallaMostrar as any,
             position: {
               x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 120,
-              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.05 + 160,
+              y: jerseyEspaldaPos.y + 130,
             },
             dimensions: { width: 120, height: 30 },
             rotation: 0,
@@ -629,6 +631,38 @@ export const processExcelFile = async (
         currentElements.push(newShortRight);
         addElement(newShortRight, currentPageIndex);
 
+        // Número en el short derecho (posicionado según imagen de referencia: 70% ancho, 55% alto)
+        // Ajustado: -40cm izquierda, -13cm arriba (considerando rotación 180°)
+        // Solo se agrega si tamano_numero_short tiene un valor
+        if (row.numero && row.tamano_numero_short) {
+          const numeroShortRightText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "shorts",
+            size: tallaMostrar as any,
+            position: {
+              x: shortRightPos.x + shortsDimensions.width * 0.70 - 300,
+              y: shortRightPos.y + shortsDimensions.height * 0.55 - 90,
+            },
+            dimensions: { width: 40, height: 30 },
+            rotation: 180, // Rotado 180° como el short
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero),
+            fontFamily: fonteFila,
+            fontSize: tamanoNumeroShort,
+            fontColor: colorNumeroShort,
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "front",
+          };
+
+          currentElements.push(numeroShortRightText);
+          addElement(numeroShortRightText, currentPageIndex);
+        }
+
       } else if (usarLayoutOpcionA) {
         // ============================================================
         // LAYOUT OPCIÓN A (XL-2XL): 3 filas
@@ -678,9 +712,9 @@ export const processExcelFile = async (
         addElement(newJerseyFrente, currentPageIndex);
 
         // Número en el frente (pecho derecho, 10cm más arriba, ajustado según dígitos)
-        if (row.numero_frente) {
+        if (row.numero) {
           // Ajustar posición según cantidad de dígitos
-          const numeroStr = String(row.numero_frente);
+          const numeroStr = String(row.numero);
           const cantidadDigitos = numeroStr.length;
           const ajusteDigitos = cantidadDigitos === 1 ? 20 : -20; // 1 dígito: +2cm, 2+ dígitos: -2cm
 
@@ -698,7 +732,7 @@ export const processExcelFile = async (
             zIndex: currentElements.length,
             locked: false,
             visible: true,
-            content: String(row.numero_frente),
+            content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: tamanoNumeroFrente,
             fontColor: colorNumeroFrente,
@@ -737,7 +771,7 @@ export const processExcelFile = async (
         addElement(newJerseyEspalda, currentPageIndex);
 
         // Número trasero (10cm a la izquierda)
-        if (row.numero_trasero) {
+        if (row.numero) {
           const numeroEspaldaText: TextElement = {
             id: generateId("text"),
             type: "text",
@@ -752,7 +786,7 @@ export const processExcelFile = async (
             zIndex: currentElements.length,
             locked: false,
             visible: true,
-            content: String(row.numero_trasero),
+            content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: tamanoNumeroEspalda,
             fontColor: colorNumeroEspalda,
@@ -766,7 +800,7 @@ export const processExcelFile = async (
           addElement(numeroEspaldaText, currentPageIndex);
         }
 
-        // Nombre en la espalda (16cm abajo, 6cm a la izquierda)
+        // Nombre en la espalda (13cm abajo desde la parte superior, 6cm a la izquierda)
         if (row.nombre) {
           const nombreEspaldaText: TextElement = {
             id: generateId("text"),
@@ -775,7 +809,7 @@ export const processExcelFile = async (
             size: tallaMostrar as any,
             position: {
               x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 120,
-              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.05 + 160,
+              y: jerseyEspaldaPos.y + 130,
             },
             dimensions: { width: 120, height: 30 },
             rotation: 0,
@@ -841,6 +875,38 @@ export const processExcelFile = async (
 
         currentElements.push(newShortRight);
         addElement(newShortRight, currentPageIndex);
+
+        // Número en el short derecho (posicionado según imagen de referencia: 70% ancho, 55% alto)
+        // Ajustado: -40cm izquierda, -13cm arriba (considerando rotación 180°)
+        // Solo se agrega si tamano_numero_short tiene un valor
+        if (row.numero && row.tamano_numero_short) {
+          const numeroShortRightText: TextElement = {
+            id: generateId("text"),
+            type: "text",
+            part: "shorts",
+            size: tallaMostrar as any,
+            position: {
+              x: shortRightPos.x + shortsDimensions.width * 0.70 - 300,
+              y: shortRightPos.y + shortsDimensions.height * 0.55 - 90,
+            },
+            dimensions: { width: 40, height: 30 },
+            rotation: 180, // Rotado 180° como el short
+            zIndex: currentElements.length,
+            locked: false,
+            visible: true,
+            content: String(row.numero),
+            fontFamily: fonteFila,
+            fontSize: tamanoNumeroShort,
+            fontColor: colorNumeroShort,
+            textAlign: "center",
+            fontWeight: "bold",
+            opacity: 1,
+            side: "front",
+          };
+
+          currentElements.push(numeroShortRightText);
+          addElement(numeroShortRightText, currentPageIndex);
+        }
       }
 
       onProgress(processedCount, rows.length);

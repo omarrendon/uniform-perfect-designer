@@ -827,13 +827,16 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                 <strong>Columnas requeridas:</strong> nombre, talla
               </p>
               <p style={{ fontSize: '11px', color: '#1e40af', marginBottom: '4px' }}>
-                <strong>Columnas opcionales:</strong> genero (Hombre/Mujer), numero_trasero, numero_frente, fuente
+                <strong>Columnas opcionales:</strong> genero (Hombre/Mujer), numero, fuente
               </p>
               <p style={{ fontSize: '10px', color: '#1e40af', marginBottom: '2px' }}>
                 <strong>Personalización:</strong> tamano_numero_frente, color_numero_frente,
               </p>
+              <p style={{ fontSize: '10px', color: '#1e40af', marginBottom: '2px' }}>
+                tamano_numero_espalda, color_numero_espalda, tamano_nombre_espalda, color_nombre_espalda,
+              </p>
               <p style={{ fontSize: '10px', color: '#1e40af' }}>
-                tamano_numero_espalda, color_numero_espalda, tamano_nombre_espalda, color_nombre_espalda
+                tamano_numero_short, color_numero_short
               </p>
             </div>
           </div>
