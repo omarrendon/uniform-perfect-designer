@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { X, Upload, Check, AlertCircle, FileUp } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
-import type { SizeSpanish } from "../types";
+import type { SizeSpanish, Gender } from "../types";
 import { validateExcelFile } from "../utils/excelReader";
 import { processExcelFile } from "../utils/excelProcessor";
 import type { ExcelProcessorCallbacks } from "../utils/excelProcessor";
@@ -28,6 +28,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   onClose,
 }) => {
   const [currentSize, setCurrentSize] = useState<SizeSpanish>('M');
+  const [currentGender, setCurrentGender] = useState<Gender>('Hombre');
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
@@ -50,8 +51,11 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
-      console.log(`Imagen cargada: ${type} para talla ${currentSize}`);
-      setUniformSizeImages(currentSize, { [type]: base64String });
+      // Crear compound key: "H-M", "M-XG", etc.
+      const genderPrefix = currentGender === 'Hombre' ? 'H' : 'M';
+      const sizeKey = `${genderPrefix}-${currentSize}`;
+      console.log(`Imagen cargada: ${type} para ${currentGender} talla ${currentSize} (key: ${sizeKey})`);
+      setUniformSizeImages(sizeKey, { [type]: base64String });
     };
     reader.readAsDataURL(file);
   };
@@ -118,11 +122,15 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
     await processExcelFile(excelFile, callbacks);
   };
 
-  const currentImages = uniformSizesConfig[currentSize] || {};
-  const isComplete = isSizeComplete(currentSize);
+  // Crear compound key para obtener las imágenes del género y talla actual
+  const genderPrefix = currentGender === 'Hombre' ? 'H' : 'M';
+  const currentSizeKey = `${genderPrefix}-${currentSize}`;
+  const currentImages = uniformSizesConfig[currentSizeKey] || {};
+  const isComplete = isSizeComplete(currentSizeKey);
 
-  // Contar cuántas tallas están completas
-  const completedSizes = SIZES.filter(size => isSizeComplete(size)).length;
+  // Contar cuántas tallas están completas (considerando ambos géneros)
+  const allSizeKeys = SIZES.flatMap(size => [`H-${size}`, `M-${size}`]);
+  const completedSizes = allSizeKeys.filter(key => isSizeComplete(key)).length;
   const totalImages = completedSizes * 4;
 
   return (
@@ -208,10 +216,10 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
             marginBottom: '8px',
           }}>
             <span style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>
-              Progreso total: {totalImages}/28 imágenes
+              Progreso total: {totalImages}/56 imágenes
             </span>
             <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#3b82f6' }}>
-              {completedSizes}/7 tallas completas
+              {completedSizes}/14 tallas completas (7 Hombre + 7 Mujer)
             </span>
           </div>
           <div style={{
@@ -227,9 +235,85 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                 height: '100%',
                 borderRadius: '9999px',
                 transition: 'width 0.3s ease',
-                width: `${(totalImages / 28) * 100}%`,
+                width: `${(totalImages / 56) * 100}%`,
               }}
             />
+          </div>
+        </div>
+
+        {/* Gender Selection */}
+        <div style={{
+          padding: '16px 24px',
+          borderBottom: '1px solid #e5e7eb',
+          backgroundColor: '#ffffff',
+        }}>
+          <label style={{
+            display: 'block',
+            fontSize: '14px',
+            fontWeight: '600',
+            color: '#374151',
+            marginBottom: '10px',
+          }}>
+            Género del uniforme:
+          </label>
+          <div style={{
+            display: 'flex',
+            gap: '12px',
+          }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              border: currentGender === 'Hombre' ? '2px solid #3b82f6' : '1px solid #d1d5db',
+              backgroundColor: currentGender === 'Hombre' ? '#eff6ff' : 'white',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontWeight: currentGender === 'Hombre' ? '600' : '500',
+              color: currentGender === 'Hombre' ? '#3b82f6' : '#6b7280',
+            }}>
+              <input
+                type="radio"
+                name="gender"
+                value="Hombre"
+                checked={currentGender === 'Hombre'}
+                onChange={(e) => setCurrentGender(e.target.value as Gender)}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  cursor: 'pointer',
+                }}
+              />
+              <span style={{ fontSize: '14px' }}>👔 Hombre</span>
+            </label>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              border: currentGender === 'Mujer' ? '2px solid #3b82f6' : '1px solid #d1d5db',
+              backgroundColor: currentGender === 'Mujer' ? '#eff6ff' : 'white',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontWeight: currentGender === 'Mujer' ? '600' : '500',
+              color: currentGender === 'Mujer' ? '#3b82f6' : '#6b7280',
+            }}>
+              <input
+                type="radio"
+                name="gender"
+                value="Mujer"
+                checked={currentGender === 'Mujer'}
+                onChange={(e) => setCurrentGender(e.target.value as Gender)}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  cursor: 'pointer',
+                }}
+              />
+              <span style={{ fontSize: '14px' }}>👗 Mujer</span>
+            </label>
           </div>
         </div>
 
@@ -287,7 +371,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               color: '#1f2937',
               marginBottom: '8px',
             }}>
-              Talla {currentSize} ({SIZE_LABELS[currentSize]})
+              {currentGender === 'Hombre' ? '👔' : '👗'} {currentGender} - Talla {currentSize} ({SIZE_LABELS[currentSize]})
             </h3>
             {isComplete ? (
               <div style={{
@@ -742,8 +826,14 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               <p style={{ fontSize: '11px', color: '#1e40af', marginBottom: '4px' }}>
                 <strong>Columnas requeridas:</strong> nombre, talla
               </p>
-              <p style={{ fontSize: '11px', color: '#1e40af' }}>
-                <strong>Columnas opcionales:</strong> numero_trasero, numero_frente, fuente
+              <p style={{ fontSize: '11px', color: '#1e40af', marginBottom: '4px' }}>
+                <strong>Columnas opcionales:</strong> genero (Hombre/Mujer), numero_trasero, numero_frente, fuente
+              </p>
+              <p style={{ fontSize: '10px', color: '#1e40af', marginBottom: '2px' }}>
+                <strong>Personalización:</strong> tamano_numero_frente, color_numero_frente,
+              </p>
+              <p style={{ fontSize: '10px', color: '#1e40af' }}>
+                tamano_numero_espalda, color_numero_espalda, tamano_nombre_espalda, color_nombre_espalda
               </p>
             </div>
           </div>

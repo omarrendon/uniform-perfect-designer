@@ -13,6 +13,50 @@ export interface ExcelProcessorCallbacks {
   onComplete: (summary: { totalElements: number; pagesUsed: number }) => void;
 }
 
+/**
+ * Parsea y valida el tamaño de fuente desde Excel
+ * @param valor - Valor del Excel (puede ser número o string)
+ * @param defaultSize - Tamaño por defecto si no es válido
+ * @returns Tamaño de fuente válido (mínimo 8, sin máximo)
+ */
+const parseFontSize = (valor: any, defaultSize: number): number => {
+  if (!valor) return defaultSize;
+
+  const size = typeof valor === 'number' ? valor : parseInt(String(valor), 10);
+
+  if (isNaN(size) || size < 8) {
+    return defaultSize;
+  }
+
+  return size;
+};
+
+/**
+ * Parsea y valida el color desde Excel
+ * @param valor - Valor del Excel (puede ser "#FF0000", "FF0000", etc.)
+ * @param defaultColor - Color por defecto si no es válido
+ * @returns Color en formato hexadecimal "#RRGGBB"
+ */
+const parseColor = (valor: any, defaultColor: string): string => {
+  if (!valor) return defaultColor;
+
+  let color = String(valor).trim();
+
+  // Si no empieza con #, agregarlo
+  if (!color.startsWith('#')) {
+    color = '#' + color;
+  }
+
+  // Validar formato hexadecimal (debe ser #RRGGBB)
+  const hexPattern = /^#[0-9A-Fa-f]{6}$/;
+  if (!hexPattern.test(color)) {
+    return defaultColor;
+  }
+
+  // Normalizar a mayúsculas
+  return color.toUpperCase();
+};
+
 export const processExcelFile = async (
   file: File,
   callbacks: ExcelProcessorCallbacks
@@ -28,9 +72,14 @@ export const processExcelFile = async (
       return;
     }
 
+    // Debug: Ver todas las columnas leídas del Excel
+    if (rows.length > 0) {
+      console.log("🔍 COLUMNAS ENCONTRADAS EN EL EXCEL:", Object.keys(rows[0]));
+      console.log("📄 PRIMERA FILA COMPLETA:", rows[0]);
+    }
+
     // Obtener funciones del store
     const {
-      isSizeComplete,
       canvasConfig,
       addPage,
       sizeConfigs,
@@ -55,35 +104,57 @@ export const processExcelFile = async (
       '3xg': '3XG',
     };
 
-    // VALIDACIÓN: Verificar que todas las tallas del Excel tengan imágenes configuradas
-    const tallasEnExcel = new Set<string>();
+    // Mapeo de género Excel a tipo Gender
+    const excelToGender = (generoExcel: string | undefined): 'Hombre' | 'Mujer' => {
+      if (!generoExcel) return 'Hombre'; // Por defecto Hombre si no se especifica
+      const generoLower = generoExcel.toLowerCase().trim();
+      if (generoLower === 'mujer' || generoLower === 'm' || generoLower === 'f' || generoLower === 'femenino') {
+        return 'Mujer';
+      }
+      return 'Hombre'; // Por defecto Hombre
+    };
+
+    // Helper para crear key compuesta (género-talla) ej: "H-XCH", "M-CH"
+    const createSizeKey = (gender: 'Hombre' | 'Mujer', sizeSpanish: SizeSpanish): string => {
+      const genderPrefix = gender === 'Hombre' ? 'H' : 'M';
+      return `${genderPrefix}-${sizeSpanish}`;
+    };
+
+    // VALIDACIÓN: Verificar que todas las combinaciones talla+género del Excel tengan imágenes configuradas
+    const tallasGeneroEnExcel = new Set<string>();
     const tallasSinConfiguracion: string[] = [];
 
-    // Recopilar todas las tallas únicas del Excel
+    // Recopilar todas las combinaciones talla+género únicas del Excel
     rows.forEach(row => {
       const tallaExcel = (row.talla || '').toLowerCase().trim();
+      const genero = excelToGender(row.genero);
       if (tallaExcel) {
-        tallasEnExcel.add(tallaExcel);
+        const tallaSpanish = excelToSpanish[tallaExcel];
+        if (tallaSpanish) {
+          const key = createSizeKey(genero, tallaSpanish);
+          tallasGeneroEnExcel.add(key);
+        }
       }
     });
 
-    // Verificar cada talla si tiene configuración completa
+    // Verificar cada combinación talla+género si tiene configuración completa
     const currentConfig = useDesignerStore.getState().uniformSizesConfig;
-    tallasEnExcel.forEach(tallaExcel => {
-      const tallaSpanish = excelToSpanish[tallaExcel];
-      if (!tallaSpanish) {
-        tallasSinConfiguracion.push(`"${tallaExcel}" - Talla no reconocida`);
-      } else if (!isSizeComplete(tallaSpanish)) {
-        const images = currentConfig[tallaSpanish];
+    tallasGeneroEnExcel.forEach(sizeKey => {
+      const images = currentConfig[sizeKey];
+      if (!images) {
+        tallasSinConfiguracion.push(`"${sizeKey}" - Sin configuración de imágenes`);
+      } else {
         const faltantes: string[] = [];
-        if (!images?.jerseyFront) faltantes.push('Playera Delantera');
-        if (!images?.jerseyBack) faltantes.push('Playera Trasera');
-        if (!images?.shortsLeft) faltantes.push('Short Izquierdo');
-        if (!images?.shortsRight) faltantes.push('Short Derecho');
+        if (!images.jerseyFront) faltantes.push('Playera Delantera');
+        if (!images.jerseyBack) faltantes.push('Playera Trasera');
+        if (!images.shortsLeft) faltantes.push('Short Izquierdo');
+        if (!images.shortsRight) faltantes.push('Short Derecho');
 
-        tallasSinConfiguracion.push(
-          `Talla "${tallaExcel.toUpperCase()}" - Faltan: ${faltantes.join(', ')}`
-        );
+        if (faltantes.length > 0) {
+          tallasSinConfiguracion.push(
+            `"${sizeKey}" - Faltan: ${faltantes.join(', ')}`
+          );
+        }
       }
     });
 
@@ -91,30 +162,32 @@ export const processExcelFile = async (
     if (tallasSinConfiguracion.length > 0) {
       onError(
         "Tallas sin configurar",
-        "El archivo Excel contiene tallas que no tienen imágenes configuradas. Por favor, configura las imágenes de todas las tallas antes de continuar.",
+        "El archivo Excel contiene combinaciones de talla y género que no tienen imágenes configuradas. Por favor, configura las imágenes antes de continuar.",
         tallasSinConfiguracion
       );
       return;
     }
 
-    // Funciones auxiliares para obtener moldes
-    const getMoldeFrenteUrl = (tallaExcel: string): string => {
+    // Funciones auxiliares para obtener moldes (con género)
+    const getMoldeFrenteUrl = (tallaExcel: string, genero: 'Hombre' | 'Mujer'): string => {
       const talla = tallaExcel.toLowerCase().trim();
       const tallaSpanish = excelToSpanish[talla];
       if (!tallaSpanish) return "";
 
+      const sizeKey = createSizeKey(genero, tallaSpanish);
       const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
-      const images = uniformSizesConfigCompressed[tallaSpanish];
+      const images = uniformSizesConfigCompressed[sizeKey];
       return images?.jerseyFront || "";
     };
 
-    const getMoldeEspaldaUrl = (tallaExcel: string): string => {
+    const getMoldeEspaldaUrl = (tallaExcel: string, genero: 'Hombre' | 'Mujer'): string => {
       const talla = tallaExcel.toLowerCase().trim();
       const tallaSpanish = excelToSpanish[talla];
       if (!tallaSpanish) return "";
 
+      const sizeKey = createSizeKey(genero, tallaSpanish);
       const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
-      const images = uniformSizesConfigCompressed[tallaSpanish];
+      const images = uniformSizesConfigCompressed[sizeKey];
       return images?.jerseyBack || "";
     };
 
@@ -133,7 +206,7 @@ export const processExcelFile = async (
       });
     };
 
-    const getShortsConfig = async (tallaExcel: string): Promise<{
+    const getShortsConfig = async (tallaExcel: string, genero: 'Hombre' | 'Mujer'): Promise<{
       left: { url: string; width: number; height: number };
       right: { url: string; width: number; height: number };
     }> => {
@@ -146,8 +219,9 @@ export const processExcelFile = async (
         };
       }
 
+      const sizeKey = createSizeKey(genero, tallaSpanish);
       const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
-      const images = uniformSizesConfigCompressed[tallaSpanish];
+      const images = uniformSizesConfigCompressed[sizeKey];
 
       // Obtener dimensiones reales de ambas imágenes
       const leftDimensions = images?.shortsLeft
@@ -164,12 +238,15 @@ export const processExcelFile = async (
       };
     };
 
-    const getSizeConfig = (tallaExcel: string) => {
+    const getSizeConfig = (tallaExcel: string, genero: 'Hombre' | 'Mujer') => {
       const tallaUpper = tallaExcel.toUpperCase().trim();
       const talla = tallaUpper as Size;
 
-      // Buscar la configuración exacta de la talla (ahora soportamos 2XL y 3XL)
-      return sizeConfigs.find(s => s.size === talla) || sizeConfigs[2]; // Default M
+      // Usar la función del store para obtener configuración por talla y género
+      const config = useDesignerStore.getState().getSizeConfig(talla, genero);
+
+      // Si no encuentra, usar configuración por defecto (M Hombre)
+      return config || useDesignerStore.getState().getSizeConfig('M', 'Hombre') || sizeConfigs[0];
     };
 
     // OCULTAR EL CANVAS
@@ -189,13 +266,17 @@ export const processExcelFile = async (
     const uniformSizesConfigOriginal = useDesignerStore.getState().uniformSizesConfig;
     rows.forEach(row => {
       const tallaExcel = (row.talla || 'm').toLowerCase().trim();
+      const genero = excelToGender(row.genero);
       const tallaSpanish = excelToSpanish[tallaExcel];
-      if (tallaSpanish && uniformSizesConfigOriginal[tallaSpanish]) {
-        const images = uniformSizesConfigOriginal[tallaSpanish];
-        if (images.jerseyFront) imagesToPreload.add(images.jerseyFront);
-        if (images.jerseyBack) imagesToPreload.add(images.jerseyBack);
-        if (images.shortsLeft) imagesToPreload.add(images.shortsLeft);
-        if (images.shortsRight) imagesToPreload.add(images.shortsRight);
+      if (tallaSpanish) {
+        const sizeKey = createSizeKey(genero, tallaSpanish);
+        const images = uniformSizesConfigOriginal[sizeKey];
+        if (images) {
+          if (images.jerseyFront) imagesToPreload.add(images.jerseyFront);
+          if (images.jerseyBack) imagesToPreload.add(images.jerseyBack);
+          if (images.shortsLeft) imagesToPreload.add(images.shortsLeft);
+          if (images.shortsRight) imagesToPreload.add(images.shortsRight);
+        }
       }
     });
 
@@ -203,22 +284,22 @@ export const processExcelFile = async (
     console.log(`Comprimiendo ${imagesToPreload.size} imágenes para el canvas...`);
     const compressedConfig: any = {};
 
-    for (const tallaSpanish of Object.keys(uniformSizesConfigOriginal) as SizeSpanish[]) {
-      const images = uniformSizesConfigOriginal[tallaSpanish];
+    for (const sizeKey of Object.keys(uniformSizesConfigOriginal)) {
+      const images = uniformSizesConfigOriginal[sizeKey];
       if (images) {
-        compressedConfig[tallaSpanish] = {};
+        compressedConfig[sizeKey] = {};
 
         if (images.jerseyFront) {
-          compressedConfig[tallaSpanish].jerseyFront = await compressImageForCanvas(images.jerseyFront);
+          compressedConfig[sizeKey].jerseyFront = await compressImageForCanvas(images.jerseyFront);
         }
         if (images.jerseyBack) {
-          compressedConfig[tallaSpanish].jerseyBack = await compressImageForCanvas(images.jerseyBack);
+          compressedConfig[sizeKey].jerseyBack = await compressImageForCanvas(images.jerseyBack);
         }
         if (images.shortsLeft) {
-          compressedConfig[tallaSpanish].shortsLeft = await compressImageForCanvas(images.shortsLeft);
+          compressedConfig[sizeKey].shortsLeft = await compressImageForCanvas(images.shortsLeft);
         }
         if (images.shortsRight) {
-          compressedConfig[tallaSpanish].shortsRight = await compressImageForCanvas(images.shortsRight);
+          compressedConfig[sizeKey].shortsRight = await compressImageForCanvas(images.shortsRight);
         }
 
         await new Promise(resolve => setTimeout(resolve, 200));
@@ -267,7 +348,8 @@ export const processExcelFile = async (
       }
 
       const tallaExcel = row.talla || "m";
-      const sizeConfig = getSizeConfig(tallaExcel);
+      const genero = excelToGender(row.genero); // Extraer género del Excel
+      const sizeConfig = getSizeConfig(tallaExcel, genero);
       const tallaMostrar = tallaExcel.toUpperCase().trim();
       const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
 
@@ -275,12 +357,34 @@ export const processExcelFile = async (
         await loadGoogleFont(fonteFila);
       }
 
+      // Parsear tamaños de fuente y colores desde Excel (con valores por defecto)
+      const tamanoNumeroFrente = parseFontSize(row.tamano_numero_frente, 24);
+      const colorNumeroFrente = parseColor(row.color_numero_frente, "#000000");
+      const tamanoNumeroEspalda = parseFontSize(row.tamano_numero_espalda, 40);
+      const colorNumeroEspalda = parseColor(row.color_numero_espalda, "#000000");
+      const tamanoNombreEspalda = parseFontSize(row.tamano_nombre_espalda, 16);
+      const colorNombreEspalda = parseColor(row.color_nombre_espalda, "#000000");
+
+      // Debug: Ver qué valores se están leyendo del Excel
+      console.log(`[${row.nombre}] Valores Excel:`, {
+        tamano_numero_espalda: row.tamano_numero_espalda,
+        color_numero_espalda: row.color_numero_espalda,
+        tamano_nombre_espalda: row.tamano_nombre_espalda,
+        color_nombre_espalda: row.color_nombre_espalda
+      });
+      console.log(`[${row.nombre}] Valores parseados:`, {
+        tamanoNumeroEspalda,
+        colorNumeroEspalda,
+        tamanoNombreEspalda,
+        colorNombreEspalda
+      });
+
       const jerseyDimensions = {
         width: sizeConfig.width,
         height: sizeConfig.height,
       };
 
-      const shortsConfig = await getShortsConfig(tallaExcel);
+      const shortsConfig = await getShortsConfig(tallaExcel, genero);
       const shortsDimensions = {
         width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
         height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / (shortsConfig.left.width / shortsConfig.left.height),
@@ -350,22 +454,27 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeFrenteUrl(tallaExcel),
+          imageUrl: getMoldeFrenteUrl(tallaExcel, genero),
         };
 
         currentElements.push(newJerseyFrente);
         addElement(newJerseyFrente, currentPageIndex);
 
-        // Número en el frente
+        // Número en el frente (pecho derecho, 10cm más arriba, ajustado según dígitos)
         if (row.numero_frente) {
+          // Ajustar posición según cantidad de dígitos
+          const numeroStr = String(row.numero_frente);
+          const cantidadDigitos = numeroStr.length;
+          const ajusteDigitos = cantidadDigitos === 1 ? 20 : -20; // 1 dígito: +2cm, 2+ dígitos: -2cm
+
           const numeroFrenteText: TextElement = {
             id: generateId("text"),
             type: "text",
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyFrentePos.x + jerseyDimensions.width / 2 - 15,
-              y: jerseyFrentePos.y + jerseyDimensions.height * 0.45,
+              x: jerseyFrentePos.x + jerseyDimensions.width * 0.75 - 85 + ajusteDigitos,
+              y: jerseyFrentePos.y + jerseyDimensions.height * 0.30 - 100,
             },
             dimensions: { width: 30, height: 25 },
             rotation: 0,
@@ -374,8 +483,8 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.numero_frente),
             fontFamily: fonteFila,
-            fontSize: 24,
-            fontColor: "#000000",
+            fontSize: tamanoNumeroFrente,
+            fontColor: colorNumeroFrente,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -404,13 +513,13 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeEspaldaUrl(tallaExcel),
+          imageUrl: getMoldeEspaldaUrl(tallaExcel, genero),
         };
 
         currentElements.push(newJerseyEspalda);
         addElement(newJerseyEspalda, currentPageIndex);
 
-        // Número trasero
+        // Número trasero (10cm a la izquierda)
         if (row.numero_trasero) {
           const numeroEspaldaText: TextElement = {
             id: generateId("text"),
@@ -418,7 +527,7 @@ export const processExcelFile = async (
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 30,
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 130,
               y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.35,
             },
             dimensions: { width: 60, height: 40 },
@@ -428,8 +537,8 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.numero_trasero),
             fontFamily: fonteFila,
-            fontSize: 40,
-            fontColor: "#000000",
+            fontSize: tamanoNumeroEspalda,
+            fontColor: colorNumeroEspalda,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -440,7 +549,7 @@ export const processExcelFile = async (
           addElement(numeroEspaldaText, currentPageIndex);
         }
 
-        // Nombre en la espalda
+        // Nombre en la espalda (16cm abajo, 6cm a la izquierda)
         if (row.nombre) {
           const nombreEspaldaText: TextElement = {
             id: generateId("text"),
@@ -448,8 +557,8 @@ export const processExcelFile = async (
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 60,
-              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.6,
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 120,
+              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.05 + 160,
             },
             dimensions: { width: 120, height: 30 },
             rotation: 0,
@@ -458,8 +567,8 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.nombre).toUpperCase(),
             fontFamily: fonteFila,
-            fontSize: 16,
-            fontColor: "#000000",
+            fontSize: tamanoNombreEspalda,
+            fontColor: colorNombreEspalda,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -469,34 +578,6 @@ export const processExcelFile = async (
           currentElements.push(nombreEspaldaText);
           addElement(nombreEspaldaText, currentPageIndex);
         }
-
-        // Talla en la espalda
-        const tallaEspaldaText: TextElement = {
-          id: generateId("text"),
-          type: "text",
-          part: "jersey",
-          size: tallaMostrar as any,
-          position: {
-            x: jerseyEspaldaPos.x + jerseyDimensions.width * 0.8,
-            y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.1,
-          },
-          dimensions: { width: 40, height: 20 },
-          rotation: 0,
-          zIndex: currentElements.length,
-          locked: false,
-          visible: true,
-          content: tallaMostrar,
-          fontFamily: "Arial",
-          fontSize: 16,
-          fontColor: "#666666",
-          textAlign: "center",
-          fontWeight: "bold",
-          opacity: 1,
-          side: "back",
-        };
-
-        currentElements.push(tallaEspaldaText);
-        addElement(tallaEspaldaText, currentPageIndex);
 
         // --- CREAR SHORT IZQUIERDO (columna 2, arriba) ---
         const shortLeftPos = {
@@ -523,34 +604,6 @@ export const processExcelFile = async (
         currentElements.push(newShortLeft);
         addElement(newShortLeft, currentPageIndex);
 
-        // Talla en el short izquierdo
-        const tallaShortLeftText: TextElement = {
-          id: generateId("text"),
-          type: "text",
-          part: "shorts",
-          size: tallaMostrar as any,
-          position: {
-            x: shortLeftPos.x + shortsDimensions.width / 2 - 20,
-            y: shortLeftPos.y + shortsDimensions.height * 0.15,
-          },
-          dimensions: { width: 40, height: 20 },
-          rotation: 0,
-          zIndex: currentElements.length,
-          locked: false,
-          visible: true,
-          content: tallaMostrar,
-          fontFamily: "Arial",
-          fontSize: 14,
-          fontColor: "#666666",
-          textAlign: "center",
-          fontWeight: "bold",
-          opacity: 1,
-          side: "front",
-        };
-
-        currentElements.push(tallaShortLeftText);
-        addElement(tallaShortLeftText, currentPageIndex);
-
         // --- CREAR SHORT DERECHO (columna 2, abajo, invertido 180°) ---
         const shortRightPos = {
           x: jerseyDimensions.width + elementGap,
@@ -575,34 +628,6 @@ export const processExcelFile = async (
 
         currentElements.push(newShortRight);
         addElement(newShortRight, currentPageIndex);
-
-        // Talla en el short derecho (rotado 180°)
-        const tallaShortRightText: TextElement = {
-          id: generateId("text"),
-          type: "text",
-          part: "shorts",
-          size: tallaMostrar as any,
-          position: {
-            x: shortRightPos.x + shortsDimensions.width / 2 - 20,
-            y: shortRightPos.y + shortsDimensions.height * 0.85,
-          },
-          dimensions: { width: 40, height: 20 },
-          rotation: 180,
-          zIndex: currentElements.length,
-          locked: false,
-          visible: true,
-          content: tallaMostrar,
-          fontFamily: "Arial",
-          fontSize: 14,
-          fontColor: "#666666",
-          textAlign: "center",
-          fontWeight: "bold",
-          opacity: 1,
-          side: "front",
-        };
-
-        currentElements.push(tallaShortRightText);
-        addElement(tallaShortRightText, currentPageIndex);
 
       } else if (usarLayoutOpcionA) {
         // ============================================================
@@ -646,22 +671,27 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeFrenteUrl(tallaExcel),
+          imageUrl: getMoldeFrenteUrl(tallaExcel, genero),
         };
 
         currentElements.push(newJerseyFrente);
         addElement(newJerseyFrente, currentPageIndex);
 
-        // Número en el frente
+        // Número en el frente (pecho derecho, 10cm más arriba, ajustado según dígitos)
         if (row.numero_frente) {
+          // Ajustar posición según cantidad de dígitos
+          const numeroStr = String(row.numero_frente);
+          const cantidadDigitos = numeroStr.length;
+          const ajusteDigitos = cantidadDigitos === 1 ? 20 : -20; // 1 dígito: +2cm, 2+ dígitos: -2cm
+
           const numeroFrenteText: TextElement = {
             id: generateId("text"),
             type: "text",
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyFrentePos.x + jerseyDimensions.width / 2 - 15,
-              y: jerseyFrentePos.y + jerseyDimensions.height * 0.45,
+              x: jerseyFrentePos.x + jerseyDimensions.width * 0.75 - 85 + ajusteDigitos,
+              y: jerseyFrentePos.y + jerseyDimensions.height * 0.30 - 100,
             },
             dimensions: { width: 30, height: 25 },
             rotation: 0,
@@ -670,8 +700,8 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.numero_frente),
             fontFamily: fonteFila,
-            fontSize: 24,
-            fontColor: "#000000",
+            fontSize: tamanoNumeroFrente,
+            fontColor: colorNumeroFrente,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -700,13 +730,13 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeEspaldaUrl(tallaExcel),
+          imageUrl: getMoldeEspaldaUrl(tallaExcel, genero),
         };
 
         currentElements.push(newJerseyEspalda);
         addElement(newJerseyEspalda, currentPageIndex);
 
-        // Número trasero
+        // Número trasero (10cm a la izquierda)
         if (row.numero_trasero) {
           const numeroEspaldaText: TextElement = {
             id: generateId("text"),
@@ -714,7 +744,7 @@ export const processExcelFile = async (
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 30,
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 130,
               y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.35,
             },
             dimensions: { width: 60, height: 40 },
@@ -724,8 +754,8 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.numero_trasero),
             fontFamily: fonteFila,
-            fontSize: 40,
-            fontColor: "#000000",
+            fontSize: tamanoNumeroEspalda,
+            fontColor: colorNumeroEspalda,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -736,7 +766,7 @@ export const processExcelFile = async (
           addElement(numeroEspaldaText, currentPageIndex);
         }
 
-        // Nombre en la espalda
+        // Nombre en la espalda (16cm abajo, 6cm a la izquierda)
         if (row.nombre) {
           const nombreEspaldaText: TextElement = {
             id: generateId("text"),
@@ -744,8 +774,8 @@ export const processExcelFile = async (
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 60,
-              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.6,
+              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 120,
+              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.05 + 160,
             },
             dimensions: { width: 120, height: 30 },
             rotation: 0,
@@ -754,8 +784,8 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.nombre).toUpperCase(),
             fontFamily: fonteFila,
-            fontSize: 16,
-            fontColor: "#000000",
+            fontSize: tamanoNombreEspalda,
+            fontColor: colorNombreEspalda,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -765,34 +795,6 @@ export const processExcelFile = async (
           currentElements.push(nombreEspaldaText);
           addElement(nombreEspaldaText, currentPageIndex);
         }
-
-        // Talla en la espalda
-        const tallaEspaldaText: TextElement = {
-          id: generateId("text"),
-          type: "text",
-          part: "jersey",
-          size: tallaMostrar as any,
-          position: {
-            x: jerseyEspaldaPos.x + jerseyDimensions.width * 0.8,
-            y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.1,
-          },
-          dimensions: { width: 40, height: 20 },
-          rotation: 0,
-          zIndex: currentElements.length,
-          locked: false,
-          visible: true,
-          content: tallaMostrar,
-          fontFamily: "Arial",
-          fontSize: 16,
-          fontColor: "#666666",
-          textAlign: "center",
-          fontWeight: "bold",
-          opacity: 1,
-          side: "back",
-        };
-
-        currentElements.push(tallaEspaldaText);
-        addElement(tallaEspaldaText, currentPageIndex);
 
         // --- FILA 2: SHORT IZQUIERDO (solo, 0°) ---
         const shortLeftY = currentY + jerseyDimensions.height + elementGap;
@@ -817,34 +819,6 @@ export const processExcelFile = async (
         currentElements.push(newShortLeft);
         addElement(newShortLeft, currentPageIndex);
 
-        // Talla en el short izquierdo
-        const tallaShortLeftText: TextElement = {
-          id: generateId("text"),
-          type: "text",
-          part: "shorts",
-          size: tallaMostrar as any,
-          position: {
-            x: shortLeftPos.x + shortsDimensions.width / 2 - 20,
-            y: shortLeftPos.y + shortsDimensions.height * 0.15,
-          },
-          dimensions: { width: 40, height: 20 },
-          rotation: 0,
-          zIndex: currentElements.length,
-          locked: false,
-          visible: true,
-          content: tallaMostrar,
-          fontFamily: "Arial",
-          fontSize: 14,
-          fontColor: "#666666",
-          textAlign: "center",
-          fontWeight: "bold",
-          opacity: 1,
-          side: "front",
-        };
-
-        currentElements.push(tallaShortLeftText);
-        addElement(tallaShortLeftText, currentPageIndex);
-
         // --- FILA 3: SHORT DERECHO (solo, 180°) ---
         const shortRightY = shortLeftY + shortsDimensions.height + elementGap;
         const shortRightPos = { x: 0, y: shortRightY };
@@ -867,34 +841,6 @@ export const processExcelFile = async (
 
         currentElements.push(newShortRight);
         addElement(newShortRight, currentPageIndex);
-
-        // Talla en el short derecho (rotado 180°)
-        const tallaShortRightText: TextElement = {
-          id: generateId("text"),
-          type: "text",
-          part: "shorts",
-          size: tallaMostrar as any,
-          position: {
-            x: shortRightPos.x + shortsDimensions.width / 2 - 20,
-            y: shortRightPos.y + shortsDimensions.height * 0.85,
-          },
-          dimensions: { width: 40, height: 20 },
-          rotation: 180,
-          zIndex: currentElements.length,
-          locked: false,
-          visible: true,
-          content: tallaMostrar,
-          fontFamily: "Arial",
-          fontSize: 14,
-          fontColor: "#666666",
-          textAlign: "center",
-          fontWeight: "bold",
-          opacity: 1,
-          side: "front",
-        };
-
-        currentElements.push(tallaShortRightText);
-        addElement(tallaShortRightText, currentPageIndex);
       }
 
       onProgress(processedCount, rows.length);

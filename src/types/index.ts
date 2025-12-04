@@ -2,6 +2,9 @@
 
 export type Size = 'XS' | 'S' | 'M' | 'L' | 'XL' | '2XL' | '3XL';
 
+// Género del uniforme
+export type Gender = 'Hombre' | 'Mujer';
+
 // Tallas en español
 export type SizeSpanish = 'XCH' | 'CH' | 'M' | 'G' | 'XG' | '2XG' | '3XG';
 
@@ -30,6 +33,7 @@ export interface UniformSizesConfig {
 
 export interface SizeConfig {
   size: Size;
+  gender: Gender; // Género del uniforme (Hombre/Mujer)
   width: number;  // Ancho de playera en píxeles (pixelsPerCm = 10)
   height: number; // Alto de playera en píxeles (pixelsPerCm = 10)
   shortsWidth?: number;  // Ancho de shorts en píxeles (opcional, precisión de moldes)
