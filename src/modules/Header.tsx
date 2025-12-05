@@ -55,8 +55,6 @@ export const Header: React.FC = () => {
     // setCanvasConfig,
     canvasConfig,
     getTotalPages,
-    currentPage,
-    setCurrentPage,
     selectedElementId,
     addElement,
     deleteElement,
@@ -184,139 +182,18 @@ export const Header: React.FC = () => {
         // Mostrar loading
         setIsExporting(true);
 
-        // CRÍTICO: Intercambiar temporalmente las imágenes comprimidas por las originales
-        // para que el PDF tenga alta calidad
-        const {
-          pages: allPages,
-          uniformSizesConfig: originalImages,
-          uniformSizesConfigCompressed: compressedImages,
-        } = useDesignerStore.getState();
-
-        // Crear un mapeo de URLs comprimidas a originales
-        const urlMapping: Map<string, string> = new Map();
-
-        for (const tallaKey of Object.keys(originalImages)) {
-          const orig = originalImages[tallaKey];
-          const comp = compressedImages[tallaKey];
-
-          if (orig && comp) {
-            if (orig.jerseyFront && comp.jerseyFront) {
-              urlMapping.set(comp.jerseyFront, orig.jerseyFront);
-            }
-            if (orig.jerseyBack && comp.jerseyBack) {
-              urlMapping.set(comp.jerseyBack, orig.jerseyBack);
-            }
-            if (orig.shortsLeft && comp.shortsLeft) {
-              urlMapping.set(comp.shortsLeft, orig.shortsLeft);
-            }
-            if (orig.shortsRight && comp.shortsRight) {
-              urlMapping.set(comp.shortsRight, orig.shortsRight);
-            }
-          }
-        }
-
-        // Intercambiar URLs en todos los elementos de todas las páginas
-        const modifiedPages = allPages.map(page =>
-          page.map(element => {
-            if (element.type === "uniform" && element.imageUrl) {
-              const originalUrl = urlMapping.get(element.imageUrl);
-              if (originalUrl) {
-                return { ...element, imageUrl: originalUrl };
-              }
-            }
-            return element;
-          })
-        );
-
-        // Actualizar el store con las URLs originales
-        useDesignerStore.setState({ pages: modifiedPages });
-
-        // Exportación PDF multipágina
         const totalPages = getTotalPages();
-        const originalPage = currentPage;
-
         setExportProgress({ current: 0, total: totalPages });
 
-        // Array para almacenar las imágenes de cada página
-        const pageImages: string[] = [];
-
-        // Capturar cada página como imagen
-        for (let i = 0; i < totalPages; i++) {
-          // Actualizar progreso
-          setExportProgress({ current: i + 1, total: totalPages });
-
-          // Cambiar a la página i
-          setCurrentPage(i);
-
-          // Esperar a que React actualice el DOM y se renderice la página
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Obtener el canvas actual
-          const canvasElement = document.querySelector(".konvajs-content");
-          if (canvasElement) {
-            // Convertir directamente a imagen sin clonar
-            // Usar PNG para mayor calidad y pixelRatio alto para mejor resolución
-            const { toPng } = await import("html-to-image");
-            const dataUrl = await toPng(canvasElement as HTMLElement, {
-              backgroundColor: "#ffffff",
-              pixelRatio: 4, // Mayor resolución para mantener calidad de los moldes
-            });
-            pageImages.push(dataUrl);
-          }
-        }
-
-        // Restaurar la página original
-        setCurrentPage(originalPage);
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // CRÍTICO: Restaurar las URLs comprimidas en el store (volver al estado original)
-        useDesignerStore.setState({ pages: allPages });
-
-        // Crear PDFs separados para cada página
-        if (pageImages.length > 0) {
-          const { default: jsPDF } = await import("jspdf");
-          const { getPageHeight } = useDesignerStore.getState();
-
-          const canvasWidthCm = canvasConfig.width;
-          const timestamp = Date.now();
-
-          // Crear un PDF separado para cada página
-          for (let i = 0; i < pageImages.length; i++) {
-            // Obtener altura ajustada para cada página
-            const pageHeightCm = getPageHeight(i);
-
-            const pdf = new jsPDF({
-              orientation:
-                canvasWidthCm > pageHeightCm ? "landscape" : "portrait",
-              unit: "cm",
-              format: [canvasWidthCm, pageHeightCm],
-            });
-
-            // Agregar la imagen a este PDF (PNG para mayor calidad)
-            // La imagen debe recortarse a la altura real de la página
-            pdf.addImage(
-              pageImages[i],
-              "PNG",
-              0,
-              0,
-              canvasWidthCm,
-              pageHeightCm
-            );
-
-            // Guardar con nombre único (incluye número de página si hay más de una)
-            const fileName =
-              pageImages.length > 1
-                ? `uniform-design-page-${i + 1}-${timestamp}.pdf`
-                : `uniform-design-${timestamp}.pdf`;
-
-            pdf.save(fileName);
-
-            // Pequeña pausa entre descargas para que el navegador procese cada archivo
-            if (i < pageImages.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 300));
-            }
-          }
-        }
+        // NUEVA EXPORTACIÓN DIRECTA - Sin degradación de calidad
+        const { exportMultiPagePDFDirect } = await import("../utils/export");
+        await exportMultiPagePDFDirect({
+          canvasWidth: canvasConfig.width,
+          canvasHeight: canvasConfig.height,
+          onProgress: (current, total) => {
+            setExportProgress({ current, total });
+          },
+        });
 
         // Ocultar loading
         setIsExporting(false);
@@ -340,21 +217,9 @@ export const Header: React.FC = () => {
     } catch (error) {
       console.error("Error al exportar:", error);
 
-      // CRÍTICO: En caso de error, también restaurar las URLs comprimidas
-      if (format === "pdf") {
-        const { pages: originalPages } = useDesignerStore.getState();
-        // Intentar restaurar si había un swap de URLs previo
-        try {
-          // Aquí simplemente forzamos una recarga del estado
-          useDesignerStore.setState({ pages: originalPages });
-        } catch (restoreError) {
-          console.error("Error al restaurar URLs:", restoreError);
-        }
-      }
-
       setIsExporting(false);
       setExportProgress({ current: 0, total: 0 });
-      alert("Error al exportar el diseño");
+      alert("Error al exportar el diseño. Ver consola para más detalles.");
     }
   };
 
