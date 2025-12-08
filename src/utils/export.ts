@@ -862,7 +862,10 @@ export const exportMultiPagePDFDirect = async (
           let xInPoints = xInCm * 28.35;
           let yInPoints = yInCm * 28.35;
 
-          const fontSizeInPoints = textEl.fontSize;
+          // Convertir tamaño de fuente de píxeles del canvas a puntos del PDF
+          // fontSize en canvas está en píxeles, necesitamos escalarlo a puntos PDF
+          // usando la misma proporción que para las dimensiones (28.35 / pixelsPerCm)
+          const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
 
           // PDF: baseline position, canvas: top position
           let pdfY = heightInPoints - yInPoints - fontSizeInPoints;
@@ -883,7 +886,7 @@ export const exportMultiPagePDFDirect = async (
           page.drawText(textEl.content, {
             x: pdfX,
             y: pdfY,
-            size: textEl.fontSize,
+            size: fontSizeInPoints,
             font: textEl.fontWeight === 'bold' ? fontBold : font,
             color: rgb(r, g, b),
             opacity: textEl.opacity,
