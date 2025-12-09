@@ -60,7 +60,7 @@ export const UniformElement: React.FC<UniformElementProps> = ({
   const groupRef = useRef<Konva.Group>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
 
-  const { updateElement, selectElement, canvasConfig } = useDesignerStore();
+  const { updateElement, selectElement, canvasConfig, isExporting } = useDesignerStore();
 
   const canvasWidth = canvasConfig.width * canvasConfig.pixelsPerCm;
   const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
@@ -129,18 +129,20 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         rotation={element.rotation}
       >
         <UniformShape element={element} />
-        {/* Texto de talla en la parte inferior del molde */}
-        <Text
-          x={0}
-          y={element.dimensions.height - 11}
-          width={element.dimensions.width}
-          text={`Talla ${element.size}`}
-          fontSize={9}
-          fontFamily="Arial"
-          fontStyle="bold"
-          fill="black"
-          align="center"
-        />
+        {/* Texto de talla (siempre visible para Excel, oculto durante exportación para manual) */}
+        {(!isExporting || element.source === 'excel') && (
+          <Text
+            x={0}
+            y={element.dimensions.height - 11}
+            width={element.dimensions.width}
+            text={`Talla ${element.size}`}
+            fontSize={9}
+            fontFamily="Arial"
+            fontStyle="bold"
+            fill="black"
+            align="center"
+          />
+        )}
       </Group>
     );
   }
@@ -166,18 +168,20 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         onTap={() => selectElement(element.id)}
       >
         <UniformShape element={element} />
-        {/* Texto de talla en la parte inferior del molde */}
-        <Text
-          x={0}
-          y={element.dimensions.height - 11}
-          width={element.dimensions.width}
-          text={`Talla ${element.size}`}
-          fontSize={9}
-          fontFamily="Arial"
-          fontStyle="bold"
-          fill="black"
-          align="center"
-        />
+        {/* Texto de talla (siempre visible para Excel, oculto durante exportación para manual) */}
+        {(!isExporting || element.source === 'excel') && (
+          <Text
+            x={0}
+            y={element.dimensions.height - 11}
+            width={element.dimensions.width}
+            text={`Talla ${element.size}`}
+            fontSize={9}
+            fontFamily="Arial"
+            fontStyle="bold"
+            fill="black"
+            align="center"
+          />
+        )}
       </Group>
 
       {isSelected && !element.locked && (

@@ -72,6 +72,7 @@ export interface UniformTemplate extends UniformElement {
   imageMask?: string;
   originalImageUrl?: string; // URL de la imagen original para exportar en alta calidad
   side?: 'front' | 'back' | 'right' | 'left'; // Lado del uniforme
+  source?: 'excel' | 'manual'; // Origen: carga masiva Excel o imágenes manuales
 }
 
 export interface TextElement extends UniformElement {

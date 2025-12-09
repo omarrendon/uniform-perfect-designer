@@ -340,6 +340,8 @@ interface DesignerState {
   setZoom: (zoom: number) => void;
   isCanvasHidden: boolean;
   setCanvasHidden: (hidden: boolean) => void;
+  isExporting: boolean; // Oculta textos de talla durante exportación
+  setIsExporting: (isExporting: boolean) => void;
 
   // Bulk Image Upload
   bulkImageUpload: {
@@ -463,6 +465,7 @@ export const useDesignerStore = create<DesignerState>()(
         showGrid: true,
         zoom: 1,
         isCanvasHidden: false,
+        isExporting: false,
 
         // Bulk Image Upload initial state
         bulkImageUpload: {
@@ -752,6 +755,11 @@ export const useDesignerStore = create<DesignerState>()(
             isCanvasHidden: hidden,
           })),
 
+        setIsExporting: (isExporting: boolean) =>
+          set(() => ({
+            isExporting,
+          })),
+
         // Uniform sizes configuration
         setUniformSizeImages: (sizeKey: string, images: Partial<SizeImages>) =>
           set(state => ({
@@ -868,6 +876,7 @@ export const useDesignerStore = create<DesignerState>()(
                 baseColor: '#ffffff',
                 imageUrl,
                 originalImageUrl: imageUrl, // Misma URL para original
+                source: 'manual', // Carga masiva de imágenes manuales
               };
             };
 

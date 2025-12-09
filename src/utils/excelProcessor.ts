@@ -457,6 +457,7 @@ export const processExcelFile = async (
           visible: true,
           baseColor: "#ffffff",
           imageUrl: getMoldeFrenteUrl(tallaExcel, genero),
+          source: 'excel',
         };
 
         currentElements.push(newJerseyFrente);
@@ -516,6 +517,7 @@ export const processExcelFile = async (
           visible: true,
           baseColor: "#ffffff",
           imageUrl: getMoldeEspaldaUrl(tallaExcel, genero),
+          source: 'excel',
         };
 
         currentElements.push(newJerseyEspalda);
@@ -601,6 +603,7 @@ export const processExcelFile = async (
           baseColor: "#ffffff",
           imageUrl: shortsConfig.left.url,
           side: "left",
+          source: 'excel',
         };
 
         currentElements.push(newShortLeft);
@@ -626,6 +629,7 @@ export const processExcelFile = async (
           baseColor: "#ffffff",
           imageUrl: shortsConfig.right.url,
           side: "right",
+          source: 'excel',
         };
 
         currentElements.push(newShortRight);
@@ -706,6 +710,7 @@ export const processExcelFile = async (
           visible: true,
           baseColor: "#ffffff",
           imageUrl: getMoldeFrenteUrl(tallaExcel, genero),
+          source: 'excel',
         };
 
         currentElements.push(newJerseyFrente);
@@ -765,6 +770,7 @@ export const processExcelFile = async (
           visible: true,
           baseColor: "#ffffff",
           imageUrl: getMoldeEspaldaUrl(tallaExcel, genero),
+          source: 'excel',
         };
 
         currentElements.push(newJerseyEspalda);
@@ -848,6 +854,7 @@ export const processExcelFile = async (
           baseColor: "#ffffff",
           imageUrl: shortsConfig.left.url,
           side: "left",
+          source: 'excel',
         };
 
         currentElements.push(newShortLeft);
@@ -871,6 +878,7 @@ export const processExcelFile = async (
           baseColor: "#ffffff",
           imageUrl: shortsConfig.right.url,
           side: "right",
+          source: 'excel',
         };
 
         currentElements.push(newShortRight);

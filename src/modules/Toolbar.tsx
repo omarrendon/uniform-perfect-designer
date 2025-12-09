@@ -134,6 +134,7 @@ export const Toolbar: React.FC = () => {
         part === "shorts"
           ? "/moldes/shorts-moldes.png"
           : "/moldes/PLAYERA TALLA M.png",
+      source: 'manual', // Agregado manualmente desde toolbar
     };
 
     addElement(newUniform);

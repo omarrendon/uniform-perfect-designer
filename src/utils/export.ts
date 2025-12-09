@@ -8,6 +8,108 @@ import { runPreflight, generatePreflightReport } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
 
 /**
+ * Sistema de transformación de coordenadas Canvas (Konva) → PDF
+ * Maneja rotaciones y diferencias en sistemas de coordenadas
+ */
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface TransformConfig {
+  canvasHeight: number; // Alto del canvas en puntos PDF
+  pixelsPerCm: number;  // Factor de conversión pixels → cm
+}
+
+/**
+ * Aplica rotación 2D alrededor de un punto central
+ */
+function rotatePoint(point: Point, center: Point, angleRad: number): Point {
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+
+  // Trasladar al origen
+  const translatedX = point.x - center.x;
+  const translatedY = point.y - center.y;
+
+  // Aplicar rotación
+  const rotatedX = translatedX * cos - translatedY * sin;
+  const rotatedY = translatedX * sin + translatedY * cos;
+
+  // Trasladar de vuelta
+  return {
+    x: rotatedX + center.x,
+    y: rotatedY + center.y,
+  };
+}
+
+/**
+ * Convierte coordenadas de canvas (Konva) a coordenadas PDF para textos
+ * Maneja correctamente las rotaciones replicando la transformación de Konva
+ *
+ * @param canvasPos - Posición absoluta del texto en canvas (píxeles)
+ * @param rotation - Rotación en grados (0, 90, 180, 270)
+ * @param textWidth - Ancho del texto en puntos PDF
+ * @param fontSize - Tamaño de fuente en puntos PDF
+ * @param config - Configuración del canvas (altura, pixelsPerCm)
+ * @returns Posición del texto en coordenadas PDF
+ */
+function canvasTextToPDF(
+  canvasPos: Point,
+  rotation: number,
+  textWidth: number,
+  fontSize: number,
+  config: TransformConfig
+): Point {
+  const { canvasHeight, pixelsPerCm } = config;
+  const CM_TO_POINTS = 28.35;
+
+  // Convertir posición de canvas (pixels) a puntos PDF
+  const xInCm = canvasPos.x / pixelsPerCm;
+  const yInCm = canvasPos.y / pixelsPerCm;
+  const xInPoints = xInCm * CM_TO_POINTS;
+  const yInPoints = yInCm * CM_TO_POINTS;
+
+  // En canvas (Konva): (x, y) es la esquina superior izquierda del texto
+  // En PDF: (x, y) es el punto baseline del texto
+
+  // Diferencia de altura entre top y baseline (aproximadamente 80% del fontSize)
+  const baselineOffset = fontSize * 0.8;
+
+  if (rotation === 0) {
+    // Sin rotación: conversión directa
+    // Canvas: (x, y) = top-left
+    // PDF: necesitamos baseline, que está más abajo
+    const pdfX = xInPoints;
+    const pdfY = canvasHeight - yInPoints - baselineOffset;
+    return { x: pdfX, y: pdfY };
+  } else if (rotation === 180) {
+    // Con rotación 180°:
+    // En Konva: el texto rota 180° alrededor de (x, y) que es el top-left
+    // Después de rotar, el texto está al revés (de cabeza) y (x, y) sigue siendo el punto de anclaje
+
+    // En PDF: el texto rota alrededor del punto baseline que especificamos
+    // Con rotate: 180, el texto se extiende hacia la IZQUIERDA desde el punto especificado
+
+    // Para replicar Konva:
+    // 1. En Konva rotado 180°, el punto (x, y) es donde está anclado el texto
+    // 2. Después de rotar, visualmente el texto se extiende hacia la izquierda
+    // 3. En PDF con rotation=180, el punto que especifico es donde el texto termina (extremo derecho visual)
+    // 4. Como el texto se extiende hacia la izquierda, ese punto debe estar en (x, y) de Konva
+
+    const pdfX = xInPoints;
+    const pdfY = canvasHeight - yInPoints + baselineOffset;
+    return { x: pdfX, y: pdfY };
+  }
+
+  // Para otras rotaciones (no implementadas aún)
+  const pdfX = xInPoints;
+  const pdfY = canvasHeight - yInPoints - baselineOffset;
+  return { x: pdfX, y: pdfY };
+}
+
+/**
  * Reemplaza temporalmente las imágenes comprimidas por las originales para exportación
  * @returns Función para restaurar las imágenes comprimidas
  */
@@ -152,8 +254,15 @@ export const exportAsPNG = async (
   options: Partial<ExportOptions> = {}
 ): Promise<void> => {
   let restoreImages: (() => void) | null = null;
+  const store = useDesignerStore.getState();
 
   try {
+    // Ocultar textos de talla durante exportación
+    store.setIsExporting(true);
+
+    // Esperar a que React re-renderice
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Reemplazar imágenes comprimidas por originales
     console.log('📸 Preparando imágenes originales para exportación PNG...');
     restoreImages = await swapToOriginalImages(element);
@@ -180,6 +289,8 @@ export const exportAsPNG = async (
     if (restoreImages) {
       restoreImages();
     }
+    // Restaurar visibilidad de textos de talla
+    store.setIsExporting(false);
   }
 };
 
@@ -193,8 +304,15 @@ export const exportAsPDF = async (
   options: Partial<ExportOptions> = {}
 ): Promise<void> => {
   let restoreImages: (() => void) | null = null;
+  const store = useDesignerStore.getState();
 
   try {
+    // Ocultar textos de talla durante exportación
+    store.setIsExporting(true);
+
+    // Esperar a que React re-renderice
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Obtener configuración CMYK global
     const cmykConfig = getGlobalCMYKConfig();
 
@@ -321,6 +439,8 @@ export const exportAsPDF = async (
     if (restoreImages) {
       restoreImages();
     }
+    // Restaurar visibilidad de textos de talla
+    store.setIsExporting(false);
   }
 };
 
@@ -333,10 +453,18 @@ export const exportMultiPagePDF = async (
   pages: HTMLElement[],
   options: Partial<ExportOptions> = {}
 ): Promise<void> => {
+  const store = useDesignerStore.getState();
+
   try {
     if (pages.length === 0) {
       throw new Error('No hay páginas para exportar');
     }
+
+    // Ocultar textos de talla durante exportación
+    store.setIsExporting(true);
+
+    // Esperar a que React re-renderice
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     console.log(`📸 Procesando ${pages.length} páginas con conversión CMYK...`);
 
@@ -431,6 +559,9 @@ export const exportMultiPagePDF = async (
   } catch (error) {
     console.error('Error al exportar PDF multipágina:', error);
     throw error;
+  } finally {
+    // Restaurar visibilidad de textos de talla
+    store.setIsExporting(false);
   }
 };
 
@@ -587,37 +718,108 @@ export const exportAsPDFDirect = async (
           });
 
           console.log(`  ✓ Uniforme renderizado (TAC: ${tacStats.max.toFixed(1)}%)`);
+
+          // Agregar texto de talla SOLO si proviene de Excel
+          if (uniform.source === 'excel') {
+            const tallaText = `Talla ${uniform.size}`;
+            const tallaFontSize = 9; // Mismo tamaño que en UniformElement.tsx
+            const tallaFontSizeInPoints = (tallaFontSize / canvasConfig.pixelsPerCm) * 28.35;
+
+            // Posición del texto RELATIVA al uniforme (como en canvas)
+            // En canvas (UniformElement.tsx): x=0, y=dimensions.height-11, width=dimensions.width, align="center"
+            // El texto se centra horizontalmente en el ancho del uniforme
+            const tallaRelativeY = uniform.dimensions.height - 11;
+            const tallaRelativeX = uniform.dimensions.width / 2; // Centro del uniforme
+
+            // Calcular posición absoluta considerando la rotación del uniform
+            let tallaAbsoluteX: number;
+            let tallaAbsoluteY: number;
+
+            if (uniform.rotation === 180) {
+              // En UniformElement.tsx, cuando rotation != 0, el Group tiene offsets:
+              // offsetX = dimensions.width / 2, offsetY = dimensions.height / 2
+              // El Group rota alrededor de su centro, no de su esquina superior izquierda
+
+              // Centro de rotación del uniform (en coordenadas canvas)
+              const centerX = uniform.position.x + uniform.dimensions.width / 2;
+              const centerY = uniform.position.y + uniform.dimensions.height / 2;
+
+              // Posición del texto relativa al centro del uniform
+              const relX = tallaRelativeX - uniform.dimensions.width / 2;
+              const relY = tallaRelativeY - uniform.dimensions.height / 2;
+
+              // Aplicar rotación de 180° alrededor del centro
+              const angleRad = (uniform.rotation * Math.PI) / 180;
+              const rotatedRelX = relX * Math.cos(angleRad) - relY * Math.sin(angleRad);
+              const rotatedRelY = relX * Math.sin(angleRad) + relY * Math.cos(angleRad);
+
+              // Convertir de vuelta a coordenadas absolutas
+              tallaAbsoluteX = centerX + rotatedRelX;
+              tallaAbsoluteY = centerY + rotatedRelY;
+            } else {
+              // Sin rotación, simplemente sumar posiciones
+              tallaAbsoluteX = uniform.position.x + tallaRelativeX;
+              tallaAbsoluteY = uniform.position.y + tallaRelativeY;
+            }
+
+            // Calcular ancho del texto
+            const textWidth = fontBold.widthOfTextAtSize(tallaText, tallaFontSizeInPoints);
+
+            // Usar función de transformación matricial para convertir coordenadas
+            const tallaPdfPos = canvasTextToPDF(
+              { x: tallaAbsoluteX, y: tallaAbsoluteY },
+              uniform.rotation,
+              textWidth,
+              tallaFontSizeInPoints,
+              { canvasHeight: heightInPoints, pixelsPerCm: canvasConfig.pixelsPerCm }
+            );
+
+            // Ajustar para centrado del texto (en canvas usa align="center", en PDF manual)
+            let tallaPdfX = tallaPdfPos.x - textWidth / 2;
+            let tallaPdfY = tallaPdfPos.y;
+
+            // Para rotación 180°, el centrado funciona al revés
+            if (uniform.rotation === 180) {
+              tallaPdfX = tallaPdfPos.x + textWidth / 2;
+            }
+
+            page.drawText(tallaText, {
+              x: tallaPdfX,
+              y: tallaPdfY,
+              size: tallaFontSizeInPoints,
+              font: fontBold,
+              color: rgb(0, 0, 0),
+              rotate: degrees(uniform.rotation),
+            });
+
+            console.log(`  ✓ Texto de talla agregado: "${tallaText}" (rotación: ${uniform.rotation}°)`);
+          }
         }
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
 
         console.log(`  📝 Procesando texto: "${textEl.content}"`);
 
-        // Calcular posición en puntos
-        const xInCm = textEl.position.x / canvasConfig.pixelsPerCm;
-        const yInCm = textEl.position.y / canvasConfig.pixelsPerCm;
-
-        let xInPoints = xInCm * 28.35;
-        let yInPoints = yInCm * 28.35;
-
         // Convertir tamaño de fuente de píxeles del canvas a puntos del PDF
         // fontSize en canvas está en píxeles, necesitamos escalarlo a puntos PDF
         // usando la misma proporción que para las dimensiones (28.35 / pixelsPerCm)
         const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
 
-        // PDF usa coordenadas desde abajo-izquierda, y el texto se posiciona desde el baseline
-        // En canvas, position.y es la parte superior del texto
-        // En PDF, necesitamos restar fontSize para llegar al baseline
-        let pdfY = heightInPoints - yInPoints - fontSizeInPoints;
-        let pdfX = xInPoints;
+        // Calcular ancho del texto
+        const textFont = textEl.fontWeight === 'bold' ? fontBold : font;
+        const textWidth = textFont.widthOfTextAtSize(textEl.content, fontSizeInPoints);
 
-        // Ajustar posición para texto rotado 180° (número en short derecho)
-        if (textEl.rotation === 180) {
-          // Para texto rotado, el punto de anclaje cambia
-          const textWidth = fontSizeInPoints * textEl.content.length * 0.6; // Aproximación
-          pdfX = xInPoints + textWidth;
-          pdfY = pdfY + fontSizeInPoints * 2; // Compensar por la rotación
-        }
+        // Usar función de transformación matricial para convertir coordenadas
+        const pdfPos = canvasTextToPDF(
+          { x: textEl.position.x, y: textEl.position.y },
+          textEl.rotation,
+          textWidth,
+          fontSizeInPoints,
+          { canvasHeight: heightInPoints, pixelsPerCm: canvasConfig.pixelsPerCm }
+        );
+
+        const pdfX = pdfPos.x;
+        const pdfY = pdfPos.y;
 
         // Convertir color de hex a RGB
         const hexColor = textEl.fontColor || '#000000';
@@ -852,31 +1054,104 @@ export const exportMultiPagePDFDirect = async (
               height: heightInPts,
               rotate: degrees(uniform.rotation),
             });
+
+            // Agregar texto de talla SOLO si proviene de Excel
+            if (uniform.source === 'excel') {
+              const tallaText = `Talla ${uniform.size}`;
+              const tallaFontSize = 9; // Mismo tamaño que en UniformElement.tsx
+              const tallaFontSizeInPoints = (tallaFontSize / canvasConfig.pixelsPerCm) * 28.35;
+
+              // Posición del texto RELATIVA al uniforme (como en canvas)
+              // En canvas (UniformElement.tsx): x=0, y=dimensions.height-11, width=dimensions.width, align="center"
+              // El texto se centra horizontalmente en el ancho del uniforme
+              const tallaRelativeY = uniform.dimensions.height - 11;
+              const tallaRelativeX = uniform.dimensions.width / 2; // Centro del uniforme
+
+              // Calcular posición absoluta considerando la rotación del uniform
+              let tallaAbsoluteX: number;
+              let tallaAbsoluteY: number;
+
+              if (uniform.rotation === 180) {
+                // En UniformElement.tsx, cuando rotation != 0, el Group tiene offsets:
+                // offsetX = dimensions.width / 2, offsetY = dimensions.height / 2
+                // El Group rota alrededor de su centro, no de su esquina superior izquierda
+
+                // Centro de rotación del uniform (en coordenadas canvas)
+                const centerX = uniform.position.x + uniform.dimensions.width / 2;
+                const centerY = uniform.position.y + uniform.dimensions.height / 2;
+
+                // Posición del texto relativa al centro del uniform
+                const relX = tallaRelativeX - uniform.dimensions.width / 2;
+                const relY = tallaRelativeY - uniform.dimensions.height / 2;
+
+                // Aplicar rotación de 180° alrededor del centro
+                const angleRad = (uniform.rotation * Math.PI) / 180;
+                const rotatedRelX = relX * Math.cos(angleRad) - relY * Math.sin(angleRad);
+                const rotatedRelY = relX * Math.sin(angleRad) + relY * Math.cos(angleRad);
+
+                // Convertir de vuelta a coordenadas absolutas
+                tallaAbsoluteX = centerX + rotatedRelX;
+                tallaAbsoluteY = centerY + rotatedRelY;
+              } else {
+                // Sin rotación, simplemente sumar posiciones
+                tallaAbsoluteX = uniform.position.x + tallaRelativeX;
+                tallaAbsoluteY = uniform.position.y + tallaRelativeY;
+              }
+
+              // Calcular ancho del texto
+              const textWidth = fontBold.widthOfTextAtSize(tallaText, tallaFontSizeInPoints);
+
+              // Usar función de transformación matricial para convertir coordenadas
+              const tallaPdfPos = canvasTextToPDF(
+                { x: tallaAbsoluteX, y: tallaAbsoluteY },
+                uniform.rotation,
+                textWidth,
+                tallaFontSizeInPoints,
+                { canvasHeight: heightInPoints, pixelsPerCm: canvasConfig.pixelsPerCm }
+              );
+
+              // Ajustar para centrado del texto (en canvas usa align="center", en PDF manual)
+              let tallaPdfX = tallaPdfPos.x - textWidth / 2;
+              let tallaPdfY = tallaPdfPos.y;
+
+              // Para rotación 180°, el centrado funciona al revés
+              if (uniform.rotation === 180) {
+                tallaPdfX = tallaPdfPos.x + textWidth / 2;
+              }
+
+              page.drawText(tallaText, {
+                x: tallaPdfX,
+                y: tallaPdfY,
+                size: tallaFontSizeInPoints,
+                font: fontBold,
+                color: rgb(0, 0, 0),
+                rotate: degrees(uniform.rotation),
+              });
+            }
           }
         } else if (element.type === 'text') {
           const textEl = element as TextElement;
-
-          const xInCm = textEl.position.x / canvasConfig.pixelsPerCm;
-          const yInCm = textEl.position.y / canvasConfig.pixelsPerCm;
-
-          let xInPoints = xInCm * 28.35;
-          let yInPoints = yInCm * 28.35;
 
           // Convertir tamaño de fuente de píxeles del canvas a puntos del PDF
           // fontSize en canvas está en píxeles, necesitamos escalarlo a puntos PDF
           // usando la misma proporción que para las dimensiones (28.35 / pixelsPerCm)
           const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
 
-          // PDF: baseline position, canvas: top position
-          let pdfY = heightInPoints - yInPoints - fontSizeInPoints;
-          let pdfX = xInPoints;
+          // Calcular ancho del texto
+          const textFont = textEl.fontWeight === 'bold' ? fontBold : font;
+          const textWidth = textFont.widthOfTextAtSize(textEl.content, fontSizeInPoints);
 
-          // Ajustar posición para texto rotado 180°
-          if (textEl.rotation === 180) {
-            const textWidth = fontSizeInPoints * textEl.content.length * 0.6;
-            pdfX = xInPoints + textWidth;
-            pdfY = pdfY + fontSizeInPoints * 2;
-          }
+          // Usar función de transformación matricial para convertir coordenadas
+          const pdfPos = canvasTextToPDF(
+            { x: textEl.position.x, y: textEl.position.y },
+            textEl.rotation,
+            textWidth,
+            fontSizeInPoints,
+            { canvasHeight: heightInPoints, pixelsPerCm: canvasConfig.pixelsPerCm }
+          );
+
+          const pdfX = pdfPos.x;
+          const pdfY = pdfPos.y;
 
           const hexColor = textEl.fontColor || '#000000';
           const r = parseInt(hexColor.slice(1, 3), 16) / 255;
