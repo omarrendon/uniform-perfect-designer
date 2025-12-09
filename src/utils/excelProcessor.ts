@@ -645,8 +645,8 @@ export const processExcelFile = async (
             part: "shorts",
             size: tallaMostrar as any,
             position: {
-              x: shortRightPos.x + shortsDimensions.width * 0.70 - 300,
-              y: shortRightPos.y + shortsDimensions.height * 0.55 - 90,
+              x: shortRightPos.x + shortsDimensions.width * 0.70 - 300 + 30, // +3cm a la derecha
+              y: shortRightPos.y + shortsDimensions.height * 0.55 - 90 + 50, // +5cm hacia abajo
             },
             dimensions: { width: 40, height: 30 },
             rotation: 180, // Rotado 180° como el short
@@ -894,8 +894,8 @@ export const processExcelFile = async (
             part: "shorts",
             size: tallaMostrar as any,
             position: {
-              x: shortRightPos.x + shortsDimensions.width * 0.70 - 300,
-              y: shortRightPos.y + shortsDimensions.height * 0.55 - 90,
+              x: shortRightPos.x + shortsDimensions.width * 0.70 - 300 + 30, // +3cm a la derecha
+              y: shortRightPos.y + shortsDimensions.height * 0.55 - 90 + 50, // +5cm hacia abajo
             },
             dimensions: { width: 40, height: 30 },
             rotation: 180, // Rotado 180° como el short
