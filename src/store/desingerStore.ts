@@ -876,7 +876,7 @@ export const useDesignerStore = create<DesignerState>()(
                 baseColor: '#ffffff',
                 imageUrl,
                 originalImageUrl: imageUrl, // Misma URL para original
-                source: 'manual', // Carga masiva de imágenes manuales
+                source: 'manual' as const, // Carga masiva de imágenes manuales
               };
             };
 

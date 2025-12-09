@@ -23,34 +23,12 @@ interface TransformConfig {
 }
 
 /**
- * Aplica rotación 2D alrededor de un punto central
- */
-function rotatePoint(point: Point, center: Point, angleRad: number): Point {
-  const cos = Math.cos(angleRad);
-  const sin = Math.sin(angleRad);
-
-  // Trasladar al origen
-  const translatedX = point.x - center.x;
-  const translatedY = point.y - center.y;
-
-  // Aplicar rotación
-  const rotatedX = translatedX * cos - translatedY * sin;
-  const rotatedY = translatedX * sin + translatedY * cos;
-
-  // Trasladar de vuelta
-  return {
-    x: rotatedX + center.x,
-    y: rotatedY + center.y,
-  };
-}
-
-/**
  * Convierte coordenadas de canvas (Konva) a coordenadas PDF para textos
  * Maneja correctamente las rotaciones replicando la transformación de Konva
  *
  * @param canvasPos - Posición absoluta del texto en canvas (píxeles)
  * @param rotation - Rotación en grados (0, 90, 180, 270)
- * @param textWidth - Ancho del texto en puntos PDF
+ * @param _textWidth - Ancho del texto en puntos PDF (no usado actualmente, reservado para futuras mejoras)
  * @param fontSize - Tamaño de fuente en puntos PDF
  * @param config - Configuración del canvas (altura, pixelsPerCm)
  * @returns Posición del texto en coordenadas PDF
@@ -58,7 +36,7 @@ function rotatePoint(point: Point, center: Point, angleRad: number): Point {
 function canvasTextToPDF(
   canvasPos: Point,
   rotation: number,
-  textWidth: number,
+  _textWidth: number,
   fontSize: number,
   config: TransformConfig
 ): Point {
