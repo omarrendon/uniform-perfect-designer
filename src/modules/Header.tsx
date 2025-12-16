@@ -26,7 +26,6 @@ import {
   // Sheet,
 } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
-import { exportCanvas } from "../utils/export";
 import { Button } from "../components/Button";
 import { ExportLoadingOverlay } from "../components/ExportLoadingOverlay";
 import { UniformSizesModal } from "../components/UniformSizesModal";
@@ -209,18 +208,16 @@ export const Header: React.FC = () => {
         setIsExporting(false);
         setExportProgress({ current: 0, total: 0 });
       } else {
-        // Exportación PNG (solo página actual)
+        // Exportación PNG con composición directa (máxima calidad)
         setIsExporting(true);
 
-        const canvasElement = document.querySelector(".konvajs-content");
-        if (canvasElement) {
-          await exportCanvas(canvasElement as HTMLElement, {
-            format,
-            transparent: true,
-            canvasWidth: canvasConfig.width,
-            canvasHeight: canvasConfig.height,
-          });
-        }
+        // NUEVA EXPORTACIÓN PNG DIRECTA - Sin degradación de calidad
+        const { exportAsPNGDirect } = await import("../utils/export");
+        await exportAsPNGDirect({
+          canvasWidth: canvasConfig.width,
+          canvasHeight: canvasConfig.height,
+          transparent: false,
+        });
 
         setIsExporting(false);
       }

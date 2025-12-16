@@ -225,7 +225,80 @@ const embedImageWithCMYK = async (
 };
 
 /**
- * Exporta el canvas como imagen PNG
+ * Reemplaza temporalmente las URLs de imágenes en los elementos del canvas
+ * para usar las imágenes originales en lugar de las comprimidas
+ */
+const swapCanvasImagesToOriginal = async (): Promise<() => void> => {
+  const store = useDesignerStore.getState();
+  const { elements, uniformSizesConfig, uniformSizesConfigCompressed } = store;
+
+  // Guardar los imageUrl originales para restaurar después
+  const originalImageUrls = new Map<string, string>();
+
+  // Crear mapeo de URLs comprimidas → originales
+  const urlMapping = new Map<string, string>();
+
+  Object.keys(uniformSizesConfig).forEach(size => {
+    const original = uniformSizesConfig[size];
+    const compressed = uniformSizesConfigCompressed[size];
+
+    if (original && compressed) {
+      if (original.jerseyFront && compressed.jerseyFront) {
+        urlMapping.set(compressed.jerseyFront, original.jerseyFront);
+      }
+      if (original.jerseyBack && compressed.jerseyBack) {
+        urlMapping.set(compressed.jerseyBack, original.jerseyBack);
+      }
+      if (original.shortsLeft && compressed.shortsLeft) {
+        urlMapping.set(compressed.shortsLeft, original.shortsLeft);
+      }
+      if (original.shortsRight && compressed.shortsRight) {
+        urlMapping.set(compressed.shortsRight, original.shortsRight);
+      }
+    }
+  });
+
+  // Actualizar elementos uniform con imágenes originales
+  elements.forEach(element => {
+    if (element.type === 'uniform') {
+      const currentImageUrl = element.imageUrl;
+
+      // Intentar obtener la URL original del mapping
+      let originalUrl = urlMapping.get(currentImageUrl);
+
+      // Si no está en el mapping, usar originalImageUrl si existe
+      if (!originalUrl && element.originalImageUrl) {
+        originalUrl = element.originalImageUrl;
+      }
+
+      if (originalUrl && originalUrl !== currentImageUrl) {
+        // Guardar la URL actual para restaurar después
+        originalImageUrls.set(element.id, currentImageUrl);
+
+        // Actualizar el elemento con la URL original
+        store.updateElement(element.id, {
+          imageUrl: originalUrl,
+        });
+      }
+    }
+  });
+
+  console.log(`✓ ${originalImageUrls.size} elementos actualizados con imágenes originales`);
+
+  // Retornar función para restaurar las URLs comprimidas
+  return () => {
+    originalImageUrls.forEach((compressedUrl, elementId) => {
+      store.updateElement(elementId, {
+        imageUrl: compressedUrl,
+      });
+    });
+    console.log(`✓ ${originalImageUrls.size} elementos restaurados con imágenes comprimidas`);
+  };
+};
+
+/**
+ * Exporta el canvas como imagen PNG (método antiguo - usa html-to-image)
+ * DEPRECADO: Usar exportAsPNGDirect para mejor calidad
  */
 export const exportAsPNG = async (
   element: HTMLElement,
@@ -241,9 +314,12 @@ export const exportAsPNG = async (
     // Esperar a que React re-renderice
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Reemplazar imágenes comprimidas por originales
+    // Reemplazar imágenes comprimidas por originales en el canvas de Konva
     console.log('📸 Preparando imágenes originales para exportación PNG...');
-    restoreImages = await swapToOriginalImages(element);
+    restoreImages = await swapCanvasImagesToOriginal();
+
+    // Esperar a que Konva re-renderice con las nuevas imágenes
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Exportar con imágenes originales
     const dataUrl = await toPng(element, {
@@ -269,6 +345,342 @@ export const exportAsPNG = async (
     }
     // Restaurar visibilidad de textos de talla
     store.setIsExporting(false);
+  }
+};
+
+/**
+ * NUEVA: Exporta como PNG componiendo directamente con imágenes originales
+ * Sin usar html-to-image ni Konva, mantiene la calidad completa de las imágenes
+ */
+export const exportAsPNGDirect = async (
+  options: Partial<ExportOptions> = {}
+): Promise<void> => {
+  try {
+    console.log('📸 Exportando PNG con composición directa (máxima calidad)...');
+
+    // Obtener elementos y configuración del store
+    const store = useDesignerStore.getState();
+    const elements = store.elements; // Elementos de la página actual
+    const canvasConfig = store.canvasConfig;
+    const uniformSizesConfig = store.uniformSizesConfig;
+
+    // Configuración de escala para alta resolución
+    // Reducir a 5x para evitar problemas de memoria con canvas muy grandes
+    const SCALE_FACTOR = 5; // 5x para alta calidad sin exceder límites del navegador
+
+    // PASO 1: Calcular el bounding box de todos los elementos visibles
+    console.log('📏 Calculando bounding box de elementos...');
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    const visibleElements = elements.filter(el => el.visible);
+
+    if (visibleElements.length === 0) {
+      throw new Error('No hay elementos visibles para exportar');
+    }
+
+    // Calcular límites de todos los elementos
+    visibleElements.forEach(element => {
+      const x = element.position.x;
+      const y = element.position.y;
+      const width = element.dimensions.width;
+      const height = element.dimensions.height;
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + width);
+      maxY = Math.max(maxY, y + height);
+    });
+
+    // Agregar un margen pequeño (10 píxeles en escala normal)
+    const margin = 10;
+    minX = Math.max(0, minX - margin);
+    minY = Math.max(0, minY - margin);
+    maxX = maxX + margin;
+    maxY = maxY + margin;
+
+    // Calcular dimensiones del bounding box
+    const boundingWidth = maxX - minX;
+    const boundingHeight = maxY - minY;
+
+    console.log(`  ✓ Bounding box: ${minX.toFixed(1)}, ${minY.toFixed(1)} → ${maxX.toFixed(1)}, ${maxY.toFixed(1)}`);
+    console.log(`  ✓ Dimensiones usadas: ${boundingWidth.toFixed(1)} × ${boundingHeight.toFixed(1)} px`);
+
+    // Calcular dimensiones en píxeles con alta resolución (solo el área usada)
+    const canvasWidthPx = Math.floor(boundingWidth * SCALE_FACTOR);
+    const canvasHeightPx = Math.floor(boundingHeight * SCALE_FACTOR);
+
+    // Verificar límites del navegador
+    const MAX_CANVAS_SIZE = 32767; // Límite típico de navegadores
+    if (canvasWidthPx > MAX_CANVAS_SIZE || canvasHeightPx > MAX_CANVAS_SIZE) {
+      throw new Error(
+        `El canvas es demasiado grande: ${canvasWidthPx} × ${canvasHeightPx} px. ` +
+        `Máximo permitido: ${MAX_CANVAS_SIZE}px. Reduce las dimensiones del canvas.`
+      );
+    }
+
+    const canvasWidthCm = boundingWidth / canvasConfig.pixelsPerCm;
+    const canvasHeightCm = boundingHeight / canvasConfig.pixelsPerCm;
+
+    console.log(`📐 Dimensiones PNG: ${canvasWidthCm.toFixed(2)} × ${canvasHeightCm.toFixed(2)} cm`);
+    console.log(`📐 Resolución PNG: ${canvasWidthPx} × ${canvasHeightPx} px (escala ${SCALE_FACTOR}x)`);
+
+    // Crear canvas HTML5 nativo
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidthPx;
+    canvas.height = canvasHeightPx;
+    const ctx = canvas.getContext('2d', {
+      willReadFrequently: false,
+      alpha: options.transparent !== false
+    });
+
+    if (!ctx) {
+      throw new Error('No se pudo crear contexto 2D del canvas');
+    }
+
+    console.log('✓ Canvas creado exitosamente');
+
+    // Configurar canvas para máxima calidad
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Fondo blanco (o transparente si se especifica)
+    if (!options.transparent) {
+      ctx.fillStyle = options.backgroundColor || '#ffffff';
+      ctx.fillRect(0, 0, canvasWidthPx, canvasHeightPx);
+    }
+
+    // Ordenar elementos por zIndex
+    const sortedElements = [...elements].sort((a, b) => a.zIndex - b.zIndex);
+
+    console.log(`📦 Procesando ${sortedElements.length} elementos...`);
+
+    // Procesar cada elemento
+    for (const element of sortedElements) {
+      if (!element.visible) continue;
+
+      if (element.type === 'uniform') {
+        const uniform = element as UniformTemplate;
+
+        // Buscar imagen original
+        let originalImageUrl: string | undefined;
+        const uniformSizesConfigCompressed = store.uniformSizesConfigCompressed;
+
+        // Buscar en el mapping de uniformSizesConfig
+        for (const sizeKey of Object.keys(uniformSizesConfig)) {
+          const originalImages = uniformSizesConfig[sizeKey];
+          const compressedImages = uniformSizesConfigCompressed[sizeKey];
+
+          if (!originalImages || !compressedImages) continue;
+
+          if (uniform.imageUrl === compressedImages.jerseyFront && originalImages.jerseyFront) {
+            originalImageUrl = originalImages.jerseyFront;
+            break;
+          }
+          if (uniform.imageUrl === compressedImages.jerseyBack && originalImages.jerseyBack) {
+            originalImageUrl = originalImages.jerseyBack;
+            break;
+          }
+          if (uniform.imageUrl === compressedImages.shortsLeft && originalImages.shortsLeft) {
+            originalImageUrl = originalImages.shortsLeft;
+            break;
+          }
+          if (uniform.imageUrl === compressedImages.shortsRight && originalImages.shortsRight) {
+            originalImageUrl = originalImages.shortsRight;
+            break;
+          }
+        }
+
+        // Si no se encontró en el mapping, usar originalImageUrl o imageUrl como fallback
+        if (!originalImageUrl) {
+          originalImageUrl = uniform.originalImageUrl || uniform.imageUrl;
+        }
+
+        if (originalImageUrl) {
+          console.log(`  🖼️  Cargando imagen: ${uniform.id}`);
+
+          // Cargar imagen original
+          const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const image = new Image();
+            // No usar crossOrigin para blob URLs y data URLs
+            if (!originalImageUrl!.startsWith('blob:') && !originalImageUrl!.startsWith('data:')) {
+              image.crossOrigin = 'anonymous';
+            }
+
+            image.onload = () => {
+              console.log(`    ✓ Imagen cargada: ${image.width}x${image.height}px`);
+              resolve(image);
+            };
+            image.onerror = (e) => {
+              console.error(`    ✗ Error al cargar imagen:`, e);
+              reject(new Error(`Error al cargar: ${originalImageUrl}`));
+            };
+            image.src = originalImageUrl!;
+          });
+
+          // Calcular posición y dimensiones escaladas (ajustadas al bounding box)
+          const x = (uniform.position.x - minX) * SCALE_FACTOR;
+          const y = (uniform.position.y - minY) * SCALE_FACTOR;
+          const width = uniform.dimensions.width * SCALE_FACTOR;
+          const height = uniform.dimensions.height * SCALE_FACTOR;
+
+          // Guardar estado del contexto
+          ctx.save();
+
+          // Aplicar rotación si es necesario
+          if (uniform.rotation !== 0) {
+            // Calcular centro de rotación
+            const centerX = x + width / 2;
+            const centerY = y + height / 2;
+
+            // Trasladar al centro, rotar, trasladar de vuelta
+            ctx.translate(centerX, centerY);
+            ctx.rotate((uniform.rotation * Math.PI) / 180);
+            ctx.translate(-centerX, -centerY);
+          }
+
+          // Dibujar imagen
+          ctx.drawImage(img, x, y, width, height);
+
+          // Restaurar estado del contexto
+          ctx.restore();
+
+          console.log(`  ✓ Imagen dibujada: ${uniform.id}`);
+
+          // Agregar texto de talla SOLO si proviene de Excel
+          if (uniform.source === 'excel') {
+            const tallaText = `Talla ${uniform.size}`;
+            const tallaFontSize = 9 * SCALE_FACTOR; // Escalar fuente
+
+            // Posición del texto relativa al uniforme
+            const tallaRelativeY = uniform.dimensions.height - 11;
+            const tallaRelativeX = uniform.dimensions.width / 2;
+
+            // Calcular posición absoluta considerando la rotación
+            let tallaAbsoluteX: number;
+            let tallaAbsoluteY: number;
+
+            if (uniform.rotation === 180) {
+              const centerX = uniform.position.x + uniform.dimensions.width / 2;
+              const centerY = uniform.position.y + uniform.dimensions.height / 2;
+
+              const relX = tallaRelativeX - uniform.dimensions.width / 2;
+              const relY = tallaRelativeY - uniform.dimensions.height / 2;
+
+              const angleRad = (uniform.rotation * Math.PI) / 180;
+              const rotatedRelX = relX * Math.cos(angleRad) - relY * Math.sin(angleRad);
+              const rotatedRelY = relX * Math.sin(angleRad) + relY * Math.cos(angleRad);
+
+              tallaAbsoluteX = centerX + rotatedRelX;
+              tallaAbsoluteY = centerY + rotatedRelY;
+            } else {
+              tallaAbsoluteX = uniform.position.x + tallaRelativeX;
+              tallaAbsoluteY = uniform.position.y + tallaRelativeY;
+            }
+
+            // Escalar posiciones (ajustadas al bounding box)
+            const textX = (tallaAbsoluteX - minX) * SCALE_FACTOR;
+            const textY = (tallaAbsoluteY - minY) * SCALE_FACTOR;
+
+            // Guardar estado
+            ctx.save();
+
+            // Configurar texto
+            ctx.font = `bold ${tallaFontSize}px Arial, sans-serif`;
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            // Aplicar rotación si es necesario
+            if (uniform.rotation !== 0) {
+              ctx.translate(textX, textY);
+              ctx.rotate((uniform.rotation * Math.PI) / 180);
+              ctx.fillText(tallaText, 0, 0);
+            } else {
+              ctx.fillText(tallaText, textX, textY);
+            }
+
+            // Restaurar estado
+            ctx.restore();
+          }
+        }
+      } else if (element.type === 'text') {
+        const textEl = element as TextElement;
+
+        console.log(`  📝 Dibujando texto: "${textEl.content}"`);
+
+        // Escalar posición y tamaño (ajustadas al bounding box)
+        const x = (textEl.position.x - minX) * SCALE_FACTOR;
+        const y = (textEl.position.y - minY) * SCALE_FACTOR;
+        const fontSize = textEl.fontSize * SCALE_FACTOR;
+
+        // Guardar estado
+        ctx.save();
+
+        // Configurar texto
+        const fontWeight = textEl.fontWeight === 'bold' ? 'bold' : 'normal';
+        ctx.font = `${fontWeight} ${fontSize}px Arial, sans-serif`;
+        ctx.fillStyle = textEl.fontColor || '#000000';
+        ctx.globalAlpha = textEl.opacity || 1;
+
+        // Aplicar rotación si es necesario
+        if (textEl.rotation !== 0) {
+          ctx.translate(x, y);
+          ctx.rotate((textEl.rotation * Math.PI) / 180);
+          ctx.fillText(textEl.content, 0, 0);
+        } else {
+          ctx.fillText(textEl.content, x, y);
+        }
+
+        // Restaurar estado
+        ctx.restore();
+
+        console.log(`  ✓ Texto dibujado`);
+      }
+    }
+
+    // Verificar que el canvas tenga contenido
+    const imageData = ctx.getImageData(0, 0, canvasWidthPx, canvasHeightPx);
+    const hasContent = imageData.data.some((value, index) => {
+      // Verificar si hay algún pixel que no sea completamente transparente
+      if (index % 4 === 3) { // Canal alpha
+        return value > 0;
+      }
+      return false;
+    });
+
+    if (!hasContent) {
+      throw new Error('El canvas está vacío. No se pudieron cargar las imágenes.');
+    }
+
+    console.log('✓ Canvas tiene contenido, convirtiendo a PNG...');
+
+    // Convertir canvas a PNG de alta calidad
+    console.log('💾 Convirtiendo a PNG...');
+    const dataUrl = canvas.toDataURL('image/png', 1.0);
+
+    // Verificar que el dataURL no esté vacío
+    if (!dataUrl || dataUrl === 'data:,') {
+      throw new Error('Error al convertir canvas a PNG: dataURL vacío');
+    }
+
+    console.log(`✓ PNG generado: ${(dataUrl.length / 1024 / 1024).toFixed(2)} MB`);
+
+    // Descargar la imagen
+    const link = document.createElement('a');
+    link.download = `uniform-design-HQ-${Date.now()}.png`;
+    link.href = dataUrl;
+    link.click();
+
+    console.log('✓ PNG de alta calidad exportado exitosamente');
+    console.log(`  Dimensiones: ${canvasWidthPx} × ${canvasHeightPx} px`);
+    console.log(`  🎉 CALIDAD COMPLETA - Imágenes originales sin degradación`);
+  } catch (error) {
+    console.error('Error al exportar PNG directo:', error);
+    throw error;
   }
 };
 
