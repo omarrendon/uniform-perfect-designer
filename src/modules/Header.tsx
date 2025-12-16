@@ -92,6 +92,16 @@ export const Header: React.FC = () => {
     heuristic: "BSSF",
   });
 
+  // Estado para dimensiones personalizadas del canvas
+  const [customCanvasWidth, setCustomCanvasWidth] = useState<number>(canvasConfig.width);
+  const [customCanvasHeight, setCustomCanvasHeight] = useState<number>(canvasConfig.height);
+
+  // Sincronizar valores locales con canvasConfig cuando cambie
+  useEffect(() => {
+    setCustomCanvasWidth(canvasConfig.width);
+    setCustomCanvasHeight(canvasConfig.height);
+  }, [canvasConfig.width, canvasConfig.height]);
+
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const optimizeDropdownRef = useRef<HTMLDivElement>(null);
   const saveDropdownRef = useRef<HTMLDivElement>(null);
@@ -333,10 +343,52 @@ export const Header: React.FC = () => {
   //   setShowOptimizeModal(true);
   // };
 
-  const applyOptimization = () => {
+  const resetOptimizationSettings = () => {
+    // Restablecer dimensiones del canvas a valores por defecto
+    const DEFAULT_WIDTH = 158.529;
+    const DEFAULT_HEIGHT = 490;
+
+    setCustomCanvasWidth(DEFAULT_WIDTH);
+    setCustomCanvasHeight(DEFAULT_HEIGHT);
+
+    // Restablecer opciones de layout a valores por defecto
+    setLayoutOptions({
+      elementGap: 5,
+      canvasMargin: 0,
+      canvasMarginV: 0,
+      allowRotation: false,
+      sortStrategy: "area",
+      heuristic: "BSSF",
+    });
+
+    console.log('🔄 Configuración restablecida a valores por defecto');
+  };
+
+  const applyOptimization = async () => {
+    // 1. Actualizar dimensiones del canvas si fueron modificadas
+    console.log('🔧 Aplicando nuevas dimensiones del canvas:', {
+      anterior: { width: canvasConfig.width, height: canvasConfig.height },
+      nueva: { width: customCanvasWidth, height: customCanvasHeight }
+    });
+
+    // Aplicar las nuevas dimensiones al store
+    const { setCanvasConfig } = useDesignerStore.getState();
+    setCanvasConfig({
+      width: customCanvasWidth,
+      height: customCanvasHeight,
+    });
+
+    // Esperar un momento para que React procese el cambio
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Obtener el canvasConfig actualizado del store
+    const updatedCanvasConfig = useDesignerStore.getState().canvasConfig;
+    console.log('✅ Verificación después de setCanvasConfig:', updatedCanvasConfig);
+
+    // 2. Ejecutar optimización con las nuevas dimensiones
     const result = optimizeLayoutAdvanced(
       elements,
-      canvasConfig,
+      updatedCanvasConfig,
       layoutOptions
     );
 
@@ -371,17 +423,22 @@ export const Header: React.FC = () => {
     });
 
     // Mostrar resultados
-    const newMetrics = calculateLayoutMetrics(optimized, canvasConfig);
+    const newMetrics = calculateLayoutMetrics(optimized, updatedCanvasConfig);
     setLayoutMetrics(newMetrics);
 
+    // Cerrar el modal primero
+    setShowOptimizeDropdown(false);
+
+    // Esperar un momento más antes de mostrar el alert
+    await new Promise(resolve => setTimeout(resolve, 200));
+
     alert(
-      `Optimización completada!\n\nEficiencia: ${result.efficiency.toFixed(
+      `Optimización completada!\n\nDimensiones del canvas: ${updatedCanvasConfig.width.toFixed(2)} × ${updatedCanvasConfig.height.toFixed(2)} cm\nEficiencia: ${result.efficiency.toFixed(
         1
       )}%\nPáginas utilizadas: ${result.pagesUsed}\nElementos procesados: ${
         result.totalElements
       }`
     );
-    setShowOptimizeModal(false);
   };
 
   // Handlers para carga masiva de imágenes
@@ -596,6 +653,10 @@ export const Header: React.FC = () => {
                     canvasConfig
                   );
                   setLayoutMetrics(currentMetrics);
+
+                  // Sincronizar dimensiones del canvas con el estado actual
+                  setCustomCanvasWidth(canvasConfig.width);
+                  setCustomCanvasHeight(canvasConfig.height);
                 }
                 setShowOptimizeDropdown(!showOptimizeDropdown);
               }}
@@ -620,9 +681,9 @@ export const Header: React.FC = () => {
                   transform: "translateX(-50%)",
                   backgroundColor: "#1f2937",
                   borderRadius: "8px",
-                  padding: "12px",
-                  minWidth: "320px",
-                  maxWidth: "380px",
+                  padding: "16px",
+                  minWidth: "420px",
+                  maxWidth: "480px",
                   boxShadow:
                     "0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2)",
                   border: "1px solid #374151",
@@ -694,8 +755,124 @@ export const Header: React.FC = () => {
                   </div>
                 )}
 
+                {/* Canvas Dimensions */}
+                <div style={{ marginBottom: "14px" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      color: "#e5e7eb",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    Dimensiones del Canvas
+                  </label>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "10px",
+                    }}
+                  >
+                    <div>
+                      <label
+                        style={{
+                          display: "block",
+                          fontSize: "11px",
+                          fontWeight: "500",
+                          color: "#e5e7eb",
+                          marginBottom: "6px",
+                        }}
+                      >
+                        Ancho (cm)
+                      </label>
+                      <input
+                        type="number"
+                        value={customCanvasWidth}
+                        onChange={e =>
+                          setCustomCanvasWidth(Number(e.target.value))
+                        }
+                        min={10}
+                        max={500}
+                        step={0.1}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          backgroundColor: "#374151",
+                          color: "#e5e7eb",
+                          border: "1px solid #4b5563",
+                          borderRadius: "6px",
+                          fontSize: "13px",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        style={{
+                          display: "block",
+                          fontSize: "11px",
+                          fontWeight: "500",
+                          color: "#e5e7eb",
+                          marginBottom: "6px",
+                        }}
+                      >
+                        Alto (cm)
+                      </label>
+                      <input
+                        type="number"
+                        value={customCanvasHeight}
+                        onChange={e =>
+                          setCustomCanvasHeight(Number(e.target.value))
+                        }
+                        min={10}
+                        max={1000}
+                        step={0.1}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          backgroundColor: "#374151",
+                          color: "#e5e7eb",
+                          border: "1px solid #4b5563",
+                          borderRadius: "6px",
+                          fontSize: "13px",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <p
+                    style={{
+                      fontSize: "10px",
+                      color: "#9ca3af",
+                      marginTop: "8px",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    Actuales: {canvasConfig.width.toFixed(2)} × {canvasConfig.height.toFixed(2)} cm
+                  </p>
+                  <p
+                    style={{
+                      fontSize: "10px",
+                      color: "#60a5fa",
+                      marginTop: "4px",
+                    }}
+                  >
+                    ℹ️ Se aplicarán al canvas y a las exportaciones PNG/PDF
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    height: "1px",
+                    backgroundColor: "#374151",
+                    margin: "14px 0",
+                  }}
+                />
+
                 {/* Strategy Selection */}
-                <div style={{ marginBottom: "10px" }}>
+                <div style={{ marginBottom: "14px" }}>
                   <label
                     style={{
                       display: "block",
@@ -735,7 +912,7 @@ export const Header: React.FC = () => {
                 </div>
 
                 {/* Heuristic Selection */}
-                <div style={{ marginBottom: "10px" }}>
+                <div style={{ marginBottom: "14px" }}>
                   <label
                     style={{
                       display: "block",
@@ -778,8 +955,8 @@ export const Header: React.FC = () => {
                   style={{
                     display: "grid",
                     gridTemplateColumns: "1fr 1fr",
-                    gap: "8px",
-                    marginBottom: "10px",
+                    gap: "10px",
+                    marginBottom: "14px",
                   }}
                 >
                   <div>
@@ -807,12 +984,13 @@ export const Header: React.FC = () => {
                       max={50}
                       style={{
                         width: "100%",
-                        padding: "6px 10px",
+                        padding: "8px 12px",
                         backgroundColor: "#374151",
                         color: "#e5e7eb",
                         border: "1px solid #4b5563",
                         borderRadius: "6px",
                         fontSize: "13px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </div>
@@ -841,19 +1019,20 @@ export const Header: React.FC = () => {
                       max={100}
                       style={{
                         width: "100%",
-                        padding: "6px 10px",
+                        padding: "8px 12px",
                         backgroundColor: "#374151",
                         color: "#e5e7eb",
                         border: "1px solid #4b5563",
                         borderRadius: "6px",
                         fontSize: "13px",
+                        boxSizing: "border-box",
                       }}
                     />
                   </div>
                 </div>
 
                 {/* Rotation Checkbox */}
-                <div style={{ marginBottom: "12px" }}>
+                <div style={{ marginBottom: "14px" }}>
                   <label
                     style={{
                       display: "flex",
@@ -894,14 +1073,14 @@ export const Header: React.FC = () => {
                 {/* Action Buttons */}
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const currentMetrics = calculateLayoutMetrics(
                         elements,
                         canvasConfig
                       );
                       setLayoutMetrics(currentMetrics);
-                      applyOptimization();
-                      setShowOptimizeDropdown(false);
+                      await applyOptimization();
+                      // El modal ya se cierra dentro de applyOptimization
                     }}
                     style={{
                       flex: 1,
@@ -923,6 +1102,30 @@ export const Header: React.FC = () => {
                     }}
                   >
                     Aplicar
+                  </button>
+                  <button
+                    onClick={resetOptimizationSettings}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      backgroundColor: "#f59e0b",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = "#d97706";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = "#f59e0b";
+                    }}
+                    title="Restablecer todas las configuraciones a valores por defecto"
+                  >
+                    Restablecer
                   </button>
                   <button
                     onClick={() => setShowOptimizeDropdown(false)}

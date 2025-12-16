@@ -512,11 +512,11 @@ export const useDesignerStore = create<DesignerState>()(
         getTotalPages: () => get().pages.length,
 
         // Obtener altura ajustada para cada página
-        // La altura máxima es DEFAULT_CANVAS_CONFIG.height
+        // La altura máxima es state.canvasConfig.height (usa configuración actual, no el default)
         // TODAS las páginas se recortan al tamaño exacto de sus elementos (sin espacio en blanco)
         getPageHeight: (pageIndex: number) => {
           const state = get();
-          const maxHeight = DEFAULT_CANVAS_CONFIG.height;
+          const maxHeight = state.canvasConfig.height; // USA LA CONFIGURACIÓN ACTUAL, no DEFAULT
 
           // Obtener elementos de la página
           const pageElements = state.pages[pageIndex] || [];
@@ -533,8 +533,8 @@ export const useDesignerStore = create<DesignerState>()(
             }
           }
 
-          // Convertir de píxeles a cm
-          const heightInCm = maxY / DEFAULT_CANVAS_CONFIG.pixelsPerCm;
+          // Convertir de píxeles a cm (usa pixelsPerCm actual, no el default)
+          const heightInCm = maxY / state.canvasConfig.pixelsPerCm;
 
           // Retornar la altura real usada (sin margen extra)
           // Si es mayor que maxHeight, usar maxHeight
