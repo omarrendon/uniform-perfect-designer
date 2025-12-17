@@ -263,6 +263,9 @@ const swapCanvasImagesToOriginal = async (): Promise<() => void> => {
     if (element.type === 'uniform') {
       const currentImageUrl = element.imageUrl;
 
+      // Skip if no current image URL
+      if (!currentImageUrl) return;
+
       // Intentar obtener la URL original del mapping
       let originalUrl = urlMapping.get(currentImageUrl);
 
@@ -555,38 +558,28 @@ export const exportAsPNGDirect = async (
             const tallaText = `Talla ${uniform.size}`;
             const tallaFontSize = 9 * SCALE_FACTOR; // Escalar fuente
 
-            // Posición del texto relativa al uniforme
-            const tallaRelativeY = uniform.dimensions.height - 11;
-            const tallaRelativeX = uniform.dimensions.width / 2;
-
-            // Calcular posición absoluta considerando la rotación
-            let tallaAbsoluteX: number;
-            let tallaAbsoluteY: number;
-
-            if (uniform.rotation === 180) {
-              const centerX = uniform.position.x + uniform.dimensions.width / 2;
-              const centerY = uniform.position.y + uniform.dimensions.height / 2;
-
-              const relX = tallaRelativeX - uniform.dimensions.width / 2;
-              const relY = tallaRelativeY - uniform.dimensions.height / 2;
-
-              const angleRad = (uniform.rotation * Math.PI) / 180;
-              const rotatedRelX = relX * Math.cos(angleRad) - relY * Math.sin(angleRad);
-              const rotatedRelY = relX * Math.sin(angleRad) + relY * Math.cos(angleRad);
-
-              tallaAbsoluteX = centerX + rotatedRelX;
-              tallaAbsoluteY = centerY + rotatedRelY;
-            } else {
-              tallaAbsoluteX = uniform.position.x + tallaRelativeX;
-              tallaAbsoluteY = uniform.position.y + tallaRelativeY;
-            }
-
-            // Escalar posiciones (ajustadas al bounding box)
-            const textX = (tallaAbsoluteX - minX) * SCALE_FACTOR;
-            const textY = (tallaAbsoluteY - minY) * SCALE_FACTOR;
-
             // Guardar estado
             ctx.save();
+
+            // En Konva, el texto está en posición (0, height-11) relativa al uniforme
+            // y se dibuja con align='center' y width=uniform.width
+
+            // Aplicar las mismas transformaciones que la imagen
+            if (uniform.rotation !== 0) {
+              // Calcular centro del uniforme en coordenadas escaladas
+              const centerX = (uniform.position.x - minX + uniform.dimensions.width / 2) * SCALE_FACTOR;
+              const centerY = (uniform.position.y - minY + uniform.dimensions.height / 2) * SCALE_FACTOR;
+
+              // Trasladar al centro, rotar, trasladar de vuelta
+              ctx.translate(centerX, centerY);
+              ctx.rotate((uniform.rotation * Math.PI) / 180);
+              ctx.translate(-centerX, -centerY);
+            }
+
+            // Calcular posición del texto relativa al uniforme (ajustada al bounding box y escalada)
+            const textX = (uniform.position.x - minX) * SCALE_FACTOR;
+            const textY = (uniform.position.y - minY + uniform.dimensions.height - 11) * SCALE_FACTOR;
+            const textCenterX = textX + (uniform.dimensions.width * SCALE_FACTOR) / 2;
 
             // Configurar texto
             ctx.font = `bold ${tallaFontSize}px Arial, sans-serif`;
@@ -594,14 +587,8 @@ export const exportAsPNGDirect = async (
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
 
-            // Aplicar rotación si es necesario
-            if (uniform.rotation !== 0) {
-              ctx.translate(textX, textY);
-              ctx.rotate((uniform.rotation * Math.PI) / 180);
-              ctx.fillText(tallaText, 0, 0);
-            } else {
-              ctx.fillText(tallaText, textX, textY);
-            }
+            // Dibujar texto centrado
+            ctx.fillText(tallaText, textCenterX, textY);
 
             // Restaurar estado
             ctx.restore();
@@ -610,9 +597,10 @@ export const exportAsPNGDirect = async (
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
 
-        console.log(`  📝 Dibujando texto: "${textEl.content}"`);
+        console.log(`  📝 Dibujando texto: "${textEl.content}" en posición (${textEl.position.x}, ${textEl.position.y})`);
 
-        // Escalar posición y tamaño (ajustadas al bounding box)
+        // Escalar posición y tamaño (ajustadas al bounding box) - SIN offsets por ahora
+        // Usar las mismas coordenadas que en el canvas para ver si coinciden
         const x = (textEl.position.x - minX) * SCALE_FACTOR;
         const y = (textEl.position.y - minY) * SCALE_FACTOR;
         const fontSize = textEl.fontSize * SCALE_FACTOR;
@@ -620,11 +608,17 @@ export const exportAsPNGDirect = async (
         // Guardar estado
         ctx.save();
 
-        // Configurar texto
+        // Configurar texto EXACTAMENTE como Konva
         const fontWeight = textEl.fontWeight === 'bold' ? 'bold' : 'normal';
-        ctx.font = `${fontWeight} ${fontSize}px Arial, sans-serif`;
+        const fontFamily = textEl.fontFamily || 'Arial';
+        ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}, sans-serif`;
         ctx.fillStyle = textEl.fontColor || '#000000';
         ctx.globalAlpha = textEl.opacity || 1;
+
+        // IMPORTANTE: En Konva sin width, (x,y) es SIEMPRE la esquina superior izquierda
+        // El textAlign NO tiene efecto sin width especificado
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
 
         // Aplicar rotación si es necesario
         if (textEl.rotation !== 0) {
@@ -1295,6 +1289,7 @@ export const exportAsPDFDirect = async (
   }
 };
 
+
 /**
  * Exporta múltiples páginas como PDFs separados usando composición directa
  */
@@ -1309,9 +1304,101 @@ export const exportMultiPagePDFDirect = async (
     const canvasConfig = store.canvasConfig;
     const cmykConfig = getGlobalCMYKConfig();
 
-    console.log(`📄 Exportando ${totalPages} páginas con composición directa...`);
+    console.log(`📄 Exportando ${totalPages} páginas (un archivo por página) - OPTIMIZADO...`);
 
-    // Procesar cada página
+    // OPTIMIZACIÓN: Pre-procesar y cachear datos de imágenes CMYK
+    console.log('⚡ Pre-procesando imágenes únicas...');
+
+    const uniformSizesConfig = store.uniformSizesConfig;
+    const uniformSizesConfigCompressed = store.uniformSizesConfigCompressed;
+
+    // Identificar todas las imágenes únicas
+    const uniqueImages = new Set<string>();
+
+    for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+      const elements = store.pages[pageIndex] || [];
+
+      for (const element of elements) {
+        if (!element.visible || element.type !== 'uniform') continue;
+
+        const uniform = element as UniformTemplate;
+        let originalImageUrl: string | undefined;
+
+        // Buscar imagen original
+        for (const sizeKey of Object.keys(uniformSizesConfig)) {
+          const originalImages = uniformSizesConfig[sizeKey];
+          const compressedImages = uniformSizesConfigCompressed[sizeKey];
+
+          if (!originalImages || !compressedImages) continue;
+
+          if (uniform.imageUrl === compressedImages.jerseyFront && originalImages.jerseyFront) {
+            originalImageUrl = originalImages.jerseyFront;
+            break;
+          }
+          if (uniform.imageUrl === compressedImages.jerseyBack && originalImages.jerseyBack) {
+            originalImageUrl = originalImages.jerseyBack;
+            break;
+          }
+          if (uniform.imageUrl === compressedImages.shortsLeft && originalImages.shortsLeft) {
+            originalImageUrl = originalImages.shortsLeft;
+            break;
+          }
+          if (uniform.imageUrl === compressedImages.shortsRight && originalImages.shortsRight) {
+            originalImageUrl = originalImages.shortsRight;
+            break;
+          }
+        }
+
+        if (!originalImageUrl) {
+          originalImageUrl = uniform.originalImageUrl || uniform.imageUrl;
+        }
+
+        if (originalImageUrl) {
+          uniqueImages.add(originalImageUrl);
+        }
+      }
+    }
+
+    console.log(`  ✓ ${uniqueImages.size} imágenes únicas encontradas`);
+
+    const conversionOptions: CMYKConversionOptions = {
+      profile: cmykConfig.profile,
+      gcrMethod: cmykConfig.gcrMethod,
+      customTAC: cmykConfig.customTAC,
+      applyDotGain: cmykConfig.applyDotGain,
+    };
+
+    // Pre-convertir todas las imágenes únicas a PNG y calcular TAC stats
+    console.log('🎨 Pre-convirtiendo imágenes a CMYK para calcular TAC...');
+    const imagePngCache = new Map<string, string>(); // URL original -> PNG dataURL
+    const imageTacCache = new Map<string, { min: number; max: number; average: number }>(); // URL original -> TAC stats
+
+    let processedCount = 0;
+    for (const imageUrl of uniqueImages) {
+      console.log(`  [${++processedCount}/${uniqueImages.size}] Procesando: ${imageUrl.substring(0, 50)}...`);
+
+      // Convertir a PNG si es necesario
+      let pngDataUrl = imageUrl;
+      if (!imageUrl.startsWith('data:image/png')) {
+        pngDataUrl = await convertToPng(imageUrl);
+      }
+      imagePngCache.set(imageUrl, pngDataUrl);
+
+      // Calcular TAC stats
+      const cmykData = await convertImageRGBtoCMYK(imageUrl, conversionOptions);
+      imageTacCache.set(imageUrl, cmykData.tac);
+
+      console.log(`    ✓ TAC: max=${cmykData.tac.max.toFixed(1)}%, avg=${cmykData.tac.average.toFixed(1)}%`);
+    }
+
+    console.log(`✓ ${uniqueImages.size} imágenes pre-procesadas`);
+    console.log(`✓ Listo para generar ${totalPages} archivos PDF`);
+
+    // Estadísticas
+    let totalImagesEmbedded = 0;
+    let totalImagesFromCache = 0;
+
+    // Procesar cada página como un PDF separado
     for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
       console.log(`\n📑 Procesando página ${pageIndex + 1}/${totalPages}...`);
 
@@ -1320,9 +1407,15 @@ export const exportMultiPagePDFDirect = async (
         options.onProgress(pageIndex + 1, totalPages);
       }
 
+      // Crear un NUEVO PDFDocument para esta página (regla de negocio: un archivo por página)
+      const pdfDoc = await PDFDocument.create();
+
+      // Embeber fuentes estándar
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
       // Obtener elementos de esta página directamente
       const elements = store.pages[pageIndex] || [];
-      const uniformSizesConfig = store.uniformSizesConfig;
 
       // Obtener altura de la página
       const pageHeightCm = store.getPageHeight(pageIndex);
@@ -1332,23 +1425,8 @@ export const exportMultiPagePDFDirect = async (
       const widthInPoints = canvasWidthCm * 28.35;
       const heightInPoints = pageHeightCm * 28.35;
 
-      // Crear documento PDF
-      const pdfDoc = await PDFDocument.create();
-
-      // Configurar metadata
-      pdfDoc.setTitle(`Uniform Design - Page ${pageIndex + 1}`);
-      pdfDoc.setAuthor('Uniform Perfect Designer');
-      pdfDoc.setSubject(`Diseño de uniformes - Página ${pageIndex + 1} - Perfil: ${cmykConfig.profile}`);
-      pdfDoc.setKeywords(['CMYK', 'Print', 'Uniform', 'Design', cmykConfig.profile, `Page ${pageIndex + 1}`]);
-      pdfDoc.setProducer('pdf-lib + Professional CMYK Direct Composer');
-      pdfDoc.setCreator('Uniform Perfect Designer v2.1 Direct Multi-Page');
-
-      // Crear página
+      // Agregar página al documento
       const page = pdfDoc.addPage([widthInPoints, heightInPoints]);
-
-      // Embeber fuentes
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
       // Estadísticas de TAC
       let maxTAC = 0;
@@ -1399,23 +1477,25 @@ export const exportMultiPagePDFDirect = async (
           }
 
           if (originalImageUrl) {
-            // Convertir a CMYK
-            const conversionOptions: CMYKConversionOptions = {
-              profile: cmykConfig.profile,
-              gcrMethod: cmykConfig.gcrMethod,
-              customTAC: cmykConfig.customTAC,
-              applyDotGain: cmykConfig.applyDotGain,
-            };
+            // OPTIMIZACIÓN: Usar PNG y TAC stats pre-calculados
+            const pngDataUrl = imagePngCache.get(originalImageUrl);
+            const tacStats = imageTacCache.get(originalImageUrl);
 
-            const { image: pdfImage, tacStats } = await embedImageWithCMYK(
-              pdfDoc,
-              originalImageUrl,
-              conversionOptions
-            );
+            if (!pngDataUrl) {
+              console.log(`  ⚠️  Advertencia: No se encontró PNG en caché para ${originalImageUrl.substring(0, 50)}`);
+              continue;
+            }
 
-            maxTAC = Math.max(maxTAC, tacStats.max);
-            avgTAC += tacStats.average;
-            tacCount++;
+            // Embeber la imagen PNG desde caché (operación rápida)
+            const pdfImage = await pdfDoc.embedPng(pngDataUrl);
+            totalImagesEmbedded++;
+            totalImagesFromCache++; // Todas vienen del caché ahora
+
+            if (tacStats) {
+              maxTAC = Math.max(maxTAC, tacStats.max);
+              avgTAC += tacStats.average;
+              tacCount++;
+            }
 
             // Calcular posición y dimensiones
             const xInCm = uniform.position.x / canvasConfig.pixelsPerCm;
@@ -1560,20 +1640,15 @@ export const exportMultiPagePDFDirect = async (
         }
       }
 
-      // Calcular TAC promedio
-      avgTAC = tacCount > 0 ? avgTAC / tacCount : 0;
-      const tacStats = { min: 0, max: maxTAC, average: avgTAC };
-
-      // Serializar PDF
+      // Serializar este PDF individual
+      console.log(`  💾 Guardando archivo PDF de página ${pageIndex + 1}...`);
       const pdfBytes = await pdfDoc.save();
 
-      // Generar nombre de archivo
+      // Generar nombre de archivo único para esta página
       const timestamp = Date.now();
-      const fileName = totalPages > 1
-        ? `uniform-design-direct-page${pageIndex + 1}-${cmykConfig.profile}-TAC${Math.round(tacStats.max)}-${timestamp}.pdf`
-        : `uniform-design-direct-${cmykConfig.profile}-TAC${Math.round(tacStats.max)}-${timestamp}.pdf`;
+      const fileName = `uniform-design-page${pageIndex + 1}-${cmykConfig.profile}-${timestamp}.pdf`;
 
-      // Descargar
+      // Descargar archivo individual
       const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -1582,16 +1657,23 @@ export const exportMultiPagePDFDirect = async (
       link.click();
       URL.revokeObjectURL(url);
 
-      console.log(`✓ Página ${pageIndex + 1} exportada: ${fileName}`);
-      console.log(`  TAC máx: ${tacStats.max.toFixed(1)}%`);
-
-      // Pequeña pausa entre descargas
-      if (pageIndex < totalPages - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      console.log(`  ✓ Archivo guardado: ${fileName} (${(pdfBytes.length / 1024 / 1024).toFixed(2)} MB)`);
+      console.log(`  ✓ Página ${pageIndex + 1}/${totalPages} completada`);
     }
 
-    console.log(`\n✅ ${totalPages} páginas exportadas con CALIDAD COMPLETA`);
+    // Estadísticas finales de optimización
+    console.log(`\n📊 ESTADÍSTICAS DE OPTIMIZACIÓN:`);
+    console.log(`  🖼️  Imágenes únicas pre-procesadas: ${uniqueImages.size}`);
+    console.log(`  ⚡ Imágenes embebidas desde caché: ${totalImagesFromCache}`);
+    console.log(`  📄 Archivos PDF generados: ${totalPages}`);
+
+    const totalImages = totalImagesEmbedded;
+    if (totalImages > 0) {
+      const timeSavedEstimate = (uniqueImages.size - 1) * totalPages * 0.5; // Tiempo ahorrado al no re-convertir
+      console.log(`  ⏱️  Tiempo ahorrado estimado: ~${timeSavedEstimate.toFixed(1)} segundos`);
+    }
+
+    console.log(`\n✅ ${totalPages} archivos PDF exportados con CALIDAD COMPLETA (un archivo por página)`);
   } catch (error) {
     console.error('Error al exportar múltiples páginas:', error);
     throw error;

@@ -966,7 +966,7 @@ export const Header: React.FC = () => {
                         marginBottom: "6px",
                       }}
                     >
-                      Separación (px)
+                      Separación ({layoutOptions.elementGap ?? 5}px = {((layoutOptions.elementGap ?? 5) / canvasConfig.pixelsPerCm).toFixed(2)}cm)
                     </label>
                     <input
                       type="number"
@@ -1001,7 +1001,7 @@ export const Header: React.FC = () => {
                         marginBottom: "6px",
                       }}
                     >
-                      Margen (px)
+                      Margen ({layoutOptions.canvasMargin ?? 0}px = {((layoutOptions.canvasMargin ?? 0) / canvasConfig.pixelsPerCm).toFixed(2)}cm)
                     </label>
                     <input
                       type="number"
@@ -2364,7 +2364,7 @@ export const Header: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Separación (px)
+                    Separación ({layoutOptions.elementGap ?? 5}px = {((layoutOptions.elementGap ?? 5) / canvasConfig.pixelsPerCm).toFixed(2)}cm)
                   </label>
                   <input
                     type="number"
@@ -2382,7 +2382,7 @@ export const Header: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Margen (px)
+                    Margen ({layoutOptions.canvasMargin ?? 0}px = {((layoutOptions.canvasMargin ?? 0) / canvasConfig.pixelsPerCm).toFixed(2)}cm)
                   </label>
                   <input
                     type="number"
