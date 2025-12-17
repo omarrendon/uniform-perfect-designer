@@ -40,6 +40,7 @@ import {
   hasSpaceForElement,
 } from "../utils/canvas";
 import type { UniformTemplate, TextElement } from "../types";
+import { GOOGLE_FONTS, loadGoogleFont } from "../utils/fontLoader";
 
 export const Header: React.FC = () => {
   const {
@@ -107,11 +108,14 @@ export const Header: React.FC = () => {
   const addDropdownRef = useRef<HTMLDivElement>(null);
   const editDropdownRef = useRef<HTMLDivElement>(null);
   const uploadDropdownRef = useRef<HTMLDivElement>(null);
+  const fontDropdownRef = useRef<HTMLDivElement>(null);
   const [showOptimizeDropdown, setShowOptimizeDropdown] = useState(false);
   const [showSaveDropdown, setShowSaveDropdown] = useState(false);
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const [showEditDropdown, setShowEditDropdown] = useState(false);
   const [showUploadDropdown, setShowUploadDropdown] = useState(false);
+  const [showFontDropdown, setShowFontDropdown] = useState(false);
+  const [fontSearchTerm, setFontSearchTerm] = useState("");
 
   // Refs para los inputs de archivos
   const jerseyFrontsInputRef = useRef<HTMLInputElement>(null);
@@ -158,6 +162,12 @@ export const Header: React.FC = () => {
       ) {
         setShowUploadDropdown(false);
       }
+      if (
+        fontDropdownRef.current &&
+        !fontDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowFontDropdown(false);
+      }
     };
 
     if (
@@ -166,7 +176,8 @@ export const Header: React.FC = () => {
       showSaveDropdown ||
       showAddDropdown ||
       showEditDropdown ||
-      showUploadDropdown
+      showUploadDropdown ||
+      showFontDropdown
     ) {
       document.addEventListener("mousedown", handleClickOutside);
     }
@@ -181,6 +192,7 @@ export const Header: React.FC = () => {
     showAddDropdown,
     showEditDropdown,
     showUploadDropdown,
+    showFontDropdown,
   ]);
 
   const handleExport = async (format: "png" | "pdf") => {
@@ -459,6 +471,41 @@ export const Header: React.FC = () => {
       bulkImageUpload.jerseyBacks.length > 0) ||
     (bulkImageUpload.shortsRights.length > 0 &&
       bulkImageUpload.shortsLefts.length > 0);
+
+  // Filtrar fuentes basándose en el término de búsqueda
+  const filteredFonts = React.useMemo(() => {
+    if (!fontSearchTerm || fontSearchTerm.trim() === "") {
+      return [...GOOGLE_FONTS];
+    }
+    const searchLower = fontSearchTerm.toLowerCase().trim();
+    const filtered = GOOGLE_FONTS.filter(font =>
+      font.toLowerCase().includes(searchLower)
+    );
+    console.log(`🔍 Búsqueda: "${fontSearchTerm}" → ${filtered.length} fuentes encontradas`);
+    return filtered;
+  }, [fontSearchTerm]);
+
+  // Handler para cambiar la fuente del elemento de texto seleccionado
+  const handleFontChange = async (fontName: string) => {
+    if (selectedElement && selectedElement.type === "text") {
+      // Cargar la fuente si no es Arial
+      if (fontName !== "Arial") {
+        try {
+          await loadGoogleFont(fontName);
+        } catch (error) {
+          console.error(`Error cargando fuente ${fontName}:`, error);
+        }
+      }
+
+      // Actualizar el elemento con la nueva fuente
+      updateElement(selectedElement.id, {
+        fontFamily: fontName,
+      });
+
+      setShowFontDropdown(false);
+      setFontSearchTerm("");
+    }
+  };
 
   return (
     <>
@@ -1296,6 +1343,223 @@ export const Header: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Selector de Fuentes */}
+          <div ref={fontDropdownRef} style={{ position: "relative" }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                if (!showFontDropdown) {
+                  setFontSearchTerm("");
+                }
+                setShowFontDropdown(!showFontDropdown);
+              }}
+              title="Selector de fuentes"
+              style={{
+                color: "#e5e7eb",
+                backgroundColor: showFontDropdown ? "#374151" : "transparent",
+                cursor: "pointer",
+              }}
+            >
+              <Type className="w-4 h-4" />
+            </Button>
+
+            {/* Font Selector Dropdown */}
+            {showFontDropdown && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  backgroundColor: "#1f2937",
+                  borderRadius: "8px",
+                  padding: "17px",
+                  width: "340px",
+                  maxHeight: "500px",
+                  boxSizing: "border-box",
+                  boxShadow:
+                    "0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2)",
+                  border: "1px solid #374151",
+                  zIndex: 1000,
+                  animation: "slideDown 0.2s ease-out",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <style>
+                  {`
+                    .font-list-scroll::-webkit-scrollbar {
+                      width: 8px;
+                    }
+                    .font-list-scroll::-webkit-scrollbar-track {
+                      background: #1f2937;
+                      border-radius: 4px;
+                    }
+                    .font-list-scroll::-webkit-scrollbar-thumb {
+                      background: #4b5563;
+                      border-radius: 4px;
+                      transition: background 0.2s;
+                    }
+                    .font-list-scroll::-webkit-scrollbar-thumb:hover {
+                      background: #6b7280;
+                    }
+                  `}
+                </style>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <h3
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: "#f9fafb",
+                      margin: 0,
+                    }}
+                  >
+                    Selector de Fuentes
+                  </h3>
+                  <span style={{ fontSize: "12px", color: "#9ca3af", fontWeight: "500" }}>
+                    {filteredFonts.length} fuentes
+                  </span>
+                </div>
+
+                {/* Input de búsqueda */}
+                <input
+                  type="text"
+                  placeholder="Buscar fuente..."
+                  value={fontSearchTerm}
+                  onChange={e => setFontSearchTerm(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    backgroundColor: "#374151",
+                    color: "#e5e7eb",
+                    border: "1px solid #4b5563",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    outline: "none",
+                    marginBottom: "12px",
+                    boxSizing: "border-box",
+                  }}
+                  autoFocus
+                />
+
+                {/* Fuente actual */}
+                {selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily && (
+                  <div
+                    style={{
+                      padding: "8px",
+                      backgroundColor: "#374151",
+                      borderRadius: "6px",
+                      marginBottom: "12px",
+                      fontSize: "12px",
+                      color: "#9ca3af",
+                    }}
+                  >
+                    Fuente actual:{" "}
+                    <span style={{ color: "#3b82f6", fontWeight: "600" }}>
+                      {(selectedElement as TextElement).fontFamily}
+                    </span>
+                  </div>
+                )}
+
+                {/* Mensaje cuando no hay texto seleccionado */}
+                {(!selectedElement || selectedElement.type !== "text") && (
+                  <div
+                    style={{
+                      padding: "8px",
+                      backgroundColor: "#374151",
+                      borderRadius: "6px",
+                      marginBottom: "12px",
+                      fontSize: "12px",
+                      color: "#f59e0b",
+                      textAlign: "center",
+                    }}
+                  >
+                    Selecciona un elemento de texto para aplicar fuente
+                  </div>
+                )}
+
+                {/* Lista de fuentes */}
+                <div
+                  className="font-list-scroll"
+                  style={{
+                    flex: 1,
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                    maxHeight: "360px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                    paddingRight: "5px",
+                  }}
+                >
+                  {filteredFonts.length > 0 ? (
+                    filteredFonts.map(font => (
+                      <button
+                        key={font}
+                        onClick={() => handleFontChange(font)}
+                        disabled={!selectedElement || selectedElement.type !== "text"}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          backgroundColor:
+                            selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily === font
+                              ? "#374151"
+                              : "transparent",
+                          color: (!selectedElement || selectedElement.type !== "text") ? "#6b7280" : "#e5e7eb",
+                          border:
+                            selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily === font
+                              ? "1px solid #3b82f6"
+                              : "1px solid transparent",
+                          borderRadius: "6px",
+                          fontSize: "16px",
+                          fontFamily: font,
+                          cursor: (!selectedElement || selectedElement.type !== "text") ? "not-allowed" : "pointer",
+                          transition: "all 0.15s",
+                          textAlign: "left",
+                          opacity: (!selectedElement || selectedElement.type !== "text") ? 0.5 : 1,
+                        }}
+                        onMouseEnter={e => {
+                          if (selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily !== font) {
+                            e.currentTarget.style.backgroundColor = "#374151";
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily !== font) {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                          }
+                        }}
+                      >
+                        {font}
+                      </button>
+                    ))
+                  ) : (
+                    <div
+                      style={{
+                        padding: "20px",
+                        textAlign: "center",
+                        color: "#9ca3af",
+                        fontSize: "13px",
+                      }}
+                    >
+                      No se encontraron fuentes
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              width: "1px",
+              height: "24px",
+              backgroundColor: "#4b5563",
+              margin: "0 4px",
+            }}
+          />
 
           {/* Botón Editar con Dropdown */}
           <div ref={editDropdownRef} style={{ position: "relative" }}>
