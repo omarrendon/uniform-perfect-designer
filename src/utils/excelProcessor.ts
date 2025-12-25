@@ -240,10 +240,31 @@ export const processExcelFile = async (
 
     const getSizeConfig = (tallaExcel: string, genero: 'Hombre' | 'Mujer') => {
       const tallaUpper = tallaExcel.toUpperCase().trim();
-      const talla = tallaUpper as Size;
+
+      // Mapeo de tallas en español a inglés
+      const tallaMapping: { [key: string]: Size } = {
+        // Español
+        'XCH': 'XS',
+        'CH': 'S',
+        'M': 'M',
+        'G': 'L',      // ← CRÍTICO: Grande = Large
+        'XG': 'XL',
+        '2XG': 'XL',
+        '3XG': 'XL',
+        // Inglés (también soportado)
+        'XS': 'XS',
+        'S': 'S',
+        'L': 'L',
+        'XL': 'XL',
+        '2XL': 'XL',
+        '3XL': 'XL',
+      };
+
+      // Obtener talla mapeada o usar la original
+      const tallaMapped = tallaMapping[tallaUpper] || tallaUpper as Size;
 
       // Usar la función del store para obtener configuración por talla y género
-      const config = useDesignerStore.getState().getSizeConfig(talla, genero);
+      const config = useDesignerStore.getState().getSizeConfig(tallaMapped, genero);
 
       // Si no encuentra, usar configuración por defecto (M Hombre)
       return config || useDesignerStore.getState().getSizeConfig('M', 'Hombre') || sizeConfigs[0];
@@ -351,6 +372,16 @@ export const processExcelFile = async (
       const genero = excelToGender(row.genero); // Extraer género del Excel
       const sizeConfig = getSizeConfig(tallaExcel, genero);
       const tallaMostrar = tallaExcel.toUpperCase().trim();
+
+      // Obtener la talla mapeada (para decisiones de layout)
+      const tallaMapping: { [key: string]: Size } = {
+        'XCH': 'XS', 'CH': 'S', 'M': 'M',
+        'G': 'L', 'XG': 'XL', '2XG': 'XL', '3XG': 'XL',
+        'XS': 'XS', 'S': 'S', 'L': 'L',
+        'XL': 'XL', '2XL': 'XL', '3XL': 'XL',
+      };
+      const tallaMapeada = tallaMapping[tallaMostrar] || tallaMostrar;
+
       const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
 
       if (fonteFila !== "Arial") {
@@ -368,6 +399,7 @@ export const processExcelFile = async (
       const colorNumeroShort = parseColor(row.color_numero_short, "#000000");
 
       // Debug: Ver qué valores se están leyendo del Excel
+      console.log(`[${row.nombre}] Talla Excel: ${tallaMostrar} → Talla Mapeada: ${tallaMapeada}`);
       console.log(`[${row.nombre}] Valores Excel:`, {
         tamano_numero_espalda: row.tamano_numero_espalda,
         color_numero_espalda: row.color_numero_espalda,
@@ -392,9 +424,9 @@ export const processExcelFile = async (
         height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / (shortsConfig.left.width / shortsConfig.left.height),
       };
 
-      // Determinar qué layout usar
-      const usarLayoutOriginal = tallasLayoutOriginal.includes(tallaMostrar);
-      const usarLayoutOpcionA = tallasLayoutOpcionA.includes(tallaMostrar);
+      // Determinar qué layout usar (usar talla MAPEADA, no la del Excel)
+      const usarLayoutOriginal = tallasLayoutOriginal.includes(tallaMapeada);
+      const usarLayoutOpcionA = tallasLayoutOpcionA.includes(tallaMapeada);
 
       if (usarLayoutOriginal) {
         // ============================================================
@@ -433,9 +465,14 @@ export const processExcelFile = async (
 
         // Verificar si cabe el uniforme completo
         if (uniformY + maxPairHeight > canvasHeight) {
+          console.log(`🆕 [Layout Predeterminado] Creando nueva página. Uniforme: ${row.nombre}, Talla: ${tallaMostrar}`);
           addPage();
           currentPageIndex++;
-          currentElements = [];
+          // Sincronizar currentElements con el estado real de la nueva página
+          const { pages: updatedPages } = useDesignerStore.getState();
+          console.log(`   Total páginas: ${updatedPages.length}, currentPageIndex: ${currentPageIndex}`);
+          currentElements = updatedPages[currentPageIndex] ? [...updatedPages[currentPageIndex]] : [];
+          console.log(`   Elementos en nueva página: ${currentElements.length}`);
         }
 
         // Recalcular Y después de posible cambio de página
@@ -686,9 +723,14 @@ export const processExcelFile = async (
 
         // Verificar si cabe el uniforme completo
         if (currentY + totalHeight > canvasHeight) {
+          console.log(`🆕 [Layout Opción A] Creando nueva página. Uniforme: ${row.nombre}, Talla: ${tallaMostrar}`);
           addPage();
           currentPageIndex++;
-          currentElements = [];
+          // Sincronizar currentElements con el estado real de la nueva página
+          const { pages: updatedPages } = useDesignerStore.getState();
+          console.log(`   Total páginas: ${updatedPages.length}, currentPageIndex: ${currentPageIndex}`);
+          currentElements = updatedPages[currentPageIndex] ? [...updatedPages[currentPageIndex]] : [];
+          console.log(`   Elementos en nueva página: ${currentElements.length}`);
           currentY = 0;
         }
 

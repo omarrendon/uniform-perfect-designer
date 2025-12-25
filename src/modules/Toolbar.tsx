@@ -332,14 +332,30 @@ export const Toolbar: React.FC = () => {
       const getSizeConfig = (tallaExcel: string) => {
         const tallaUpper = tallaExcel.toUpperCase().trim();
 
-        // Para 2XL y 3XL, usar XL como base
-        if (tallaUpper === "2XL" || tallaUpper === "3XL") {
-          return sizeConfigs.find(s => s.size === "XL") || sizeConfigs[2];
-        }
+        // Mapeo de tallas en español a inglés
+        const tallaMapping: { [key: string]: Size } = {
+          // Español
+          'XCH': 'XS',
+          'CH': 'S',
+          'M': 'M',
+          'G': 'L',      // ← CRÍTICO: Grande = Large
+          'XG': 'XL',
+          '2XG': 'XL',
+          '3XG': 'XL',
+          // Inglés (también soportado)
+          'XS': 'XS',
+          'S': 'S',
+          'L': 'L',
+          'XL': 'XL',
+          '2XL': 'XL',
+          '3XL': 'XL',
+        };
 
-        const talla = tallaUpper as Size;
+        // Obtener talla mapeada o usar la original
+        const tallaMapped = tallaMapping[tallaUpper] || tallaUpper as Size;
+
         return (
-          sizeConfigs.find(s => s.size === talla) || sizeConfigs[2]
+          sizeConfigs.find(s => s.size === tallaMapped) || sizeConfigs[2]
         ); // Default M
       };
 
@@ -476,13 +492,15 @@ export const Toolbar: React.FC = () => {
           height: sizeConfig.height,
         };
 
+        const canvasWidth = canvasConfig.width * canvasConfig.pixelsPerCm;
         const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
         const elementGap = 5;
 
         // 1. Crear Jersey ESPALDA (columna 1 - izquierda)
         // Filtrar solo jerseys en la columna 1 (primera columna izquierda)
+        // Usar posición fija (x=0) en lugar de dimensiones variables para evitar problemas con tallas mixtas
         const jerseysCol1 = currentElements.filter(
-          el => el.type === "uniform" && el.part === "jersey" && el.position.x < jerseyDimensions.width + elementGap
+          el => el.type === "uniform" && el.part === "jersey" && el.position.x === 0
         );
 
         let espaldaX = 0;
@@ -496,9 +514,14 @@ export const Toolbar: React.FC = () => {
           // Verificar si cabe en la columna
           if (espaldaY + jerseyDimensions.height > canvasHeight) {
             // No cabe, crear nueva página
+            console.log(`🆕 Creando nueva página para jersey espalda. Uniforme: ${row.nombre}, Talla: ${tallaMostrar}`);
             addPage();
             currentPageIndex++;
-            currentElements = [];
+            // Sincronizar currentElements con el estado real de la nueva página
+            const { pages: updatedPages } = useDesignerStore.getState();
+            console.log(`   Total páginas después de addPage(): ${updatedPages.length}, currentPageIndex: ${currentPageIndex}`);
+            currentElements = updatedPages[currentPageIndex] ? [...updatedPages[currentPageIndex]] : [];
+            console.log(`   Elementos en nueva página: ${currentElements.length}`);
             espaldaX = 0;
             espaldaY = 0;
           }
@@ -590,11 +613,13 @@ export const Toolbar: React.FC = () => {
         }
 
         // 2. Crear Jersey FRENTE (columna 2 - centro)
-        // Filtrar solo jerseys en la columna 2 (segunda columna)
+        // Calcular posición X de la columna 2 basada en el uniforme actual
         const col2X = jerseyDimensions.width + elementGap;
+        // Filtrar jerseys en columna 2 usando posición aproximada para manejar tallas mixtas
+        // Consideramos que están en columna 2 si su X está cerca de col2X (dentro de un rango razonable)
         const jerseysCol2 = currentElements.filter(
           el => el.type === "uniform" && el.part === "jersey" &&
-          el.position.x >= col2X && el.position.x < col2X + jerseyDimensions.width + elementGap
+          el.position.x > elementGap && el.position.x < canvasWidth / 2
         );
 
         let frenteX = col2X;
@@ -608,9 +633,14 @@ export const Toolbar: React.FC = () => {
           // Verificar si cabe en la columna
           if (frenteY + jerseyDimensions.height > canvasHeight) {
             // No cabe, crear nueva página
+            console.log(`🆕 Creando nueva página para jersey frente. Uniforme: ${row.nombre}, Talla: ${tallaMostrar}`);
             addPage();
             currentPageIndex++;
-            currentElements = [];
+            // Sincronizar currentElements con el estado real de la nueva página
+            const { pages: updatedPages } = useDesignerStore.getState();
+            console.log(`   Total páginas después de addPage(): ${updatedPages.length}, currentPageIndex: ${currentPageIndex}`);
+            currentElements = updatedPages[currentPageIndex] ? [...updatedPages[currentPageIndex]] : [];
+            console.log(`   Elementos en nueva página: ${currentElements.length}`);
             frenteX = col2X;
             frenteY = 0;
           }
@@ -694,7 +724,7 @@ export const Toolbar: React.FC = () => {
 
         // Posición X FIJA: PEGADO AL BORDE DERECHO del canvas
         // Esta X NUNCA cambia - todos los shorts van en esta misma X
-        const canvasWidth = canvasConfig.width * canvasConfig.pixelsPerCm;
+        // canvasWidth ya está definido arriba
         const shortsColumnX = canvasWidth - shortsDimensions.width;
 
         // ⚡ CRÍTICO: OBTENER ESTADO FRESCO del store DESPUÉS de agregar jerseys
@@ -753,9 +783,11 @@ export const Toolbar: React.FC = () => {
         // Si no encontró espacio en ninguna página existente, crear nueva
         if (!foundSpace) {
           addPage();
-          currentPageIndex++;
-          shortsPageIndex = currentPageIndex;
-          currentElements = [];
+          // NO incrementar currentPageIndex ni modificar currentElements
+          // porque son para JERSEYS, no para shorts
+          // Los shorts tienen su propio índice independiente
+          const { pages: updatedPages } = useDesignerStore.getState();
+          shortsPageIndex = updatedPages.length - 1; // Última página creada
           pairY = 0;
         }
 
