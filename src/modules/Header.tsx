@@ -40,7 +40,7 @@ import {
   hasSpaceForElement,
 } from "../utils/canvas";
 import type { UniformTemplate, TextElement } from "../types";
-import { GOOGLE_FONTS, loadGoogleFont } from "../utils/fontLoader";
+import { ALL_FONTS, loadFont } from "../utils/fontLoader";
 
 export const Header: React.FC = () => {
   const {
@@ -475,10 +475,10 @@ export const Header: React.FC = () => {
   // Filtrar fuentes basándose en el término de búsqueda
   const filteredFonts = React.useMemo(() => {
     if (!fontSearchTerm || fontSearchTerm.trim() === "") {
-      return [...GOOGLE_FONTS];
+      return [...ALL_FONTS];
     }
     const searchLower = fontSearchTerm.toLowerCase().trim();
-    const filtered = GOOGLE_FONTS.filter(font =>
+    const filtered = ALL_FONTS.filter(font =>
       font.toLowerCase().includes(searchLower)
     );
     console.log(`🔍 Búsqueda: "${fontSearchTerm}" → ${filtered.length} fuentes encontradas`);
@@ -491,7 +491,7 @@ export const Header: React.FC = () => {
       // Cargar la fuente si no es Arial
       if (fontName !== "Arial") {
         try {
-          await loadGoogleFont(fontName);
+          await loadFont(fontName);
         } catch (error) {
           console.error(`Error cargando fuente ${fontName}:`, error);
         }

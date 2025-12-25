@@ -303,8 +303,40 @@ export const GOOGLE_FONTS = [
 
 export type GoogleFont = (typeof GOOGLE_FONTS)[number];
 
+// ============================================
+// SISTEMA DE FUENTES PERSONALIZADAS
+// ============================================
+
+// Lista de fuentes personalizadas (locales)
+export const CUSTOM_FONTS = [
+  "Atlanta College",
+  "Basketball",
+  "Athletic",
+  "Arial Black",
+] as const;
+
+export type CustomFont = (typeof CUSTOM_FONTS)[number];
+
+// Tipo combinado de todas las fuentes disponibles
+export type AvailableFont = GoogleFont | CustomFont;
+
+// Lista completa de fuentes (Google + Personalizadas)
+export const ALL_FONTS: readonly AvailableFont[] = [
+  ...GOOGLE_FONTS,
+  ...CUSTOM_FONTS,
+] as const;
+
 // Cache de fuentes ya cargadas
 const loadedFonts = new Set<string>();
+
+// Registro de fuentes personalizadas con sus rutas
+interface CustomFontConfig {
+  name: string;
+  path: string;
+  format: "truetype" | "opentype" | "woff" | "woff2";
+}
+
+const customFontRegistry: Map<string, CustomFontConfig> = new Map();
 
 /**
  * Carga una fuente de Google Fonts dinámicamente
@@ -347,9 +379,7 @@ export const loadGoogleFont = async (fontName: string): Promise<void> => {
  * Carga múltiples fuentes de Google Fonts
  * @param fontNames Array de nombres de fuentes a cargar
  */
-export const loadMultipleFonts = async (
-  fontNames: string[]
-): Promise<void> => {
+export const loadMultipleFonts = async (fontNames: string[]): Promise<void> => {
   const promises = fontNames
     .filter(font => font !== "Arial" && !loadedFonts.has(font))
     .map(font => loadGoogleFont(font));
@@ -358,12 +388,115 @@ export const loadMultipleFonts = async (
 };
 
 /**
+ * Registra una fuente personalizada para su uso
+ * @param name Nombre de la fuente
+ * @param path Ruta al archivo de fuente (relativa a /public)
+ * @param format Formato del archivo de fuente
+ */
+export const registerCustomFont = (
+  name: string,
+  path: string,
+  format: "truetype" | "opentype" | "woff" | "woff2"
+): void => {
+  customFontRegistry.set(name, { name, path, format });
+};
+
+/**
+ * Carga una fuente personalizada usando @font-face
+ * @param fontName Nombre de la fuente personalizada
+ * @returns Promise que se resuelve cuando la fuente está cargada
+ */
+export const loadCustomFont = async (fontName: string): Promise<void> => {
+  // Si ya está cargada, no hacer nada
+  if (loadedFonts.has(fontName)) {
+    return Promise.resolve();
+  }
+
+  const fontConfig = customFontRegistry.get(fontName);
+  if (!fontConfig) {
+    console.warn(`Fuente personalizada "${fontName}" no está registrada`);
+    return Promise.reject(
+      new Error(`Custom font "${fontName}" not registered`)
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      // Crear la regla @font-face
+      const fontFace = new FontFace(
+        fontConfig.name,
+        `url(${fontConfig.path}) format('${fontConfig.format}')`,
+        {
+          weight: "normal",
+          style: "normal",
+        }
+      );
+
+      // Cargar la fuente
+      fontFace
+        .load()
+        .then(loadedFace => {
+          // Agregar la fuente al documento
+          (document as any).fonts.add(loadedFace);
+          loadedFonts.add(fontName);
+
+          console.log(
+            `✅ Fuente personalizada "${fontName}" cargada exitosamente`
+          );
+          resolve();
+        })
+        .catch(error => {
+          console.error(
+            `Error al cargar la fuente personalizada "${fontName}":`,
+            error
+          );
+          reject(error);
+        });
+    } catch (error) {
+      console.error(`Error al crear FontFace para "${fontName}":`, error);
+      reject(error);
+    }
+  });
+};
+
+/**
+ * Verifica si una fuente es personalizada (local) o de Google Fonts
+ * @param fontName Nombre de la fuente
+ * @returns true si es personalizada, false si es de Google Fonts
+ */
+export const isCustomFont = (fontName: string): boolean => {
+  return CUSTOM_FONTS.includes(fontName as CustomFont);
+};
+
+/**
+ * Carga una fuente (Google o personalizada) dinámicamente
+ * @param fontName Nombre de la fuente a cargar
+ * @returns Promise que se resuelve cuando la fuente está cargada
+ */
+export const loadFont = async (fontName: string): Promise<void> => {
+  // Si es Arial o ya está cargada, no hacer nada
+  if (fontName === "Arial" || loadedFonts.has(fontName)) {
+    return Promise.resolve();
+  }
+
+  // Determinar si es Google Font o personalizada
+  if (isCustomFont(fontName)) {
+    return loadCustomFont(fontName);
+  } else {
+    return loadGoogleFont(fontName);
+  }
+};
+
+/**
  * Valida si una fuente existe en la lista de fuentes disponibles
  * @param fontName Nombre de la fuente a validar
  * @returns true si existe, false si no
  */
 export const isValidFont = (fontName: string): boolean => {
-  return GOOGLE_FONTS.includes(fontName as GoogleFont);
+  return (
+    GOOGLE_FONTS.includes(fontName as GoogleFont) ||
+    CUSTOM_FONTS.includes(fontName as CustomFont)
+  );
 };
 
 /**
@@ -380,4 +513,31 @@ export const getValidFontOrFallback = (
 
   const trimmedFont = fontName.trim();
   return isValidFont(trimmedFont) ? trimmedFont : fallback;
+};
+
+/**
+ * Inicializa el sistema de fuentes personalizadas
+ * Registra todas las fuentes personalizadas con sus rutas
+ */
+export const initializeCustomFonts = (): void => {
+  // Registrar Atlanta College
+  registerCustomFont(
+    "Atlanta College",
+    "/fonts/AtlantaCollege.ttf",
+    "truetype"
+  );
+
+  // Registrar Basketball
+  registerCustomFont("Basketball", "/fonts/Basketball.otf", "opentype");
+
+  // Registrar Athletic
+  registerCustomFont("Athletic", "/fonts/Athletic.ttf", "truetype");
+
+  // Registrar Arial Black (puede estar instalada en el sistema, pero también podemos tener una copia local)
+  registerCustomFont("Arial Black", "/fonts/ArialBlack.ttf", "truetype");
+
+  console.log("✅ Sistema de fuentes personalizadas inicializado");
+  console.log(`📦 Total de fuentes disponibles: ${ALL_FONTS.length}`);
+  console.log(`   - Google Fonts: ${GOOGLE_FONTS.length}`);
+  console.log(`   - Fuentes personalizadas: ${CUSTOM_FONTS.length}`);
 };

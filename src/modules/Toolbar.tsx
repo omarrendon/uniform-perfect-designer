@@ -34,9 +34,9 @@ import { BulkLoadingOverlay } from "../components/BulkLoadingOverlay";
 import { loadImage } from "../utils/imageCache";
 import { compressImageForCanvas } from "../utils/imageCompressorForCanvas";
 import {
-  loadGoogleFont,
+  loadFont,
   getValidFontOrFallback,
-  GOOGLE_FONTS,
+  ALL_FONTS,
 } from "../utils/fontLoader";
 
 export const Toolbar: React.FC = () => {
@@ -465,9 +465,9 @@ export const Toolbar: React.FC = () => {
         // Obtener la fuente de la fila (default "Arial" si no existe)
         const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
 
-        // Cargar la fuente de Google Fonts si no es Arial
+        // Cargar la fuente si no es Arial
         if (fonteFila !== "Arial") {
-          await loadGoogleFont(fonteFila);
+          await loadFont(fonteFila);
         }
 
         // Dimensiones de jersey con rotación 0°
@@ -1421,20 +1421,20 @@ const EditTab: React.FC<{
                   onChange={async e => {
                     const newFont = e.target.value;
                     if (newFont !== "Arial") {
-                      await loadGoogleFont(newFont);
+                      await loadFont(newFont);
                     }
                     onUpdate(element.id, { fontFamily: newFont });
                   }}
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 >
-                  {GOOGLE_FONTS.map(font => (
+                  {ALL_FONTS.map(font => (
                     <option key={font} value={font} style={{ fontFamily: font }}>
                       {font}
                     </option>
                   ))}
                 </select>
                 <p className="text-[10px] text-gray-500 mt-1.5">
-                  Google Fonts disponibles
+                  Fuentes disponibles (Google Fonts + Personalizadas)
                 </p>
               </div>
 
