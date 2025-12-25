@@ -1419,9 +1419,15 @@ const EditTab: React.FC<{
                   <input
                     type="number"
                     value={element.fontSize}
-                    onChange={e =>
-                      onUpdate(element.id, { fontSize: Number(e.target.value) })
-                    }
+                    onChange={e => {
+                      const newSize = Number(e.target.value);
+                      const oldSize = element.fontSize;
+                      onUpdate(element.id, { fontSize: newSize });
+
+                      // Log para debugging de tamaño desde controles
+                      const partName = element.part === 'jersey' ? 'jersey' : element.part === 'shorts' ? 'shorts' : 'desconocido';
+                      console.log(`📏 [TAMAÑO CAMBIADO - Input] "${element.content}" | Parte: ${partName} | Tamaño: ${oldSize}px → ${newSize}px | Pos: (x: ${Math.round(element.position.x)}, y: ${Math.round(element.position.y)})`);
+                    }}
                     min={10}
                     max={200}
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"

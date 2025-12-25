@@ -443,6 +443,10 @@ export const loadCustomFont = async (fontName: string): Promise<void> => {
           console.log(
             `✅ Fuente personalizada "${fontName}" cargada exitosamente`
           );
+          console.log(`   📝 Nombre de familia: ${loadedFace.family}`);
+          console.log(`   📝 Estilo: ${loadedFace.style}`);
+          console.log(`   📝 Peso: ${loadedFace.weight}`);
+          console.log(`   📝 Ruta: ${fontConfig.path}`);
           resolve();
         })
         .catch(error => {

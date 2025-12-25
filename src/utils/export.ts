@@ -1,11 +1,13 @@
 import { toPng } from 'html-to-image';
-import { PDFDocument, PDFImage, rgb, StandardFonts, degrees } from 'pdf-lib';
+import { PDFDocument, PDFImage, PDFFont, rgb, StandardFonts, degrees } from 'pdf-lib';
 import type { ExportOptions, UniformTemplate, TextElement } from '../types';
 import { useDesignerStore } from '../store/desingerStore';
 import { convertImageRGBtoCMYK, type CMYKConversionOptions } from './colorConversion';
 import { addPrintMarks, expandPageForMarks, generatePrintFileName } from './printMarks';
 import { runPreflight, generatePreflightReport } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
+import { CUSTOM_FONTS } from './fontLoader';
+import fontkit from '@pdf-lib/fontkit';
 
 /**
  * Sistema de transformación de coordenadas Canvas (Konva) → PDF
@@ -190,6 +192,86 @@ const convertToPng = async (imageDataUrl: string): Promise<string> => {
 };
 
 /**
+ * Mapa de fuentes personalizadas con sus rutas
+ */
+const CUSTOM_FONT_PATHS: Record<string, string> = {
+  "Atlanta College": "/fonts/AtlantaCollege.ttf",
+  "Basketball": "/fonts/Basketball.otf",
+  "Athletic": "/fonts/Athletic.ttf",
+  "Arial Black": "/fonts/ArialBlack.ttf",
+};
+
+/**
+ * Embebe fuentes personalizadas en el PDF
+ * @param pdfDoc Documento PDF
+ * @returns Mapa de nombre de fuente → PDFFont embedida
+ */
+const embedCustomFonts = async (pdfDoc: PDFDocument): Promise<Map<string, PDFFont>> => {
+  const fontMap = new Map<string, PDFFont>();
+
+  // Registrar fontkit para soportar TTF/OTF
+  pdfDoc.registerFontkit(fontkit);
+
+  // Embeder cada fuente personalizada
+  for (const fontName of CUSTOM_FONTS) {
+    const fontPath = CUSTOM_FONT_PATHS[fontName];
+    if (!fontPath) {
+      console.warn(`No se encontró ruta para la fuente personalizada: ${fontName}`);
+      continue;
+    }
+
+    try {
+      console.log(`  📝 Cargando fuente personalizada: ${fontName} desde ${fontPath}`);
+
+      // Cargar el archivo de fuente
+      const response = await fetch(fontPath);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch font: ${response.statusText}`);
+      }
+
+      const fontBytes = await response.arrayBuffer();
+
+      // Embeder la fuente en el PDF
+      const customFont = await pdfDoc.embedFont(fontBytes);
+      fontMap.set(fontName, customFont);
+
+      console.log(`  ✓ Fuente "${fontName}" embedida exitosamente`);
+    } catch (error) {
+      console.error(`Error al embeber fuente "${fontName}":`, error);
+      // Continuar con otras fuentes si una falla
+    }
+  }
+
+  return fontMap;
+};
+
+/**
+ * Selecciona la fuente correcta para un texto basándose en fontFamily y fontWeight
+ * @param fontFamily Nombre de la fuente
+ * @param fontWeight Peso de la fuente ('normal' o 'bold')
+ * @param standardFont Fuente estándar (Helvetica)
+ * @param standardFontBold Fuente estándar bold (Helvetica Bold)
+ * @param customFonts Mapa de fuentes personalizadas embedidas
+ * @returns La fuente PDF correcta
+ */
+const selectFont = (
+  fontFamily: string,
+  fontWeight: string,
+  standardFont: PDFFont,
+  standardFontBold: PDFFont,
+  customFonts: Map<string, PDFFont>
+): PDFFont => {
+  // Si la fuente es personalizada y está embedida, usarla
+  if (customFonts.has(fontFamily)) {
+    return customFonts.get(fontFamily)!;
+  }
+
+  // Si es fuente estándar o Google Font, usar Helvetica como fallback
+  // (las Google Fonts no se pueden embeber directamente en PDF)
+  return fontWeight === 'bold' ? standardFontBold : standardFont;
+};
+
+/**
  * Crea una imagen CMYK para pdf-lib con validación preflight
  */
 const embedImageWithCMYK = async (
@@ -352,6 +434,58 @@ export const exportAsPNG = async (
 };
 
 /**
+ * Asegura que todas las fuentes personalizadas estén cargadas
+ */
+const ensureCustomFontsLoaded = async (elements: any[]): Promise<void> => {
+  const fontsToLoad = new Set<string>();
+
+  // Identificar fuentes personalizadas usadas
+  elements.forEach(element => {
+    if (element.type === 'text' && element.fontFamily) {
+      if (CUSTOM_FONTS.includes(element.fontFamily as any)) {
+        fontsToLoad.add(element.fontFamily);
+      }
+    }
+  });
+
+  if (fontsToLoad.size === 0) return;
+
+  console.log(`📝 Verificando ${fontsToLoad.size} fuentes personalizadas...`);
+  console.log('📋 Fuentes en document.fonts:');
+
+  // Log de todas las fuentes cargadas para debugging
+  Array.from(document.fonts).forEach((font: any) => {
+    console.log(`   - "${font.family}" (peso: ${font.weight}, estilo: ${font.style}, estado: ${font.status})`);
+  });
+
+  // Esperar a que todas las fuentes estén listas
+  await document.fonts.ready;
+
+  // Esperar a que todas las fuentes personalizadas estén listas
+  const fontPromises = Array.from(fontsToLoad).map(async (fontName) => {
+    try {
+      // Buscar la fuente en document.fonts
+      const fontFace = Array.from(document.fonts).find(
+        (f: any) => f.family === fontName || f.family.toLowerCase() === fontName.toLowerCase()
+      );
+
+      if (fontFace) {
+        await fontFace.load();
+        console.log(`  ✓ Fuente "${fontName}" lista (familia real: "${fontFace.family}")`);
+      } else {
+        console.warn(`  ⚠️ Fuente "${fontName}" NO encontrada en document.fonts`);
+        console.warn(`  📋 Fuentes disponibles:`, Array.from(document.fonts).map((f: any) => f.family));
+      }
+    } catch (error) {
+      console.error(`  ✗ Error al cargar fuente "${fontName}":`, error);
+    }
+  });
+
+  await Promise.all(fontPromises);
+  console.log('✓ Todas las fuentes personalizadas procesadas');
+};
+
+/**
  * NUEVA: Exporta como PNG componiendo directamente con imágenes originales
  * Sin usar html-to-image ni Konva, mantiene la calidad completa de las imágenes
  */
@@ -366,6 +500,9 @@ export const exportAsPNGDirect = async (
     const elements = store.elements; // Elementos de la página actual
     const canvasConfig = store.canvasConfig;
     const uniformSizesConfig = store.uniformSizesConfig;
+
+    // Asegurar que las fuentes personalizadas estén cargadas
+    await ensureCustomFontsLoaded(elements);
 
     // Configuración de escala para alta resolución
     // Reducir a 5x para evitar problemas de memoria con canvas muy grandes
@@ -597,7 +734,7 @@ export const exportAsPNGDirect = async (
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
 
-        console.log(`  📝 Dibujando texto: "${textEl.content}" en posición (${textEl.position.x}, ${textEl.position.y})`);
+        console.log(`  📝 Dibujando texto: "${textEl.content}" | Fuente: ${textEl.fontFamily || 'Arial'}`);
 
         // Escalar posición y tamaño (ajustadas al bounding box) - SIN offsets por ahora
         // Usar las mismas coordenadas que en el canvas para ver si coinciden
@@ -609,11 +746,23 @@ export const exportAsPNGDirect = async (
         ctx.save();
 
         // Configurar texto EXACTAMENTE como Konva
-        const fontWeight = textEl.fontWeight === 'bold' ? 'bold' : 'normal';
         const fontFamily = textEl.fontFamily || 'Arial';
-        ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}, sans-serif`;
+        const isCustomFont = CUSTOM_FONTS.includes(fontFamily as any);
+
+        // Para fuentes personalizadas, NO usar bold (usar normal weight)
+        // porque si la fuente no tiene variante bold, el navegador usa Arial como fallback
+        const fontWeight = isCustomFont ? 'normal' : (textEl.fontWeight === 'bold' ? 'bold' : 'normal');
+
+        // Para fuentes personalizadas con espacios, necesitamos usar comillas
+        const fontFamilyFormatted = fontFamily.includes(' ')
+          ? `"${fontFamily}"`
+          : fontFamily;
+
+        ctx.font = `${fontWeight} ${fontSize}px ${fontFamilyFormatted}, sans-serif`;
         ctx.fillStyle = textEl.fontColor || '#000000';
         ctx.globalAlpha = textEl.opacity || 1;
+
+        console.log(`    Font aplicada: ${ctx.font} | Es custom: ${isCustomFont}`);
 
         // IMPORTANTE: En Konva sin width, (x,y) es SIEMPRE la esquina superior izquierda
         // El textAlign NO tiene efecto sin width especificado
@@ -988,9 +1137,14 @@ export const exportAsPDFDirect = async (
     // Crear página
     let page = pdfDoc.addPage([widthInPoints, heightInPoints]);
 
-    // Embeber fuente para texto
+    // Embeber fuentes estándar
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    // Embeber fuentes personalizadas
+    console.log('📝 Embebiendo fuentes personalizadas en PDF...');
+    const customFonts = await embedCustomFonts(pdfDoc);
+    console.log(`✓ ${customFonts.size} fuentes personalizadas embedidas`);
 
     // Estadísticas de TAC
     let maxTAC = 0;
@@ -1182,15 +1336,23 @@ export const exportAsPDFDirect = async (
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
 
-        console.log(`  📝 Procesando texto: "${textEl.content}"`);
+        console.log(`  📝 Procesando texto: "${textEl.content}" | Fuente: ${textEl.fontFamily || 'Arial'}`);
 
         // Convertir tamaño de fuente de píxeles del canvas a puntos del PDF
         // fontSize en canvas está en píxeles, necesitamos escalarlo a puntos PDF
         // usando la misma proporción que para las dimensiones (28.35 / pixelsPerCm)
         const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
 
+        // Seleccionar la fuente correcta (personalizada o estándar)
+        const textFont = selectFont(
+          textEl.fontFamily || 'Arial',
+          textEl.fontWeight || 'normal',
+          font,
+          fontBold,
+          customFonts
+        );
+
         // Calcular ancho del texto
-        const textFont = textEl.fontWeight === 'bold' ? fontBold : font;
         const textWidth = textFont.widthOfTextAtSize(textEl.content, fontSizeInPoints);
 
         // Usar función de transformación matricial para convertir coordenadas
@@ -1211,12 +1373,12 @@ export const exportAsPDFDirect = async (
         const g = parseInt(hexColor.slice(3, 5), 16) / 255;
         const b = parseInt(hexColor.slice(5, 7), 16) / 255;
 
-        // Renderizar texto
+        // Renderizar texto con la fuente correcta
         page.drawText(textEl.content, {
           x: pdfX,
           y: pdfY,
           size: fontSizeInPoints,
-          font: textEl.fontWeight === 'bold' ? fontBold : font,
+          font: textFont,
           color: rgb(r, g, b),
           opacity: textEl.opacity,
           rotate: degrees(textEl.rotation),
@@ -1414,6 +1576,9 @@ export const exportMultiPagePDFDirect = async (
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+      // Embeber fuentes personalizadas
+      const customFonts = await embedCustomFonts(pdfDoc);
+
       // Obtener elementos de esta página directamente
       const elements = store.pages[pageIndex] || [];
 
@@ -1607,8 +1772,16 @@ export const exportMultiPagePDFDirect = async (
           // usando la misma proporción que para las dimensiones (28.35 / pixelsPerCm)
           const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
 
+          // Seleccionar la fuente correcta (personalizada o estándar)
+          const textFont = selectFont(
+            textEl.fontFamily || 'Arial',
+            textEl.fontWeight || 'normal',
+            font,
+            fontBold,
+            customFonts
+          );
+
           // Calcular ancho del texto
-          const textFont = textEl.fontWeight === 'bold' ? fontBold : font;
           const textWidth = textFont.widthOfTextAtSize(textEl.content, fontSizeInPoints);
 
           // Usar función de transformación matricial para convertir coordenadas
@@ -1632,7 +1805,7 @@ export const exportMultiPagePDFDirect = async (
             x: pdfX,
             y: pdfY,
             size: fontSizeInPoints,
-            font: textEl.fontWeight === 'bold' ? fontBold : font,
+            font: textFont,
             color: rgb(r, g, b),
             opacity: textEl.opacity,
             rotate: degrees(textEl.rotation),
