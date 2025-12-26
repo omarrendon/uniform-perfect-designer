@@ -11,7 +11,7 @@ interface UniformSizesModalProps {
   onClose: () => void;
 }
 
-const SIZES: SizeSpanish[] = ['XCH', 'CH', 'M', 'G', 'XG', '2XG', '3XG'];
+const SIZES: SizeSpanish[] = ['XCH', 'CH', 'M', 'G', 'XG'];
 
 const SIZE_LABELS: Record<SizeSpanish, string> = {
   'XCH': 'Extra Chica',
@@ -19,8 +19,6 @@ const SIZE_LABELS: Record<SizeSpanish, string> = {
   'M': 'Mediana',
   'G': 'Grande',
   'XG': 'Extra Grande',
-  '2XG': '2 Extra Grande',
-  '3XG': '3 Extra Grande',
 };
 
 export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({

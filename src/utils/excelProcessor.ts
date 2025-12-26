@@ -17,10 +17,11 @@ export interface ExcelProcessorCallbacks {
  * Parsea y valida el tamaño de fuente desde Excel
  * @param valor - Valor del Excel (puede ser número o string)
  * @param defaultSize - Tamaño por defecto si no es válido
- * @returns Tamaño de fuente válido (mínimo 8, sin máximo)
+ * @returns Tamaño de fuente válido (mínimo 8, sin máximo), o null si está vacío
  */
-const parseFontSize = (valor: any, defaultSize: number): number => {
-  if (!valor) return defaultSize;
+const parseFontSize = (valor: any, defaultSize: number): number | null => {
+  // Si está vacío, retornar null para usar configuración de talla
+  if (!valor || String(valor).trim() === '') return null;
 
   const size = typeof valor === 'number' ? valor : parseInt(String(valor), 10);
 
@@ -76,6 +77,50 @@ interface SizeTextConfig {
 }
 
 const TEXT_POSITIONS_BY_SIZE: Record<string, SizeTextConfig> = {
+  'XS': {
+    jerseyFront: {
+      offsetX: 296,      // Offset desde jerseyFrentePos (estimado)
+      offsetY: 107,
+      fontSize: 105.14
+    },
+    jerseyBackNumber: {
+      offsetX: 128,      // Offset desde jerseyEspaldaPos (estimado)
+      offsetY: 198,      // Estimado basado en patrón de M
+      fontSize: 286.28
+    },
+    jerseyBackName: {
+      offsetX: 164,      // Offset desde jerseyEspaldaPos (estimado)
+      offsetY: 130,      // Estimado basado en patrón de M
+      fontSize: 81.98
+    },
+    shortsRight: {
+      offsetX: 307,      // 337 - 30 (ajustado 30px a la izquierda)
+      offsetY: 278,      // 293 - 15 (ajustado 15px más arriba)
+      fontSize: 134.34
+    }
+  },
+  'S': {
+    jerseyFront: {
+      offsetX: 312,      // Offset desde jerseyFrentePos (estimado)
+      offsetY: 113,
+      fontSize: 107.99
+    },
+    jerseyBackNumber: {
+      offsetX: 145,      // Offset desde jerseyEspaldaPos (actualizado)
+      offsetY: 222,      // Estimado basado en nuevas coordenadas
+      fontSize: 283.43
+    },
+    jerseyBackName: {
+      offsetX: 163,      // Offset desde jerseyEspaldaPos (actualizado)
+      offsetY: 136,      // Estimado basado en nuevas coordenadas (884 - 748)
+      fontSize: 86.52
+    },
+    shortsRight: {
+      offsetX: 305,      // Actualizado basado en nuevas coordenadas (873 - ~568)
+      offsetY: 280,      // Actualizado basado en nuevas coordenadas (870 - ~590)
+      fontSize: 145.73
+    }
+  },
   'M': {
     jerseyFront: {
       offsetX: 330,      // Offset desde jerseyFrentePos
@@ -98,7 +143,51 @@ const TEXT_POSITIONS_BY_SIZE: Record<string, SizeTextConfig> = {
       fontSize: 150.47
     }
   },
-  // Otras tallas se agregarán aquí conforme se configuren
+  'L': {
+    jerseyFront: {
+      offsetX: 351,      // Offset desde jerseyFrentePos (estimado)
+      offsetY: 128,
+      fontSize: 119.38
+    },
+    jerseyBackNumber: {
+      offsetX: 160,      // Offset desde jerseyEspaldaPos (estimado)
+      offsetY: 225,      // Estimado basado en patrón
+      fontSize: 311.90
+    },
+    jerseyBackName: {
+      offsetX: 196,      // Offset desde jerseyEspaldaPos (estimado)
+      offsetY: 131,      // Estimado basado en patrón
+      fontSize: 88.02
+    },
+    shortsRight: {
+      offsetX: 307,      // Usando patrón similar a otras tallas
+      offsetY: 278,      // Usando patrón similar a otras tallas
+      fontSize: 147.05
+    }
+  },
+  'XL': {
+    jerseyFront: {
+      offsetX: 357,      // Offset desde jerseyFrentePos (x: 0)
+      offsetY: 137,
+      fontSize: 121.64
+    },
+    jerseyBackNumber: {
+      offsetX: 137,      // Offset desde jerseyEspaldaPos (x: 634) → 771 - 634 = 137
+      offsetY: 246,      // Offset desde jerseyEspaldaPos (y: 0) → 246 - 0 = 246
+      fontSize: 330.79
+    },
+    jerseyBackName: {
+      offsetX: 211,      // Offset desde jerseyEspaldaPos (x: 634) → 845 - 634 = 211
+      offsetY: 149,      // Offset desde jerseyEspaldaPos (y: 0) → 149 - 0 = 149
+      fontSize: 98.06
+    },
+    shortsRight: {
+      offsetX: 389,      // Offset desde shortRightPos (x: 0) → 389 - 0 = 389
+      offsetY: 332,      // Offset desde shortRightPos (y: 1550) → 1882 - 1550 = 332
+      fontSize: 161.13
+    }
+  },
+  // Todas las tallas principales están configuradas
 };
 
 /**
@@ -150,10 +239,6 @@ export const processExcelFile = async (
       'g': 'G',
       'xl': 'XG',
       'xg': 'XG',
-      '2xl': '2XG',
-      '2xg': '2XG',
-      '3xl': '3XG',
-      '3xg': '3XG',
     };
 
     // Mapeo de género Excel a tipo Gender
@@ -411,7 +496,7 @@ export const processExcelFile = async (
     // DEFINIR QUÉ TALLAS USAN QUÉ LAYOUT
     // ============================================================
     const tallasLayoutOriginal = ['XS', 'S', 'M', 'L'];      // 2 columnas horizontales
-    const tallasLayoutOpcionA = ['XL', '2XL'];               // Playeras horizontales + shorts verticales
+    const tallasLayoutOpcionA = ['XL'];                      // Playeras horizontales + shorts verticales
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -428,9 +513,9 @@ export const processExcelFile = async (
       // Obtener la talla mapeada (para decisiones de layout)
       const tallaMapping: { [key: string]: Size } = {
         'XCH': 'XS', 'CH': 'S', 'M': 'M',
-        'G': 'L', 'XG': 'XL', '2XG': 'XL', '3XG': 'XL',
+        'G': 'L', 'XG': 'XL',
         'XS': 'XS', 'S': 'S', 'L': 'L',
-        'XL': 'XL', '2XL': 'XL', '3XL': 'XL',
+        'XL': 'XL',
       };
       const tallaMapeada = tallaMapping[tallaMostrar] || tallaMostrar;
 
@@ -564,7 +649,8 @@ export const processExcelFile = async (
             // Usar offsets relativos a la posición del jersey frente
             numeroFrenteX = jerseyFrentePos.x + textPosConfig.jerseyFront.offsetX;
             numeroFrenteY = jerseyFrentePos.y + textPosConfig.jerseyFront.offsetY;
-            numeroFrenteFontSize = textPosConfig.jerseyFront.fontSize;
+            // Si el Excel tiene valor, usar ese; si no, usar el configurado
+            numeroFrenteFontSize = tamanoNumeroFrente ?? textPosConfig.jerseyFront.fontSize;
           } else {
             // Posición calculada (código original)
             const numeroStr = String(row.numero);
@@ -572,7 +658,7 @@ export const processExcelFile = async (
             const ajusteDigitos = cantidadDigitos === 1 ? 20 : -20;
             numeroFrenteX = jerseyFrentePos.x + jerseyDimensions.width * 0.75 - 85 + ajusteDigitos;
             numeroFrenteY = jerseyFrentePos.y + jerseyDimensions.height * 0.30 - 100;
-            numeroFrenteFontSize = tamanoNumeroFrente;
+            numeroFrenteFontSize = tamanoNumeroFrente ?? 24; // Default 24px si no hay configuración ni Excel
           }
 
           const numeroFrenteText: TextElement = {
@@ -637,12 +723,13 @@ export const processExcelFile = async (
             // Usar offsets relativos a la posición del jersey espalda
             numeroEspaldaX = jerseyEspaldaPos.x + textPosConfig.jerseyBackNumber.offsetX;
             numeroEspaldaY = jerseyEspaldaPos.y + textPosConfig.jerseyBackNumber.offsetY;
-            numeroEspaldaFontSize = textPosConfig.jerseyBackNumber.fontSize;
+            // Si el Excel tiene valor, usar ese; si no, usar el configurado
+            numeroEspaldaFontSize = tamanoNumeroEspalda ?? textPosConfig.jerseyBackNumber.fontSize;
           } else {
             // Posición calculada (código original)
             numeroEspaldaX = jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 130;
             numeroEspaldaY = jerseyEspaldaPos.y + jerseyDimensions.height * 0.35;
-            numeroEspaldaFontSize = tamanoNumeroEspalda;
+            numeroEspaldaFontSize = tamanoNumeroEspalda ?? 40; // Default 40px si no hay configuración ni Excel
           }
 
           const numeroEspaldaText: TextElement = {
@@ -682,12 +769,13 @@ export const processExcelFile = async (
             // Usar offsets relativos a la posición del jersey espalda
             nombreEspaldaX = jerseyEspaldaPos.x + textPosConfig.jerseyBackName.offsetX;
             nombreEspaldaY = jerseyEspaldaPos.y + textPosConfig.jerseyBackName.offsetY;
-            nombreEspaldaFontSize = textPosConfig.jerseyBackName.fontSize;
+            // Si el Excel tiene valor, usar ese; si no, usar el configurado
+            nombreEspaldaFontSize = tamanoNombreEspalda ?? textPosConfig.jerseyBackName.fontSize;
           } else {
             // Posición calculada (código original)
             nombreEspaldaX = jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 120;
             nombreEspaldaY = jerseyEspaldaPos.y + 130;
-            nombreEspaldaFontSize = tamanoNombreEspalda;
+            nombreEspaldaFontSize = tamanoNombreEspalda ?? 16; // Default 16px si no hay configuración ni Excel
           }
 
           // Ajustar tamaño de fuente según longitud del nombre para que quepa en el jersey
@@ -813,12 +901,13 @@ export const processExcelFile = async (
             // Usar offsets relativos a la posición del short derecho
             numeroShortX = shortRightPos.x + textPosConfig.shortsRight.offsetX;
             numeroShortY = shortRightPos.y + textPosConfig.shortsRight.offsetY;
+            // Para shorts: SIEMPRE usar el tamaño configurado (ignorar Excel)
             numeroShortFontSize = textPosConfig.shortsRight.fontSize;
           } else {
             // Posición calculada (código original)
             numeroShortX = shortRightPos.x + shortsDimensions.width * 0.70 - 300 + 30;
             numeroShortY = shortRightPos.y + shortsDimensions.height * 0.55 - 90 + 50;
-            numeroShortFontSize = tamanoNumeroShort;
+            numeroShortFontSize = tamanoNumeroShort ?? 24; // Default 24px si no hay configuración ni Excel
           }
 
           const numeroShortRightText: TextElement = {
@@ -832,7 +921,7 @@ export const processExcelFile = async (
             },
             dimensions: { width: 40, height: 30 },
             rotation: 180, // Rotado 180° como el short
-            zIndex: currentElements.length + 1000, // zIndex alto para estar al frente
+            zIndex: currentElements.length + 2000, // zIndex muy alto para estar completamente al frente
             locked: false,
             visible: true,
             content: String(row.numero),
@@ -847,6 +936,9 @@ export const processExcelFile = async (
 
           currentElements.push(numeroShortRightText);
           addElement(numeroShortRightText, currentPageIndex);
+
+          // Log para debugging
+          console.log(`🩳 [NÚMERO SHORT CREADO] "${row.numero}" | Pos: (${Math.round(numeroShortX)}, ${Math.round(numeroShortY)}) | Fuente: ${Math.round(numeroShortFontSize)}px | Color: ${colorNumeroShort} | zIndex: ${currentElements.length + 2000}`);
         }
 
       } else if (usarLayoutOpcionA) {
@@ -884,6 +976,9 @@ export const processExcelFile = async (
         // JERSEY FRENTE (izquierda)
         const jerseyFrentePos = { x: 0, y: currentY };
 
+        // Log de debugging para calcular offsets - Layout A
+        console.log(`👕 [JERSEY FRENTE - Layout A] Talla: ${tallaMostrar} | Pos base: (x: ${Math.round(jerseyFrentePos.x)}, y: ${Math.round(jerseyFrentePos.y)})`);
+
         const newJerseyFrente: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
@@ -905,10 +1000,24 @@ export const processExcelFile = async (
 
         // Número en el frente (pecho derecho, 10cm más arriba, ajustado según dígitos)
         if (row.numero) {
-          // Ajustar posición según cantidad de dígitos
-          const numeroStr = String(row.numero);
-          const cantidadDigitos = numeroStr.length;
-          const ajusteDigitos = cantidadDigitos === 1 ? 20 : -20; // 1 dígito: +2cm, 2+ dígitos: -2cm
+          // Usar posición configurada o calcular
+          let numeroFrenteX, numeroFrenteY, numeroFrenteFontSize;
+
+          if (textPosConfig) {
+            // Usar offsets relativos a la posición del jersey frente
+            numeroFrenteX = jerseyFrentePos.x + textPosConfig.jerseyFront.offsetX;
+            numeroFrenteY = jerseyFrentePos.y + textPosConfig.jerseyFront.offsetY;
+            // Si el Excel tiene valor, usar ese; si no, usar el configurado
+            numeroFrenteFontSize = tamanoNumeroFrente ?? textPosConfig.jerseyFront.fontSize;
+          } else {
+            // Posición calculada (código original)
+            const numeroStr = String(row.numero);
+            const cantidadDigitos = numeroStr.length;
+            const ajusteDigitos = cantidadDigitos === 1 ? 20 : -20; // 1 dígito: +2cm, 2+ dígitos: -2cm
+            numeroFrenteX = jerseyFrentePos.x + jerseyDimensions.width * 0.75 - 85 + ajusteDigitos;
+            numeroFrenteY = jerseyFrentePos.y + jerseyDimensions.height * 0.30 - 100;
+            numeroFrenteFontSize = tamanoNumeroFrente ?? 24;
+          }
 
           const numeroFrenteText: TextElement = {
             id: generateId("text"),
@@ -916,8 +1025,8 @@ export const processExcelFile = async (
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyFrentePos.x + jerseyDimensions.width * 0.75 - 85 + ajusteDigitos,
-              y: jerseyFrentePos.y + jerseyDimensions.height * 0.30 - 100,
+              x: numeroFrenteX,
+              y: numeroFrenteY,
             },
             dimensions: { width: 30, height: 25 },
             rotation: 0,
@@ -926,7 +1035,7 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.numero),
             fontFamily: fonteFila,
-            fontSize: tamanoNumeroFrente,
+            fontSize: numeroFrenteFontSize,
             fontColor: colorNumeroFrente,
             textAlign: "center",
             fontWeight: "bold",
@@ -943,6 +1052,9 @@ export const processExcelFile = async (
           x: jerseyDimensions.width + elementGap,
           y: currentY
         };
+
+        // Log de debugging para calcular offsets - Layout A
+        console.log(`👕 [JERSEY ESPALDA - Layout A] Talla: ${tallaMostrar} | Pos base: (x: ${Math.round(jerseyEspaldaPos.x)}, y: ${Math.round(jerseyEspaldaPos.y)})`);
 
         const newJerseyEspalda: UniformTemplate = {
           id: generateId("uniform"),
@@ -965,14 +1077,30 @@ export const processExcelFile = async (
 
         // Número trasero (10cm a la izquierda)
         if (row.numero) {
+          // Usar posición configurada o calcular
+          let numeroEspaldaX, numeroEspaldaY, numeroEspaldaFontSize;
+
+          if (textPosConfig) {
+            // Usar offsets relativos a la posición del jersey espalda
+            numeroEspaldaX = jerseyEspaldaPos.x + textPosConfig.jerseyBackNumber.offsetX;
+            numeroEspaldaY = jerseyEspaldaPos.y + textPosConfig.jerseyBackNumber.offsetY;
+            // Si el Excel tiene valor, usar ese; si no, usar el configurado
+            numeroEspaldaFontSize = tamanoNumeroEspalda ?? textPosConfig.jerseyBackNumber.fontSize;
+          } else {
+            // Posición calculada (código original)
+            numeroEspaldaX = jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 130;
+            numeroEspaldaY = jerseyEspaldaPos.y + jerseyDimensions.height * 0.35;
+            numeroEspaldaFontSize = tamanoNumeroEspalda ?? 40;
+          }
+
           const numeroEspaldaText: TextElement = {
             id: generateId("text"),
             type: "text",
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 130,
-              y: jerseyEspaldaPos.y + jerseyDimensions.height * 0.35,
+              x: numeroEspaldaX,
+              y: numeroEspaldaY,
             },
             dimensions: { width: 60, height: 40 },
             rotation: 0,
@@ -981,7 +1109,7 @@ export const processExcelFile = async (
             visible: true,
             content: String(row.numero),
             fontFamily: fonteFila,
-            fontSize: tamanoNumeroEspalda,
+            fontSize: numeroEspaldaFontSize,
             fontColor: colorNumeroEspalda,
             textAlign: "center",
             fontWeight: "bold",
@@ -995,23 +1123,69 @@ export const processExcelFile = async (
 
         // Nombre en la espalda (13cm abajo desde la parte superior, 6cm a la izquierda)
         if (row.nombre) {
+          const nombreTexto = String(row.nombre);
+
+          // Usar posición configurada o calcular
+          let nombreEspaldaX, nombreEspaldaY, nombreEspaldaFontSize;
+
+          if (textPosConfig) {
+            // Usar offsets relativos a la posición del jersey espalda
+            nombreEspaldaX = jerseyEspaldaPos.x + textPosConfig.jerseyBackName.offsetX;
+            nombreEspaldaY = jerseyEspaldaPos.y + textPosConfig.jerseyBackName.offsetY;
+            // Si el Excel tiene valor, usar ese; si no, usar el configurado
+            nombreEspaldaFontSize = tamanoNombreEspalda ?? textPosConfig.jerseyBackName.fontSize;
+
+            // Mover nombre a la izquierda según cantidad de letras
+            if (nombreTexto.length > 5) {
+              let desplazamientoIzquierda = 0;
+              let desplazamientoAbajo = 0;
+
+              if (nombreTexto.length >= 6 && nombreTexto.length <= 7) {
+                desplazamientoIzquierda = 40;
+              } else if (nombreTexto.length >= 8) {
+                desplazamientoIzquierda = 45;
+                desplazamientoAbajo = 15; // Bajar 15px para nombres muy largos
+              }
+
+              nombreEspaldaX = nombreEspaldaX - desplazamientoIzquierda;
+              nombreEspaldaY = nombreEspaldaY + desplazamientoAbajo;
+              console.log(`⬅️ [DESPLAZAMIENTO NOMBRE - Layout A] "${nombreTexto}" (${nombreTexto.length} letras, Talla: ${tallaMapeada}) | Desplazado ${desplazamientoIzquierda}px izq, ${desplazamientoAbajo}px abajo`);
+            }
+          } else {
+            // Posición calculada (código original)
+            nombreEspaldaX = jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 120;
+            nombreEspaldaY = jerseyEspaldaPos.y + 130;
+            nombreEspaldaFontSize = tamanoNombreEspalda ?? 16;
+          }
+
+          // Ajustar tamaño de fuente según longitud del nombre para que quepa en el jersey (Layout A)
+          const anchoMaximoNombre = jerseyDimensions.width * 0.75; // 75% del ancho del jersey
+          const anchoAproximadoTexto = nombreEspaldaFontSize * nombreTexto.length * 0.75; // Factor 0.75 para fuentes bold
+
+          if (anchoAproximadoTexto > anchoMaximoNombre) {
+            // Reducir proporcionalmente el tamaño de fuente
+            const factorReduccion = anchoMaximoNombre / anchoAproximadoTexto;
+            nombreEspaldaFontSize = Math.max(35, nombreEspaldaFontSize * factorReduccion); // Mínimo 35px
+            console.log(`📐 [AJUSTE NOMBRE - Layout A] "${nombreTexto}" (${nombreTexto.length} letras) | Fuente ajustada: ${Math.round(nombreEspaldaFontSize)}px | Ancho estimado: ${Math.round(nombreEspaldaFontSize * nombreTexto.length * 0.75)}px / ${Math.round(anchoMaximoNombre)}px`);
+          }
+
           const nombreEspaldaText: TextElement = {
             id: generateId("text"),
             type: "text",
             part: "jersey",
             size: tallaMostrar as any,
             position: {
-              x: jerseyEspaldaPos.x + jerseyDimensions.width / 2 - 120,
-              y: jerseyEspaldaPos.y + 130,
+              x: nombreEspaldaX,
+              y: nombreEspaldaY,
             },
             dimensions: { width: 120, height: 30 },
             rotation: 0,
             zIndex: currentElements.length,
             locked: false,
             visible: true,
-            content: String(row.nombre).toUpperCase(),
+            content: nombreTexto.toUpperCase(),
             fontFamily: fonteFila,
-            fontSize: tamanoNombreEspalda,
+            fontSize: nombreEspaldaFontSize,
             fontColor: colorNombreEspalda,
             textAlign: "center",
             fontWeight: "bold",
@@ -1051,6 +1225,9 @@ export const processExcelFile = async (
         const shortRightY = shortLeftY + shortsDimensions.height + elementGap;
         const shortRightPos = { x: 0, y: shortRightY };
 
+        // Log de debugging para calcular offsets - Layout A
+        console.log(`🩳 [SHORT DERECHO - Layout A] Talla: ${tallaMostrar} | Pos base: (x: ${Math.round(shortRightPos.x)}, y: ${Math.round(shortRightPos.y)})`);
+
         const newShortRight: UniformTemplate = {
           id: generateId("uniform"),
           type: "uniform",
@@ -1075,23 +1252,39 @@ export const processExcelFile = async (
         // Ajustado: -40cm izquierda, -13cm arriba (considerando rotación 180°)
         // Solo se agrega si tamano_numero_short tiene un valor
         if (row.numero && row.tamano_numero_short) {
+          // Usar posición configurada o calcular
+          let numeroShortX, numeroShortY, numeroShortFontSize;
+
+          if (textPosConfig) {
+            // Usar offsets relativos a la posición del short derecho
+            numeroShortX = shortRightPos.x + textPosConfig.shortsRight.offsetX;
+            numeroShortY = shortRightPos.y + textPosConfig.shortsRight.offsetY;
+            // Para shorts: SIEMPRE usar el tamaño configurado (ignorar Excel)
+            numeroShortFontSize = textPosConfig.shortsRight.fontSize;
+          } else {
+            // Posición calculada (código original)
+            numeroShortX = shortRightPos.x + shortsDimensions.width * 0.70 - 300 + 30;
+            numeroShortY = shortRightPos.y + shortsDimensions.height * 0.55 - 90 + 50;
+            numeroShortFontSize = tamanoNumeroShort ?? 24;
+          }
+
           const numeroShortRightText: TextElement = {
             id: generateId("text"),
             type: "text",
             part: "shorts",
             size: tallaMostrar as any,
             position: {
-              x: shortRightPos.x + shortsDimensions.width * 0.70 - 300 + 30, // +3cm a la derecha
-              y: shortRightPos.y + shortsDimensions.height * 0.55 - 90 + 50, // +5cm hacia abajo
+              x: numeroShortX,
+              y: numeroShortY,
             },
             dimensions: { width: 40, height: 30 },
             rotation: 180, // Rotado 180° como el short
-            zIndex: currentElements.length,
+            zIndex: currentElements.length + 2000, // zIndex muy alto para estar completamente al frente
             locked: false,
             visible: true,
             content: String(row.numero),
             fontFamily: fonteFila,
-            fontSize: tamanoNumeroShort,
+            fontSize: numeroShortFontSize,
             fontColor: colorNumeroShort,
             textAlign: "center",
             fontWeight: "bold",
@@ -1101,6 +1294,9 @@ export const processExcelFile = async (
 
           currentElements.push(numeroShortRightText);
           addElement(numeroShortRightText, currentPageIndex);
+
+          // Log para debugging
+          console.log(`🩳 [NÚMERO SHORT CREADO - Layout A] "${row.numero}" | Pos: (${Math.round(numeroShortX)}, ${Math.round(numeroShortY)}) | Fuente: ${Math.round(numeroShortFontSize)}px | Color: ${colorNumeroShort} | zIndex: ${currentElements.length + 2000}`);
         }
       }
 
