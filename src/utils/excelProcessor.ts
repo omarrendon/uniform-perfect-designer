@@ -84,12 +84,12 @@ const TEXT_POSITIONS_BY_SIZE: Record<string, SizeTextConfig> = {
     },
     jerseyBackNumber: {
       offsetX: 148,      // Offset desde jerseyEspaldaPos
-      offsetY: 204,      // 998 - ~794 (posición estimada de jerseyEspaldaPos)
+      offsetY: 204,
       fontSize: 319.02
     },
     jerseyBackName: {
       offsetX: 189,      // Offset desde jerseyEspaldaPos
-      offsetY: 130,      // 924 - ~794 (posición estimada de jerseyEspaldaPos)
+      offsetY: 130,
       fontSize: 94.59
     },
     shortsRight: {
@@ -98,28 +98,7 @@ const TEXT_POSITIONS_BY_SIZE: Record<string, SizeTextConfig> = {
       fontSize: 150.47
     }
   },
-  'L': {
-    jerseyFront: {
-      offsetX: 347,
-      offsetY: 1718,
-      fontSize: 121.46
-    },
-    jerseyBackNumber: {
-      offsetX: 152,
-      offsetY: 2663,
-      fontSize: 328.77
-    },
-    jerseyBackName: {
-      offsetX: 137,
-      offsetY: 933,
-      fontSize: 84.92
-    },
-    shortsRight: {
-      offsetX: 964,
-      offsetY: 2550,
-      fontSize: 156.42
-    }
-  }
+  // Otras tallas se agregarán aquí conforme se configuren
 };
 
 /**
@@ -714,8 +693,8 @@ export const processExcelFile = async (
           // Ajustar tamaño de fuente según longitud del nombre para que quepa en el jersey
           const nombreTexto = String(row.nombre).toUpperCase();
 
-          // SOLO PARA TALLA M: Mover nombre a la izquierda según cantidad de letras
-          if (textPosConfig && tallaMapeada === 'M' && nombreTexto.length > 5) {
+          // Mover nombre a la izquierda según cantidad de letras (TODAS LAS TALLAS)
+          if (textPosConfig && nombreTexto.length > 5) {
             let desplazamientoIzquierda = 0;
             let desplazamientoAbajo = 0;
 
@@ -728,7 +707,7 @@ export const processExcelFile = async (
 
             nombreEspaldaX = nombreEspaldaX - desplazamientoIzquierda;
             nombreEspaldaY = nombreEspaldaY + desplazamientoAbajo;
-            console.log(`⬅️ [DESPLAZAMIENTO NOMBRE] "${nombreTexto}" (${nombreTexto.length} letras) | Desplazado ${desplazamientoIzquierda}px izq, ${desplazamientoAbajo}px abajo | Nueva pos: (${Math.round(nombreEspaldaX)}, ${Math.round(nombreEspaldaY)})`);
+            console.log(`⬅️ [DESPLAZAMIENTO NOMBRE] "${nombreTexto}" (${nombreTexto.length} letras, Talla: ${tallaMapeada}) | Desplazado ${desplazamientoIzquierda}px izq, ${desplazamientoAbajo}px abajo | Nueva pos: (${Math.round(nombreEspaldaX)}, ${Math.round(nombreEspaldaY)})`);
           }
           const anchoMaximoNombre = jerseyDimensions.width * 0.75; // 75% del ancho del jersey
           const anchoAproximadoTexto = nombreEspaldaFontSize * nombreTexto.length * 0.75; // Factor 0.75 para fuentes bold
