@@ -525,29 +525,26 @@ export const processExcelFile = async (
         await loadFont(fonteFila);
       }
 
-      // Parsear tamaños de fuente y colores desde Excel (con valores por defecto)
+      // Parsear tamaños de fuente y color desde Excel (con valores por defecto)
       const tamanoNumeroFrente = parseFontSize(row.tamano_numero_frente, 24);
-      const colorNumeroFrente = parseColor(row.color_numero_frente, "#000000");
       const tamanoNumeroEspalda = parseFontSize(row.tamano_numero_espalda, 40);
-      const colorNumeroEspalda = parseColor(row.color_numero_espalda, "#000000");
       const tamanoNombreEspalda = parseFontSize(row.tamano_nombre_espalda, 16);
-      const colorNombreEspalda = parseColor(row.color_nombre_espalda, "#000000");
       const tamanoNumeroShort = parseFontSize(row.tamano_numero_short, 30);
-      const colorNumeroShort = parseColor(row.color_numero_short, "#000000");
+
+      // Color único para todos los textos del uniforme
+      const colorTexto = parseColor(row.color, "#000000");
 
       // Debug: Ver qué valores se están leyendo del Excel
       console.log(`[${row.nombre}] Talla Excel: ${tallaMostrar} → Talla Mapeada: ${tallaMapeada}`);
       console.log(`[${row.nombre}] Valores Excel:`, {
         tamano_numero_espalda: row.tamano_numero_espalda,
-        color_numero_espalda: row.color_numero_espalda,
+        color: row.color,
         tamano_nombre_espalda: row.tamano_nombre_espalda,
-        color_nombre_espalda: row.color_nombre_espalda
       });
       console.log(`[${row.nombre}] Valores parseados:`, {
         tamanoNumeroEspalda,
-        colorNumeroEspalda,
+        colorTexto,
         tamanoNombreEspalda,
-        colorNombreEspalda
       });
 
       const jerseyDimensions = {
@@ -678,7 +675,7 @@ export const processExcelFile = async (
             content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: numeroFrenteFontSize,
-            fontColor: colorNumeroFrente,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -749,7 +746,7 @@ export const processExcelFile = async (
             content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: numeroEspaldaFontSize,
-            fontColor: colorNumeroEspalda,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -824,7 +821,7 @@ export const processExcelFile = async (
             content: nombreTexto,
             fontFamily: fonteFila,
             fontSize: nombreEspaldaFontSize,
-            fontColor: colorNombreEspalda,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -927,7 +924,7 @@ export const processExcelFile = async (
             content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: numeroShortFontSize,
-            fontColor: colorNumeroShort,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -938,7 +935,7 @@ export const processExcelFile = async (
           addElement(numeroShortRightText, currentPageIndex);
 
           // Log para debugging
-          console.log(`🩳 [NÚMERO SHORT CREADO] "${row.numero}" | Pos: (${Math.round(numeroShortX)}, ${Math.round(numeroShortY)}) | Fuente: ${Math.round(numeroShortFontSize)}px | Color: ${colorNumeroShort} | zIndex: ${currentElements.length + 2000}`);
+          console.log(`🩳 [NÚMERO SHORT CREADO] "${row.numero}" | Pos: (${Math.round(numeroShortX)}, ${Math.round(numeroShortY)}) | Fuente: ${Math.round(numeroShortFontSize)}px | Color: ${colorTexto} | zIndex: ${currentElements.length + 2000}`);
         }
 
       } else if (usarLayoutOpcionA) {
@@ -1036,7 +1033,7 @@ export const processExcelFile = async (
             content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: numeroFrenteFontSize,
-            fontColor: colorNumeroFrente,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -1110,7 +1107,7 @@ export const processExcelFile = async (
             content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: numeroEspaldaFontSize,
-            fontColor: colorNumeroEspalda,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -1186,7 +1183,7 @@ export const processExcelFile = async (
             content: nombreTexto.toUpperCase(),
             fontFamily: fonteFila,
             fontSize: nombreEspaldaFontSize,
-            fontColor: colorNombreEspalda,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -1285,7 +1282,7 @@ export const processExcelFile = async (
             content: String(row.numero),
             fontFamily: fonteFila,
             fontSize: numeroShortFontSize,
-            fontColor: colorNumeroShort,
+            fontColor: colorTexto,
             textAlign: "center",
             fontWeight: "bold",
             opacity: 1,
@@ -1296,7 +1293,7 @@ export const processExcelFile = async (
           addElement(numeroShortRightText, currentPageIndex);
 
           // Log para debugging
-          console.log(`🩳 [NÚMERO SHORT CREADO - Layout A] "${row.numero}" | Pos: (${Math.round(numeroShortX)}, ${Math.round(numeroShortY)}) | Fuente: ${Math.round(numeroShortFontSize)}px | Color: ${colorNumeroShort} | zIndex: ${currentElements.length + 2000}`);
+          console.log(`🩳 [NÚMERO SHORT CREADO - Layout A] "${row.numero}" | Pos: (${Math.round(numeroShortX)}, ${Math.round(numeroShortY)}) | Fuente: ${Math.round(numeroShortFontSize)}px | Color: ${colorTexto} | zIndex: ${currentElements.length + 2000}`);
         }
       }
 
