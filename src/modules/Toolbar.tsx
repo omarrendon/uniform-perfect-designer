@@ -208,10 +208,6 @@ export const Toolbar: React.FC = () => {
         'g': 'G',
         'xl': 'XG',
         'xg': 'XG',
-        '2xl': '2XG',
-        '2xg': '2XG',
-        '3xl': '3XG',
-        '3xg': '3XG',
       };
 
       // Recopilar todas las tallas únicas del Excel

@@ -388,16 +388,6 @@ const SIZE_CONFIGS_HOMBRE: SizeConfig[] = [
     width: 629.26, height: 875.66,     // Playera: 62.926cm × 87.566cm (medida real verificada)
     shortsWidth: 952.04, shortsHeight: 664.04 // Shorts:  95.204cm × 66.404cm (medida real verificada)
   },
-  {
-    size: "2XL", gender: "Hombre",
-    width: 660.7, height: 919.41,      // Playera: 66.07cm × 91.941cm (medida real verificada)
-    shortsWidth: 999.61, shortsHeight: 697.21 // Shorts:  99.961cm × 69.721cm (medida real verificada)
-  },
-  {
-    size: "3XL", gender: "Hombre",
-    width: 693.69, height: 965.34,     // Playera: 69.369cm × 96.534cm (medida real verificada)
-    shortsWidth: 1049, shortsHeight: 732 // Shorts:  104.9cm × 73.2cm (estimado por tendencia)
-  },
 ];
 
 // Configuraciones de tallas MUJER - Usando medidas de hombre temporalmente
@@ -427,16 +417,6 @@ const SIZE_CONFIGS_MUJER: SizeConfig[] = [
     size: "XL", gender: "Mujer",
     width: 629.26, height: 875.66,     // TEMPORAL: usar medidas de hombre
     shortsWidth: 952.04, shortsHeight: 664.04
-  },
-  {
-    size: "2XL", gender: "Mujer",
-    width: 660.7, height: 919.41,      // TEMPORAL: usar medidas de hombre
-    shortsWidth: 999.61, shortsHeight: 697.21
-  },
-  {
-    size: "3XL", gender: "Mujer",
-    width: 693.69, height: 965.34,     // TEMPORAL: usar medidas de hombre
-    shortsWidth: 1049, shortsHeight: 732
   },
 ];
 
