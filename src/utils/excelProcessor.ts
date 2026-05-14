@@ -1,5 +1,5 @@
 import { useDesignerStore } from "../store/desingerStore";
-import type { SizeSpanish, Size, UniformTemplate, TextElement } from "../types";
+import type { Size, UniformTemplate, TextElement } from "../types";
 import { readExcelFile } from "./excelReader";
 import { generateId } from "./canvas";
 import { loadImage } from "./imageCache";
@@ -228,104 +228,43 @@ export const processExcelFile = async (
       addElement
     } = useDesignerStore.getState();
 
-    // Mapeo de tallas Excel a tallas en español
-    const excelToSpanish: Record<string, SizeSpanish> = {
-      'xs': 'XCH',
-      'xch': 'XCH',
-      's': 'CH',
-      'ch': 'CH',
-      'm': 'M',
-      'l': 'G',
-      'g': 'G',
-      'xl': 'XG',
-      'xg': 'XG',
-    };
-
     // Mapeo de género Excel a tipo Gender
     const excelToGender = (generoExcel: string | undefined): 'Hombre' | 'Mujer' => {
-      if (!generoExcel) return 'Hombre'; // Por defecto Hombre si no se especifica
+      if (!generoExcel) return 'Hombre';
       const generoLower = generoExcel.toLowerCase().trim();
       if (generoLower === 'mujer' || generoLower === 'm' || generoLower === 'f' || generoLower === 'femenino') {
         return 'Mujer';
       }
-      return 'Hombre'; // Por defecto Hombre
+      return 'Hombre';
     };
 
-    // Helper para crear key compuesta (género-talla) ej: "H-XCH", "M-CH"
-    const createSizeKey = (gender: 'Hombre' | 'Mujer', sizeSpanish: SizeSpanish): string => {
-      const genderPrefix = gender === 'Hombre' ? 'H' : 'M';
-      return `${genderPrefix}-${sizeSpanish}`;
-    };
+    // VALIDACIÓN: Verificar que el template del uniforme esté completamente configurado
+    const { isTemplateComplete, uniformTemplate } = useDesignerStore.getState();
 
-    // VALIDACIÓN: Verificar que todas las combinaciones talla+género del Excel tengan imágenes configuradas
-    const tallasGeneroEnExcel = new Set<string>();
-    const tallasSinConfiguracion: string[] = [];
+    if (!isTemplateComplete()) {
+      const faltantes: string[] = [];
+      if (!uniformTemplate?.jerseyFront) faltantes.push('Playera Delantera');
+      if (!uniformTemplate?.jerseyBack)  faltantes.push('Playera Trasera');
+      if (!uniformTemplate?.shortsLeft)  faltantes.push('Short Izquierdo');
+      if (!uniformTemplate?.shortsRight) faltantes.push('Short Derecho');
 
-    // Recopilar todas las combinaciones talla+género únicas del Excel
-    rows.forEach(row => {
-      const tallaExcel = (row.talla || '').toLowerCase().trim();
-      const genero = excelToGender(row.genero);
-      if (tallaExcel) {
-        const tallaSpanish = excelToSpanish[tallaExcel];
-        if (tallaSpanish) {
-          const key = createSizeKey(genero, tallaSpanish);
-          tallasGeneroEnExcel.add(key);
-        }
-      }
-    });
-
-    // Verificar cada combinación talla+género si tiene configuración completa
-    const currentConfig = useDesignerStore.getState().uniformSizesConfig;
-    tallasGeneroEnExcel.forEach(sizeKey => {
-      const images = currentConfig[sizeKey];
-      if (!images) {
-        tallasSinConfiguracion.push(`"${sizeKey}" - Sin configuración de imágenes`);
-      } else {
-        const faltantes: string[] = [];
-        if (!images.jerseyFront) faltantes.push('Playera Delantera');
-        if (!images.jerseyBack) faltantes.push('Playera Trasera');
-        if (!images.shortsLeft) faltantes.push('Short Izquierdo');
-        if (!images.shortsRight) faltantes.push('Short Derecho');
-
-        if (faltantes.length > 0) {
-          tallasSinConfiguracion.push(
-            `"${sizeKey}" - Faltan: ${faltantes.join(', ')}`
-          );
-        }
-      }
-    });
-
-    // Si hay tallas sin configuración, mostrar error y detener
-    if (tallasSinConfiguracion.length > 0) {
       onError(
-        "Tallas sin configurar",
-        "El archivo Excel contiene combinaciones de talla y género que no tienen imágenes configuradas. Por favor, configura las imágenes antes de continuar.",
-        tallasSinConfiguracion
+        "Plantilla no configurada",
+        "Debes cargar la plantilla del uniforme antes de procesar el Excel. Las 4 imágenes son obligatorias.",
+        faltantes.map(f => `✗ Falta: ${f}`)
       );
       return;
     }
 
-    // Funciones auxiliares para obtener moldes (con género)
-    const getMoldeFrenteUrl = (tallaExcel: string, genero: 'Hombre' | 'Mujer'): string => {
-      const talla = tallaExcel.toLowerCase().trim();
-      const tallaSpanish = excelToSpanish[talla];
-      if (!tallaSpanish) return "";
-
-      const sizeKey = createSizeKey(genero, tallaSpanish);
-      const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
-      const images = uniformSizesConfigCompressed[sizeKey];
-      return images?.jerseyFront || "";
+    // Funciones auxiliares de imagen — usan el template único para todas las tallas
+    const getMoldeFrenteUrl = (): string => {
+      const { uniformTemplateCompressed } = useDesignerStore.getState();
+      return uniformTemplateCompressed?.jerseyFront || "";
     };
 
-    const getMoldeEspaldaUrl = (tallaExcel: string, genero: 'Hombre' | 'Mujer'): string => {
-      const talla = tallaExcel.toLowerCase().trim();
-      const tallaSpanish = excelToSpanish[talla];
-      if (!tallaSpanish) return "";
-
-      const sizeKey = createSizeKey(genero, tallaSpanish);
-      const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
-      const images = uniformSizesConfigCompressed[sizeKey];
-      return images?.jerseyBack || "";
+    const getMoldeEspaldaUrl = (): string => {
+      const { uniformTemplateCompressed } = useDesignerStore.getState();
+      return uniformTemplateCompressed?.jerseyBack || "";
     };
 
     // Función auxiliar para obtener dimensiones reales de una imagen desde base64/URL
@@ -343,35 +282,23 @@ export const processExcelFile = async (
       });
     };
 
-    const getShortsConfig = async (tallaExcel: string, genero: 'Hombre' | 'Mujer'): Promise<{
+    const getShortsConfig = async (_tallaExcel: string, _genero: 'Hombre' | 'Mujer'): Promise<{
       left: { url: string; width: number; height: number };
       right: { url: string; width: number; height: number };
     }> => {
-      const talla = tallaExcel.toLowerCase().trim();
-      const tallaSpanish = excelToSpanish[talla];
-      if (!tallaSpanish) {
-        return {
-          left: { url: "", width: 380, height: 265 },
-          right: { url: "", width: 380, height: 265 }
-        };
-      }
+      const { uniformTemplateCompressed } = useDesignerStore.getState();
 
-      const sizeKey = createSizeKey(genero, tallaSpanish);
-      const { uniformSizesConfigCompressed } = useDesignerStore.getState(); // Usar imágenes COMPRIMIDAS para canvas
-      const images = uniformSizesConfigCompressed[sizeKey];
-
-      // Obtener dimensiones reales de ambas imágenes
-      const leftDimensions = images?.shortsLeft
-        ? await getImageDimensions(images.shortsLeft)
+      const leftDimensions = uniformTemplateCompressed?.shortsLeft
+        ? await getImageDimensions(uniformTemplateCompressed.shortsLeft)
         : { width: 380, height: 265 };
 
-      const rightDimensions = images?.shortsRight
-        ? await getImageDimensions(images.shortsRight)
+      const rightDimensions = uniformTemplateCompressed?.shortsRight
+        ? await getImageDimensions(uniformTemplateCompressed.shortsRight)
         : { width: 380, height: 265 };
 
       return {
-        left: { url: images?.shortsLeft || "", ...leftDimensions },
-        right: { url: images?.shortsRight || "", ...rightDimensions }
+        left: { url: uniformTemplateCompressed?.shortsLeft || "", ...leftDimensions },
+        right: { url: uniformTemplateCompressed?.shortsRight || "", ...rightDimensions },
       };
     };
 
@@ -421,52 +348,30 @@ export const processExcelFile = async (
     console.log('Pre-cargando imágenes en caché...');
     const imagesToPreload = new Set<string>();
 
-    const uniformSizesConfigOriginal = useDesignerStore.getState().uniformSizesConfig;
-    rows.forEach(row => {
-      const tallaExcel = (row.talla || 'm').toLowerCase().trim();
-      const genero = excelToGender(row.genero);
-      const tallaSpanish = excelToSpanish[tallaExcel];
-      if (tallaSpanish) {
-        const sizeKey = createSizeKey(genero, tallaSpanish);
-        const images = uniformSizesConfigOriginal[sizeKey];
-        if (images) {
-          if (images.jerseyFront) imagesToPreload.add(images.jerseyFront);
-          if (images.jerseyBack) imagesToPreload.add(images.jerseyBack);
-          if (images.shortsLeft) imagesToPreload.add(images.shortsLeft);
-          if (images.shortsRight) imagesToPreload.add(images.shortsRight);
-        }
-      }
-    });
-
-    // Comprimir imágenes para el canvas
-    console.log(`Comprimiendo ${imagesToPreload.size} imágenes para el canvas...`);
-    const compressedConfig: any = {};
-
-    for (const sizeKey of Object.keys(uniformSizesConfigOriginal)) {
-      const images = uniformSizesConfigOriginal[sizeKey];
-      if (images) {
-        compressedConfig[sizeKey] = {};
-
-        if (images.jerseyFront) {
-          compressedConfig[sizeKey].jerseyFront = await compressImageForCanvas(images.jerseyFront);
-        }
-        if (images.jerseyBack) {
-          compressedConfig[sizeKey].jerseyBack = await compressImageForCanvas(images.jerseyBack);
-        }
-        if (images.shortsLeft) {
-          compressedConfig[sizeKey].shortsLeft = await compressImageForCanvas(images.shortsLeft);
-        }
-        if (images.shortsRight) {
-          compressedConfig[sizeKey].shortsRight = await compressImageForCanvas(images.shortsRight);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
+    const uniformTemplateOriginal = useDesignerStore.getState().uniformTemplate;
+    if (uniformTemplateOriginal) {
+      if (uniformTemplateOriginal.jerseyFront) imagesToPreload.add(uniformTemplateOriginal.jerseyFront);
+      if (uniformTemplateOriginal.jerseyBack)  imagesToPreload.add(uniformTemplateOriginal.jerseyBack);
+      if (uniformTemplateOriginal.shortsLeft)  imagesToPreload.add(uniformTemplateOriginal.shortsLeft);
+      if (uniformTemplateOriginal.shortsRight) imagesToPreload.add(uniformTemplateOriginal.shortsRight);
     }
 
-    // Guardar imágenes comprimidas
-    useDesignerStore.setState({ uniformSizesConfigCompressed: compressedConfig });
-    console.log('✓ Imágenes comprimidas para canvas');
+    // Comprimir las 4 imágenes del template una sola vez
+    console.log('Comprimiendo imágenes del template para canvas...');
+    const compressedTemplate: any = {};
+
+    if (uniformTemplateOriginal?.jerseyFront)
+      compressedTemplate.jerseyFront = await compressImageForCanvas(uniformTemplateOriginal.jerseyFront);
+    if (uniformTemplateOriginal?.jerseyBack)
+      compressedTemplate.jerseyBack = await compressImageForCanvas(uniformTemplateOriginal.jerseyBack);
+    if (uniformTemplateOriginal?.shortsLeft)
+      compressedTemplate.shortsLeft = await compressImageForCanvas(uniformTemplateOriginal.shortsLeft);
+    if (uniformTemplateOriginal?.shortsRight)
+      compressedTemplate.shortsRight = await compressImageForCanvas(uniformTemplateOriginal.shortsRight);
+
+    // Guardar template comprimido
+    useDesignerStore.setState({ uniformTemplateCompressed: compressedTemplate });
+    console.log('✓ Template comprimido para canvas');
 
     // Pre-cargar imágenes comprimidas en caché
     console.log('Pre-cargando imágenes comprimidas en caché...');
@@ -552,8 +457,7 @@ export const processExcelFile = async (
         height: sizeConfig.height,
       };
 
-      const shortsConfig = await getShortsConfig(tallaExcel, genero);
-      const shortsDimensions = {
+      const shortsConfig = await getShortsConfig(tallaExcel, genero);      const shortsDimensions = {
         width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
         height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / (shortsConfig.left.width / shortsConfig.left.height),
       };
@@ -630,7 +534,7 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeFrenteUrl(tallaExcel, genero),
+          imageUrl: getMoldeFrenteUrl(),
           source: 'excel',
         };
 
@@ -704,7 +608,7 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeEspaldaUrl(tallaExcel, genero),
+          imageUrl: getMoldeEspaldaUrl(),
           source: 'excel',
         };
 
@@ -988,7 +892,7 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeFrenteUrl(tallaExcel, genero),
+          imageUrl: getMoldeFrenteUrl(),
           source: 'excel',
         };
 
@@ -1065,7 +969,7 @@ export const processExcelFile = async (
           locked: false,
           visible: true,
           baseColor: "#ffffff",
-          imageUrl: getMoldeEspaldaUrl(tallaExcel, genero),
+          imageUrl: getMoldeEspaldaUrl(),
           source: 'excel',
         };
 

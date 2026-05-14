@@ -318,6 +318,13 @@ interface DesignerState {
   clearUniformSizesConfig: () => void;
   getSizeConfig: (size: Size, gender: Gender) => SizeConfig | undefined; // Helper para obtener config por talla y género
 
+  // Uniform template — una sola plantilla para todas las tallas
+  uniformTemplate: SizeImages | null; // Imágenes ORIGINALES del template (para PDF)
+  uniformTemplateCompressed: SizeImages | null; // Imágenes COMPRIMIDAS del template (para canvas)
+  setUniformTemplate: (images: Partial<SizeImages>) => void;
+  isTemplateComplete: () => boolean;
+  clearUniformTemplate: () => void;
+
   // History (Undo/Redo)
   history: HistoryState[];
   historyIndex: number;
@@ -439,6 +446,8 @@ export const useDesignerStore = create<DesignerState>()(
         sizeConfigs: DEFAULT_SIZE_CONFIGS,
         uniformSizesConfig: {}, // Configuración de imágenes ORIGINALES por talla
         uniformSizesConfigCompressed: {}, // Configuración de imágenes COMPRIMIDAS por talla
+        uniformTemplate: null, // Plantilla única ORIGINAL para todas las tallas
+        uniformTemplateCompressed: null, // Plantilla única COMPRIMIDA para canvas
         history: [],
         historyIndex: -1,
         currentProject: null,
@@ -769,6 +778,31 @@ export const useDesignerStore = create<DesignerState>()(
           set(() => ({
             uniformSizesConfig: {},
             uniformSizesConfigCompressed: {},
+          })),
+
+        // Uniform template actions
+        setUniformTemplate: (images) =>
+          set(state => ({
+            uniformTemplate: {
+              ...(state.uniformTemplate || {}),
+              ...images,
+            } as SizeImages,
+          })),
+
+        isTemplateComplete: () => {
+          const { uniformTemplate } = get();
+          return !!(
+            uniformTemplate?.jerseyFront &&
+            uniformTemplate?.jerseyBack &&
+            uniformTemplate?.shortsLeft &&
+            uniformTemplate?.shortsRight
+          );
+        },
+
+        clearUniformTemplate: () =>
+          set(() => ({
+            uniformTemplate: null,
+            uniformTemplateCompressed: null,
           })),
 
         // Helper para obtener configuración de talla por género

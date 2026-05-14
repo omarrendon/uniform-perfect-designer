@@ -1,121 +1,131 @@
 # Carga Masiva de Uniformes desde Excel
 
-## 📋 Descripción
+## Descripción
 
-Esta funcionalidad permite crear múltiples "juegos" de uniformes (jersey + shorts) automáticamente desde un archivo Excel. Por cada fila en el Excel, se generará un jersey y un short completo.
+Permite crear múltiples juegos de uniformes (jersey frente + espalda + short izquierdo + derecho) automáticamente desde un archivo Excel. Por cada fila válida se genera el juego completo escalado a la talla indicada.
 
-## ✅ Características implementadas
+---
 
-- **Carga desde Excel**: Botón para cargar archivo `.xlsx` o `.xls`
-- **Generación automática**: Por cada fila válida, se crea 1 jersey + 1 short
-- **Validaciones completas**: Mantiene todas las validaciones existentes:
-  - ✅ No encimado (detección de colisiones)
-  - ✅ Respeto de márgenes (1cm)
-  - ✅ Validación de espacio disponible
-  - ✅ Uso de moldes reales
-- **Mensajes informativos**: Alertas si no hay espacio suficiente
+## Antes de usar: cargar la plantilla
 
-## 📄 Formato del archivo Excel
+El sistema usa **una sola plantilla de 4 imágenes** que se escala a todas las tallas automáticamente. Debes cargarla antes de procesar cualquier Excel.
 
-### Estructura requerida
+### Paso 1 — Abrir el modal de configuración
+En la barra de herramientas, haz clic en el botón de configuración de uniforme (ícono de ajustes).
 
-El archivo Excel debe tener **al menos una columna** llamada `nombre`:
+### Paso 2 — Subir las 4 imágenes del uniforme
 
-| nombre     |
-|------------|
-| Jugador 1  |
-| Jugador 2  |
-| Jugador 3  |
-| ...        |
+| Imagen | Descripción |
+|---|---|
+| **Playera Delantera** | Vista frontal de la camiseta |
+| **Playera Trasera** | Vista trasera de la camiseta |
+| **Short Izquierdo** | Short vista izquierda |
+| **Short Derecho** | Short vista derecha |
 
-### Reglas:
-- La primera fila debe contener el encabezado `nombre`
-- Cada fila subsecuente representa un juego de uniforme
-- Las filas vacías o sin nombre se omiten automáticamente
-- Puede haber más columnas, pero solo `nombre` es obligatoria
+Hasta que las 4 estén cargadas, el botón "Procesar" estará deshabilitado.
 
-## 🚀 Cómo usar
+> Las imágenes se guardan en memoria durante la sesión. Al refrescar la página se deben cargar de nuevo.
 
-### Paso 1: Preparar el archivo Excel
-1. Crea un archivo Excel (.xlsx o .xls)
-2. En la primera columna, escribe `nombre` en la primera fila
-3. Agrega los nombres en las filas siguientes
+---
 
-### Paso 2: Cargar en la aplicación
-1. Abre la aplicación y ve a la pestaña **"Agregar"**
-2. En la sección **"Carga Masiva"**, haz clic en **"Cargar desde Excel"**
-3. Selecciona tu archivo Excel
-4. Espera a que se procesen todos los uniformes
+## Formato del archivo Excel
 
-### Paso 3: Verificar
-- Se mostrará un mensaje indicando cuántos juegos se crearon
-- Si no hay espacio, se mostrará un mensaje indicando cuántos se pudieron crear
-- Todos los uniformes respetarán las validaciones de espacio
+### Columnas requeridas
 
-## 📊 Ejemplo de archivo Excel
+| Columna | Tipo | Descripción |
+|---|---|---|
+| `nombre` | Texto | **Obligatorio.** Nombre del jugador (aparece en espalda del jersey) |
+| `talla` | Texto | **Obligatorio.** Talla del uniforme |
 
-Puedes usar este ejemplo:
+### Valores válidos para `talla`
+
+Acepta formato español o inglés, en mayúsculas o minúsculas:
+
+| Español | Inglés equivalente |
+|---|---|
+| `XCH` | `XS` |
+| `CH` | `S` |
+| `M` | `M` |
+| `G` | `L` |
+| `XG` | `XL` |
+
+### Columnas opcionales
+
+| Columna | Tipo | Descripción | Default |
+|---|---|---|---|
+| `genero` | Texto | `Hombre`, `Mujer`, `M`, `F`, `Femenino` | `Hombre` |
+| `numero` | Número | Número del jugador (frente, espalda y short) | Sin número |
+| `fuente` | Texto | Nombre de Google Font para el texto | `Arial` |
+| `color` | Texto (hex) | Color de todos los textos del uniforme. Ej: `#FF0000` | `#000000` |
+| `tamano_numero_frente` | Número ≥8 | Tamaño de fuente del número en el pecho | Predefinido por talla |
+| `tamano_numero_espalda` | Número ≥8 | Tamaño de fuente del número grande trasero | Predefinido por talla |
+| `tamano_nombre_espalda` | Número ≥8 | Tamaño de fuente del nombre en la espalda | Predefinido por talla |
+| `tamano_numero_short` | Número ≥8 | **Activa y define** el número en el short | Sin número en short |
+
+> **Nota sobre `tamano_numero_short`:** Si el campo existe y tiene un valor, se dibuja el número en el short. Si está vacío o ausente, el short no lleva número.
+
+---
+
+## Cómo funciona el escalado
+
+La plantilla se carga una sola vez y Konva escala la imagen a las dimensiones exactas de cada talla. Esto es posible porque todas las tallas mantienen la misma proporción:
+
+- **Playera**: ratio ~0.718 (todos los tamaños)  
+- **Shorts**: ratio ~1.433 (todos los tamaños)
+
+Las dimensiones reales por talla (en píxeles, `pixelsPerCm = 10`):
+
+| Talla | Playera (w×h) | Shorts (w×h) |
+|---|---|---|
+| XCH / XS | 513×714 | 780×544 |
+| CH / S | 540×752 | 821×572 |
+| M | 568×791 | 863×602 |
+| G / L | 599×834 | 906×632 |
+| XG / XL | 629×875 | 952×664 |
+
+---
+
+## Ejemplo de archivo Excel
 
 ```
-| nombre          |
-|-----------------|
-| Juan Pérez      |
-| María González  |
-| Pedro López     |
-| Ana Martínez    |
-| Carlos Sánchez  |
+| nombre      | talla | genero | numero | fuente     | color   | tamano_numero_frente | tamano_numero_espalda | tamano_nombre_espalda | tamano_numero_short |
+|-------------|-------|--------|--------|------------|---------|----------------------|-----------------------|-----------------------|---------------------|
+| García      | M     | Hombre | 10     | Bebas Neue | #FF0000 |                      |                       |                       | 30                  |
+| López       | G     | Mujer  | 7      | Arial      | #0000FF | 24                   | 40                    | 16                    |                     |
+| Martínez    | XG    | Hombre | 23     | Impact     | #000000 |                      |                       |                       | 25                  |
 ```
 
-Para cada una de estas filas, se generará:
-- 1 Jersey con el molde correspondiente
-- 1 Short con los moldes correspondientes
-- Ambos posicionados sin encimarse en el canvas
+- **García**: número en rojo, Bebas Neue, con número en short (tam. 30), talla M Hombre
+- **López**: número en azul, Arial, tamaños personalizados, **sin** número en short, talla G Mujer
+- **Martínez**: texto negro, Impact, con número en short (tam. 25), talla XG Hombre
 
-## ⚠️ Consideraciones importantes
+---
 
-### Espacio en el canvas
-- El canvas tiene un tamaño limitado
-- Si no hay espacio suficiente, la carga se detendrá
-- Se mostrará un mensaje indicando cuántos juegos se crearon antes de quedarse sin espacio
+## Solución de problemas
 
-### Validaciones automáticas
-- **Detección de colisiones**: Los uniformes NO se enciman
-- **Búsqueda de espacio**: El sistema busca automáticamente posiciones válidas
-- **Respeto de márgenes**: Se respeta el margen de 1cm en todos los bordes
-
-### Dimensiones
-- **Jersey**: Dimensiones estándar según talla M
-- **Shorts**: Dimensiones extendidas (ancho x2.2, alto x0.45) para contener ambos moldes
-
-## 🔧 Solución de problemas
-
-### "Por favor selecciona un archivo Excel válido"
-- Verifica que el archivo sea `.xlsx` o `.xls`
-- Asegúrate de no estar seleccionando otro tipo de archivo
+### "Plantilla no configurada"
+Las 4 imágenes del uniforme no están cargadas. Ve al modal de configuración y sube las imágenes faltantes antes de procesar.
 
 ### "El archivo Excel está vacío"
-- Verifica que el archivo tenga al menos una fila de datos (además del encabezado)
+El archivo no tiene filas de datos (solo encabezado o completamente vacío).
 
-### "Error al procesar el archivo Excel. Verifica que tenga la columna 'nombre'"
-- Asegúrate de que la primera columna se llame exactamente `nombre` (minúsculas)
-- Verifica que el archivo no esté corrupto
+### "El archivo debe contener una columna llamada 'nombre'"
+El encabezado `nombre` no se encontró. Los nombres de columna se normalizan a minúsculas automáticamente, pero la columna debe existir.
 
-### "No hay espacio suficiente..."
-- El canvas está lleno
-- Opciones:
-  1. Aumenta el tamaño del canvas
-  2. Elimina algunos elementos existentes
-  3. Carga menos uniformes
+### "No hay espacio suficiente"
+El canvas está lleno. Opciones:
+1. Aumentar el tamaño del canvas
+2. Eliminar elementos existentes
+3. Procesar menos uniformes por lote
 
-## 💡 Consejos
+---
 
-- **Prueba con pocos datos primero**: Empieza con 2-3 nombres para verificar
-- **Limpia el canvas**: Si vas a cargar muchos uniformes, limpia el canvas primero
-- **Canvas grande**: Para muchos uniformes, considera usar un canvas más grande
-- **Nombres únicos**: Aunque no es obligatorio, ayuda tener nombres descriptivos
+## Ubicación de archivos
 
-## 📁 Ubicación de archivos
-
-- **Utilidad de lectura**: `src/utils/excelReader.ts`
-- **Lógica de generación**: `src/modules/Toolbar.tsx` (función `handleExcelUpload`)
-- **Botón de carga**: Sección "Carga Masiva" en pestaña "Agregar"
+| Archivo | Contenido |
+|---|---|
+| `src/utils/excelReader.ts` | Lectura y normalización del archivo Excel |
+| `src/utils/excelProcessor.ts` | Procesamiento completo con layout y texto |
+| `src/modules/Toolbar.tsx` | Flujo de carga desde pestaña "Agregar" |
+| `src/components/UniformSizesModal.tsx` | Modal de plantilla y upload del Excel |
+| `src/store/desingerStore.ts` | `uniformTemplate`, `uniformTemplateCompressed` |
