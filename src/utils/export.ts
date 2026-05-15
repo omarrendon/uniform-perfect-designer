@@ -103,7 +103,7 @@ const renderTextAsImage = async (
   fontWeight: string,
   fontSizePts: number,
   hexColor: string,
-): Promise<{ pdfImage: PDFImage; widthPts: number; heightPts: number } | null> => {
+): Promise<{ pdfImage: PDFImage; widthPts: number; heightPts: number; yOffsetPts: number } | null> => {
   try {
     const SCALE = 3;
     const PTS_TO_CSS_PX = 96 / 72;
@@ -111,24 +111,32 @@ const renderTextAsImage = async (
     const fontStyle = fontWeight === 'bold' ? 'bold' : 'normal';
     const fontSpec = `${fontStyle} ${fontSizeCssPx}px "${fontFamily}", Arial, sans-serif`;
 
-    // Medir con canvas provisional para obtener bounding box real (incluye italic overhang)
+    // Konva dibuja texto con textBaseline='middle' en y=fontSize/2 dentro del nodo,
+    // y el nodo tiene altura exacta de fontSize. Replicamos eso para alineación perfecta.
+    const midY = fontSizeCssPx / 2;
+
+    // Medir con 'middle' (igual que Konva) para detectar si el glifo se sale del cuadro
     const measureCanvas = document.createElement('canvas');
-    measureCanvas.width = Math.ceil(fontSizeCssPx * text.length * 1.5) + 20;
+    measureCanvas.width  = Math.ceil(fontSizeCssPx * text.length * 1.5) + 20;
     measureCanvas.height = Math.ceil(fontSizeCssPx * 2.5);
     const mCtx = measureCanvas.getContext('2d')!;
     mCtx.font = fontSpec;
-    mCtx.textBaseline = 'alphabetic';
+    mCtx.textBaseline = 'middle';
     const m = mCtx.measureText(text);
 
-    // Usar actualBoundingBox para dimensiones reales del glifo (incluye overhang itálico)
-    const left    = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft));
-    const right   = Math.ceil(m.actualBoundingBoxRight);
-    const ascent  = Math.ceil(m.actualBoundingBoxAscent);
-    const descent = Math.ceil(m.actualBoundingBoxDescent);
+    // Espacio que el glifo necesita arriba/abajo del punto 'middle'
+    const glyphAbove = Math.ceil(m.actualBoundingBoxAscent)  + 2;
+    const glyphBelow = Math.ceil(m.actualBoundingBoxDescent) + 2;
 
-    const PAD = Math.ceil(fontSizeCssPx * 0.1); // 10% de padding para evitar recortes
-    const w = left + right + PAD * 2;
-    const h = ascent + descent + PAD * 2;
+    // Si el glifo sobresale del cuadro fontSize, agregar espacio extra para no recortarlo
+    const extraTop    = Math.max(0, glyphAbove - midY);
+    const extraBottom = Math.max(0, glyphBelow - midY);
+
+    const left  = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft)) + 2;
+    const right = Math.ceil(m.actualBoundingBoxRight) + 2;
+
+    const w = left + right;
+    const h = Math.ceil(fontSizeCssPx) + extraTop + extraBottom;
 
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width  = w;
@@ -142,9 +150,9 @@ const renderTextAsImage = async (
     const g = parseInt(hexColor.slice(3, 5), 16);
     const b = parseInt(hexColor.slice(5, 7), 16);
     ctx2.fillStyle = `rgb(${r},${g},${b})`;
-    // baseline alfabética: dibujamos en (left + PAD, ascent + PAD)
-    ctx2.textBaseline = 'alphabetic';
-    ctx2.fillText(text, left + PAD, ascent + PAD);
+    // Mismo textBaseline y posición que Konva: 'middle' en y = fontSize/2
+    ctx2.textBaseline = 'middle';
+    ctx2.fillText(text, left, midY + extraTop);
 
     const dataUrl = tmpCanvas.toDataURL('image/png');
     const base64  = dataUrl.split(',')[1];
@@ -152,11 +160,14 @@ const renderTextAsImage = async (
     const bytes   = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
-    const pdfImage = await pdfDoc.embedPng(bytes);
+    const pdfImage  = await pdfDoc.embedPng(bytes);
     const widthPts  = (w / SCALE) / PTS_TO_CSS_PX;
-    const heightPts = (h / SCALE) / PTS_TO_CSS_PX;
+    // heightPts = fontSizePts (= nodo Konva), más cualquier espacio extra si hubo desborde
+    const heightPts  = (h    / SCALE) / PTS_TO_CSS_PX;
+    // yOffsetPts solo > 0 si el glifo desbordó hacia arriba del cuadro fontSize
+    const yOffsetPts = (extraTop / SCALE) / PTS_TO_CSS_PX;
 
-    return { pdfImage, widthPts, heightPts };
+    return { pdfImage, widthPts, heightPts, yOffsetPts };
   } catch {
     return null;
   }
@@ -1369,10 +1380,11 @@ export const exportAsPDFDirect = async (
 
         if (textImg) {
           // Posición top-left en PDF (y invertido: PDF origin=bottom-left)
+          // yOffsetPts compensa el espacio transparente superior de la imagen
           const xInPts = (textEl.position.x / canvasConfig.pixelsPerCm) * 28.35;
           const yInPts = (textEl.position.y / canvasConfig.pixelsPerCm) * 28.35;
           const pdfX = xInPts;
-          const pdfY = heightInPoints - yInPts - textImg.heightPts;
+          const pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
 
           page.drawImage(textImg.pdfImage, {
             x: pdfX,
@@ -1780,7 +1792,7 @@ export const exportMultiPagePDFDirect = async (
             const xInPts = (textEl.position.x / canvasConfig.pixelsPerCm) * 28.35;
             const yInPts = (textEl.position.y / canvasConfig.pixelsPerCm) * 28.35;
             const pdfX = xInPts;
-            const pdfY = heightInPoints - yInPts - textImg.heightPts;
+            const pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
 
             page.drawImage(textImg.pdfImage, {
               x: pdfX,
