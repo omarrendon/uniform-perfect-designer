@@ -1,5 +1,5 @@
 import { toPng } from 'html-to-image';
-import { PDFDocument, PDFImage, PDFFont, rgb, StandardFonts, degrees } from 'pdf-lib';
+import { PDFDocument, PDFImage, rgb, StandardFonts, degrees } from 'pdf-lib';
 import type { ExportOptions, UniformTemplate, TextElement } from '../types';
 import { useDesignerStore } from '../store/desingerStore';
 import { convertImageRGBtoCMYK, type CMYKConversionOptions } from './colorConversion';
@@ -7,7 +7,7 @@ import { addPrintMarks, expandPageForMarks, generatePrintFileName } from './prin
 import { runPreflight, generatePreflightReport } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
 import { CUSTOM_FONTS } from './fontLoader';
-import fontkit from '@pdf-lib/fontkit';
+
 
 /**
  * Sistema de transformación de coordenadas Canvas (Konva) → PDF
@@ -88,6 +88,79 @@ function canvasTextToPDF(
   const pdfY = canvasHeight - yInPoints - baselineOffset;
   return { x: pdfX, y: pdfY };
 }
+
+/**
+ * Renderiza texto en un canvas HTML usando la fuente del navegador y devuelve una imagen PNG
+ * embebida en el PDF. Garantiza que cualquier fuente (Google Font, sistema) se renderice
+ * correctamente sin problemas de encoding.
+ *
+ * @returns { pdfImage, widthPts, heightPts } — imagen y dimensiones en puntos PDF, o null si falla
+ */
+const renderTextAsImage = async (
+  pdfDoc: PDFDocument,
+  text: string,
+  fontFamily: string,
+  fontWeight: string,
+  fontSizePts: number,
+  hexColor: string,
+): Promise<{ pdfImage: PDFImage; widthPts: number; heightPts: number } | null> => {
+  try {
+    const SCALE = 3;
+    const PTS_TO_CSS_PX = 96 / 72;
+    const fontSizeCssPx = fontSizePts * PTS_TO_CSS_PX * SCALE;
+    const fontStyle = fontWeight === 'bold' ? 'bold' : 'normal';
+    const fontSpec = `${fontStyle} ${fontSizeCssPx}px "${fontFamily}", Arial, sans-serif`;
+
+    // Medir con canvas provisional para obtener bounding box real (incluye italic overhang)
+    const measureCanvas = document.createElement('canvas');
+    measureCanvas.width = Math.ceil(fontSizeCssPx * text.length * 1.5) + 20;
+    measureCanvas.height = Math.ceil(fontSizeCssPx * 2.5);
+    const mCtx = measureCanvas.getContext('2d')!;
+    mCtx.font = fontSpec;
+    mCtx.textBaseline = 'alphabetic';
+    const m = mCtx.measureText(text);
+
+    // Usar actualBoundingBox para dimensiones reales del glifo (incluye overhang itálico)
+    const left    = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft));
+    const right   = Math.ceil(m.actualBoundingBoxRight);
+    const ascent  = Math.ceil(m.actualBoundingBoxAscent);
+    const descent = Math.ceil(m.actualBoundingBoxDescent);
+
+    const PAD = Math.ceil(fontSizeCssPx * 0.1); // 10% de padding para evitar recortes
+    const w = left + right + PAD * 2;
+    const h = ascent + descent + PAD * 2;
+
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width  = w;
+    tmpCanvas.height = h;
+
+    const ctx2 = tmpCanvas.getContext('2d')!;
+    ctx2.font = fontSpec;
+    ctx2.clearRect(0, 0, w, h);
+
+    const r = parseInt(hexColor.slice(1, 3), 16);
+    const g = parseInt(hexColor.slice(3, 5), 16);
+    const b = parseInt(hexColor.slice(5, 7), 16);
+    ctx2.fillStyle = `rgb(${r},${g},${b})`;
+    // baseline alfabética: dibujamos en (left + PAD, ascent + PAD)
+    ctx2.textBaseline = 'alphabetic';
+    ctx2.fillText(text, left + PAD, ascent + PAD);
+
+    const dataUrl = tmpCanvas.toDataURL('image/png');
+    const base64  = dataUrl.split(',')[1];
+    const binary  = atob(base64);
+    const bytes   = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const pdfImage = await pdfDoc.embedPng(bytes);
+    const widthPts  = (w / SCALE) / PTS_TO_CSS_PX;
+    const heightPts = (h / SCALE) / PTS_TO_CSS_PX;
+
+    return { pdfImage, widthPts, heightPts };
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Reemplaza temporalmente las imágenes comprimidas por las originales para exportación
@@ -192,84 +265,8 @@ const convertToPng = async (imageDataUrl: string): Promise<string> => {
 };
 
 /**
- * Mapa de fuentes personalizadas con sus rutas
- */
-const CUSTOM_FONT_PATHS: Record<string, string> = {
-  "Atlanta College": "/fonts/AtlantaCollege.ttf",
-  "Basketball": "/fonts/Basketball.otf",
-  "Athletic": "/fonts/Athletic.ttf",
-  "Arial Black": "/fonts/ArialBlack.ttf",
-};
-
-/**
- * Embebe fuentes personalizadas en el PDF
- * @param pdfDoc Documento PDF
- * @returns Mapa de nombre de fuente → PDFFont embedida
- */
-const embedCustomFonts = async (pdfDoc: PDFDocument): Promise<Map<string, PDFFont>> => {
-  const fontMap = new Map<string, PDFFont>();
-
-  // Registrar fontkit para soportar TTF/OTF
-  pdfDoc.registerFontkit(fontkit);
-
-  // Embeder cada fuente personalizada
-  for (const fontName of CUSTOM_FONTS) {
-    const fontPath = CUSTOM_FONT_PATHS[fontName];
-    if (!fontPath) {
-      console.warn(`No se encontró ruta para la fuente personalizada: ${fontName}`);
-      continue;
-    }
-
-    try {
-      console.log(`  📝 Cargando fuente personalizada: ${fontName} desde ${fontPath}`);
-
-      // Cargar el archivo de fuente
-      const response = await fetch(fontPath);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch font: ${response.statusText}`);
-      }
-
-      const fontBytes = await response.arrayBuffer();
-
-      // Embeder la fuente en el PDF
-      const customFont = await pdfDoc.embedFont(fontBytes);
-      fontMap.set(fontName, customFont);
-
-      console.log(`  ✓ Fuente "${fontName}" embedida exitosamente`);
-    } catch (error) {
-      console.error(`Error al embeber fuente "${fontName}":`, error);
-      // Continuar con otras fuentes si una falla
-    }
-  }
-
-  return fontMap;
-};
-
 /**
  * Selecciona la fuente correcta para un texto basándose en fontFamily y fontWeight
- * @param fontFamily Nombre de la fuente
- * @param fontWeight Peso de la fuente ('normal' o 'bold')
- * @param standardFont Fuente estándar (Helvetica)
- * @param standardFontBold Fuente estándar bold (Helvetica Bold)
- * @param customFonts Mapa de fuentes personalizadas embedidas
- * @returns La fuente PDF correcta
- */
-const selectFont = (
-  fontFamily: string,
-  fontWeight: string,
-  standardFont: PDFFont,
-  standardFontBold: PDFFont,
-  customFonts: Map<string, PDFFont>
-): PDFFont => {
-  // Si la fuente es personalizada y está embedida, usarla
-  if (customFonts.has(fontFamily)) {
-    return customFonts.get(fontFamily)!;
-  }
-
-  // Si es fuente estándar o Google Font, usar Helvetica como fallback
-  // (las Google Fonts no se pueden embeber directamente en PDF)
-  return fontWeight === 'bold' ? standardFontBold : standardFont;
-};
 
 /**
  * Crea una imagen CMYK para pdf-lib con validación preflight
@@ -307,17 +304,32 @@ const embedImageWithCMYK = async (
 };
 
 /**
+ * Resuelve la imagen original de un UniformTemplate.
+ * Para elementos de carga Excel usa templatePiece + uniformTemplate del store
+ * evitando duplicar los datos de imagen en cada elemento.
+ */
+const resolveOriginalImage = (
+  uniform: UniformTemplate,
+  uniformTemplate: ReturnType<typeof useDesignerStore.getState>['uniformTemplate'],
+): string | undefined => {
+  if (uniform.templatePiece && uniformTemplate?.[uniform.templatePiece]) {
+    return uniformTemplate[uniform.templatePiece];
+  }
+  return uniform.originalImageUrl;
+};
+
+/**
  * Reemplaza temporalmente las URLs de imágenes en los elementos del canvas
  * para usar las imágenes originales en lugar de las comprimidas
  */
 const swapCanvasImagesToOriginal = async (): Promise<() => void> => {
   const store = useDesignerStore.getState();
-  const { elements, uniformSizesConfig, uniformSizesConfigCompressed } = store;
+  const { elements, uniformSizesConfig, uniformSizesConfigCompressed, uniformTemplate, uniformTemplateCompressed } = store;
 
   // Guardar los imageUrl originales para restaurar después
   const originalImageUrls = new Map<string, string>();
 
-  // Crear mapeo de URLs comprimidas → originales
+  // Crear mapeo de URLs comprimidas → originales (imágenes manuales por talla)
   const urlMapping = new Map<string, string>();
 
   Object.keys(uniformSizesConfig).forEach(size => {
@@ -340,6 +352,16 @@ const swapCanvasImagesToOriginal = async (): Promise<() => void> => {
     }
   });
 
+  // Mapeo para imágenes cargadas via Excel (template único comprimido → original)
+  if (uniformTemplate && uniformTemplateCompressed) {
+    const pieces = ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight'] as const;
+    for (const piece of pieces) {
+      const original = uniformTemplate[piece];
+      const compressed = uniformTemplateCompressed[piece];
+      if (original && compressed) urlMapping.set(compressed, original);
+    }
+  }
+
   // Actualizar elementos uniform con imágenes originales
   elements.forEach(element => {
     if (element.type === 'uniform') {
@@ -351,9 +373,9 @@ const swapCanvasImagesToOriginal = async (): Promise<() => void> => {
       // Intentar obtener la URL original del mapping
       let originalUrl = urlMapping.get(currentImageUrl);
 
-      // Si no está en el mapping, usar originalImageUrl si existe
-      if (!originalUrl && element.originalImageUrl) {
-        originalUrl = element.originalImageUrl;
+      // Fallback: resolver desde templatePiece o originalImageUrl
+      if (!originalUrl) {
+        originalUrl = resolveOriginalImage(element as UniformTemplate, uniformTemplate ?? null);
       }
 
       if (originalUrl && originalUrl !== currentImageUrl) {
@@ -634,9 +656,9 @@ export const exportAsPNGDirect = async (
           }
         }
 
-        // Si no se encontró en el mapping, usar originalImageUrl o imageUrl como fallback
+        // Si no se encontró en el mapping, resolver desde templatePiece o originalImageUrl
         if (!originalImageUrl) {
-          originalImageUrl = uniform.originalImageUrl || uniform.imageUrl;
+          originalImageUrl = resolveOriginalImage(uniform, store.uniformTemplate ?? null) || uniform.imageUrl;
         }
 
         if (originalImageUrl) {
@@ -1137,14 +1159,8 @@ export const exportAsPDFDirect = async (
     // Crear página
     let page = pdfDoc.addPage([widthInPoints, heightInPoints]);
 
-    // Embeber fuentes estándar
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    // Fuente para etiquetas de talla (Helvetica Bold embebido)
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-    // Embeber fuentes personalizadas
-    console.log('📝 Embebiendo fuentes personalizadas en PDF...');
-    const customFonts = await embedCustomFonts(pdfDoc);
-    console.log(`✓ ${customFonts.size} fuentes personalizadas embedidas`);
 
     // Estadísticas de TAC
     let maxTAC = 0;
@@ -1194,9 +1210,9 @@ export const exportAsPDFDirect = async (
           }
         }
 
-        // Si no se encontró en el mapeo, usar originalImageUrl o imageUrl como fallback
+        // Si no se encontró en el mapeo, resolver desde templatePiece o originalImageUrl
         if (!originalImageUrl) {
-          originalImageUrl = uniform.originalImageUrl || uniform.imageUrl;
+          originalImageUrl = resolveOriginalImage(uniform, store.uniformTemplate ?? null) || uniform.imageUrl;
           console.log(`  ⚠️  No se encontró imagen original, usando fallback`);
         }
 
@@ -1338,53 +1354,37 @@ export const exportAsPDFDirect = async (
 
         console.log(`  📝 Procesando texto: "${textEl.content}" | Fuente: ${textEl.fontFamily || 'Arial'}`);
 
-        // Convertir tamaño de fuente de píxeles del canvas a puntos del PDF
-        // fontSize en canvas está en píxeles, necesitamos escalarlo a puntos PDF
-        // usando la misma proporción que para las dimensiones (28.35 / pixelsPerCm)
         const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
+        const hexColor = textEl.fontColor || '#000000';
 
-        // Seleccionar la fuente correcta (personalizada o estándar)
-        const textFont = selectFont(
+        // Renderizar texto como imagen PNG usando el navegador (garantiza fuente correcta)
+        const textImg = await renderTextAsImage(
+          pdfDoc,
+          textEl.content,
           textEl.fontFamily || 'Arial',
           textEl.fontWeight || 'normal',
-          font,
-          fontBold,
-          customFonts
-        );
-
-        // Calcular ancho del texto
-        const textWidth = textFont.widthOfTextAtSize(textEl.content, fontSizeInPoints);
-
-        // Usar función de transformación matricial para convertir coordenadas
-        const pdfPos = canvasTextToPDF(
-          { x: textEl.position.x, y: textEl.position.y },
-          textEl.rotation,
-          textWidth,
           fontSizeInPoints,
-          { canvasHeight: heightInPoints, pixelsPerCm: canvasConfig.pixelsPerCm }
+          hexColor,
         );
 
-        const pdfX = pdfPos.x;
-        const pdfY = pdfPos.y;
+        if (textImg) {
+          // Posición top-left en PDF (y invertido: PDF origin=bottom-left)
+          const xInPts = (textEl.position.x / canvasConfig.pixelsPerCm) * 28.35;
+          const yInPts = (textEl.position.y / canvasConfig.pixelsPerCm) * 28.35;
+          const pdfX = xInPts;
+          const pdfY = heightInPoints - yInPts - textImg.heightPts;
 
-        // Convertir color de hex a RGB
-        const hexColor = textEl.fontColor || '#000000';
-        const r = parseInt(hexColor.slice(1, 3), 16) / 255;
-        const g = parseInt(hexColor.slice(3, 5), 16) / 255;
-        const b = parseInt(hexColor.slice(5, 7), 16) / 255;
+          page.drawImage(textImg.pdfImage, {
+            x: pdfX,
+            y: pdfY,
+            width:  textImg.widthPts,
+            height: textImg.heightPts,
+            opacity: textEl.opacity,
+            rotate: degrees(textEl.rotation),
+          });
+        }
 
-        // Renderizar texto con la fuente correcta
-        page.drawText(textEl.content, {
-          x: pdfX,
-          y: pdfY,
-          size: fontSizeInPoints,
-          font: textFont,
-          color: rgb(r, g, b),
-          opacity: textEl.opacity,
-          rotate: degrees(textEl.rotation),
-        });
-
-        console.log(`  ✓ Texto renderizado`);
+        console.log(`  ✓ Texto renderizado como imagen`);
       }
     }
 
@@ -1512,7 +1512,7 @@ export const exportMultiPagePDFDirect = async (
         }
 
         if (!originalImageUrl) {
-          originalImageUrl = uniform.originalImageUrl || uniform.imageUrl;
+          originalImageUrl = resolveOriginalImage(uniform, store.uniformTemplate ?? null) || uniform.imageUrl;
         }
 
         if (originalImageUrl) {
@@ -1572,12 +1572,8 @@ export const exportMultiPagePDFDirect = async (
       // Crear un NUEVO PDFDocument para esta página (regla de negocio: un archivo por página)
       const pdfDoc = await PDFDocument.create();
 
-      // Embeber fuentes estándar
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      // Fuente para etiquetas de talla (Helvetica Bold embebido)
       const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-      // Embeber fuentes personalizadas
-      const customFonts = await embedCustomFonts(pdfDoc);
 
       // Obtener elementos de esta página directamente
       const elements = store.pages[pageIndex] || [];
@@ -1638,7 +1634,7 @@ export const exportMultiPagePDFDirect = async (
           }
 
           if (!originalImageUrl) {
-            originalImageUrl = uniform.originalImageUrl || uniform.imageUrl;
+            originalImageUrl = resolveOriginalImage(uniform, store.uniformTemplate ?? null) || uniform.imageUrl;
           }
 
           if (originalImageUrl) {
@@ -1767,49 +1763,34 @@ export const exportMultiPagePDFDirect = async (
         } else if (element.type === 'text') {
           const textEl = element as TextElement;
 
-          // Convertir tamaño de fuente de píxeles del canvas a puntos del PDF
-          // fontSize en canvas está en píxeles, necesitamos escalarlo a puntos PDF
-          // usando la misma proporción que para las dimensiones (28.35 / pixelsPerCm)
           const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
+          const hexColor = textEl.fontColor || '#000000';
 
-          // Seleccionar la fuente correcta (personalizada o estándar)
-          const textFont = selectFont(
+          // Renderizar texto como imagen PNG usando el navegador (garantiza fuente correcta)
+          const textImg = await renderTextAsImage(
+            pdfDoc,
+            textEl.content,
             textEl.fontFamily || 'Arial',
             textEl.fontWeight || 'normal',
-            font,
-            fontBold,
-            customFonts
-          );
-
-          // Calcular ancho del texto
-          const textWidth = textFont.widthOfTextAtSize(textEl.content, fontSizeInPoints);
-
-          // Usar función de transformación matricial para convertir coordenadas
-          const pdfPos = canvasTextToPDF(
-            { x: textEl.position.x, y: textEl.position.y },
-            textEl.rotation,
-            textWidth,
             fontSizeInPoints,
-            { canvasHeight: heightInPoints, pixelsPerCm: canvasConfig.pixelsPerCm }
+            hexColor,
           );
 
-          const pdfX = pdfPos.x;
-          const pdfY = pdfPos.y;
+          if (textImg) {
+            const xInPts = (textEl.position.x / canvasConfig.pixelsPerCm) * 28.35;
+            const yInPts = (textEl.position.y / canvasConfig.pixelsPerCm) * 28.35;
+            const pdfX = xInPts;
+            const pdfY = heightInPoints - yInPts - textImg.heightPts;
 
-          const hexColor = textEl.fontColor || '#000000';
-          const r = parseInt(hexColor.slice(1, 3), 16) / 255;
-          const g = parseInt(hexColor.slice(3, 5), 16) / 255;
-          const b = parseInt(hexColor.slice(5, 7), 16) / 255;
-
-          page.drawText(textEl.content, {
-            x: pdfX,
-            y: pdfY,
-            size: fontSizeInPoints,
-            font: textFont,
-            color: rgb(r, g, b),
-            opacity: textEl.opacity,
-            rotate: degrees(textEl.rotation),
-          });
+            page.drawImage(textImg.pdfImage, {
+              x: pdfX,
+              y: pdfY,
+              width:  textImg.widthPts,
+              height: textImg.heightPts,
+              opacity: textEl.opacity,
+              rotate: degrees(textEl.rotation),
+            });
+          }
         }
       }
 

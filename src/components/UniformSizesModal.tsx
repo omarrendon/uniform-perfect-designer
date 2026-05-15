@@ -1,9 +1,10 @@
 import React, { useState, useRef } from "react";
-import { X, Upload, Check, AlertCircle, FileUp } from "lucide-react";
+import { X, Upload, Check, AlertCircle, FileUp, Palette } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
 import { validateExcelFile } from "../utils/excelReader";
 import { processExcelFile } from "../utils/excelProcessor";
 import type { ExcelProcessorCallbacks } from "../utils/excelProcessor";
+import { UniformDesignPreviewModal } from "./UniformDesignPreviewModal";
 
 interface UniformSizesModalProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
+  const [showDesignModal, setShowDesignModal] = useState(false);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
   const { uniformTemplate, setUniformTemplate, isTemplateComplete } = useDesignerStore();
@@ -183,6 +185,23 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                 {uploadedCount}/4 imágenes cargadas — faltan {4 - uploadedCount} para continuar
               </span>
             </div>
+          )}
+
+          {templateComplete && (
+            <button
+              onClick={() => setShowDesignModal(true)}
+              style={{
+                marginTop: '10px',
+                display: 'flex', alignItems: 'center', gap: '8px',
+                width: '100%', padding: '10px 16px',
+                backgroundColor: '#7c3aed', color: 'white',
+                border: 'none', borderRadius: '8px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+              }}
+            >
+              <Palette style={{ width: '18px', height: '18px' }} />
+              Armar posiciones de números y nombres
+            </button>
           )}
         </div>
 
@@ -407,6 +426,11 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
           </div>
         )}
       </div>
+
+      <UniformDesignPreviewModal
+        isOpen={showDesignModal}
+        onClose={() => setShowDesignModal(false)}
+      />
     </div>
   );
 };

@@ -275,6 +275,7 @@ import type {
   Size,
   SizeConfig,
   SizeImages,
+  UniformDesignConfig,
   UniformSizesConfig,
 } from "../types";
 import { findValidPosition } from "../utils/canvas";
@@ -324,6 +325,10 @@ interface DesignerState {
   setUniformTemplate: (images: Partial<SizeImages>) => void;
   isTemplateComplete: () => boolean;
   clearUniformTemplate: () => void;
+
+  // Diseño del uniforme (posiciones de textos)
+  uniformDesignConfig: UniformDesignConfig | null;
+  setUniformDesignConfig: (config: UniformDesignConfig | null) => void;
 
   // History (Undo/Redo)
   history: HistoryState[];
@@ -446,8 +451,9 @@ export const useDesignerStore = create<DesignerState>()(
         sizeConfigs: DEFAULT_SIZE_CONFIGS,
         uniformSizesConfig: {}, // Configuración de imágenes ORIGINALES por talla
         uniformSizesConfigCompressed: {}, // Configuración de imágenes COMPRIMIDAS por talla
-        uniformTemplate: null, // Plantilla única ORIGINAL para todas las tallas
-        uniformTemplateCompressed: null, // Plantilla única COMPRIMIDA para canvas
+        uniformTemplate: null,
+        uniformTemplateCompressed: null,
+        uniformDesignConfig: null,
         history: [],
         historyIndex: -1,
         currentProject: null,
@@ -780,13 +786,13 @@ export const useDesignerStore = create<DesignerState>()(
             uniformSizesConfigCompressed: {},
           })),
 
-        // Uniform template actions
+        // Uniform template — plantilla única para todas las tallas
         setUniformTemplate: (images) =>
           set(state => ({
             uniformTemplate: {
-              ...(state.uniformTemplate || {}),
+              ...(state.uniformTemplate ?? {}),
               ...images,
-            } as SizeImages,
+            },
           })),
 
         isTemplateComplete: () => {
@@ -803,7 +809,11 @@ export const useDesignerStore = create<DesignerState>()(
           set(() => ({
             uniformTemplate: null,
             uniformTemplateCompressed: null,
+            uniformDesignConfig: null,
           })),
+
+        setUniformDesignConfig: (config) =>
+          set(() => ({ uniformDesignConfig: config })),
 
         // Helper para obtener configuración de talla por género
         getSizeConfig: (size: Size, gender: Gender) => {
@@ -1016,6 +1026,7 @@ export const useDesignerStore = create<DesignerState>()(
           sizeConfigs: state.sizeConfigs,
           // uniformSizesConfig: NO se guarda en localStorage para evitar problemas de espacio
           showGrid: state.showGrid,
+          uniformDesignConfig: state.uniformDesignConfig,
         }),
       }
     )

@@ -32,11 +32,16 @@ export const readExcelFile = async (
         // Convertir a JSON
         const rawData = XLSX.utils.sheet_to_json<any>(worksheet, { defval: "" });
 
-        // Normalizar los nombres de las columnas (convertir a minúsculas y quitar espacios)
+        // Normalizar los nombres de las columnas (minúsculas, sin espacios, sin acentos)
         const jsonData = rawData.map((row: any) => {
           const normalizedRow: any = {};
           Object.keys(row).forEach((key) => {
-            const normalizedKey = key.toLowerCase().trim().replace(/\s+/g, '_');
+            const normalizedKey = key
+              .toLowerCase()
+              .trim()
+              .replace(/\s+/g, '_')
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, ''); // quitar diacríticos (á→a, é→e, ñ→n, etc.)
             normalizedRow[normalizedKey] = row[key];
           });
           return normalizedRow;

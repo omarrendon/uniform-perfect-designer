@@ -63,12 +63,15 @@ export interface UniformElement {
   visible: boolean;
 }
 
+export type TemplatePiece = 'jerseyFront' | 'jerseyBack' | 'shortsLeft' | 'shortsRight';
+
 export interface UniformTemplate extends UniformElement {
   type: 'uniform';
   baseColor: string;
   imageUrl?: string;
   imageMask?: string;
-  originalImageUrl?: string; // URL de la imagen original para exportar en alta calidad
+  originalImageUrl?: string; // URL de la imagen original (uploads manuales)
+  templatePiece?: TemplatePiece; // Para carga Excel: identifica la pieza sin duplicar los datos de imagen
   side?: 'front' | 'back' | 'right' | 'left'; // Lado del uniforme
   source?: 'excel' | 'manual'; // Origen: carga masiva Excel o imágenes manuales
 }
@@ -121,4 +124,24 @@ export interface ExportOptions {
   quality?: number;
   canvasWidth?: number; // Ancho del canvas en cm (para PDF)
   canvasHeight?: number; // Alto del canvas en cm (para PDF)
+}
+
+// Configuración de diseño para un elemento de texto en el uniforme
+export interface TextDesignConfig {
+  enabled: boolean;
+  relativeX: number;  // 0–1, fracción del ancho de la pieza
+  relativeY: number;  // 0–1, fracción del alto de la pieza
+  fontFamily: string;
+  fontSize: number;   // px a talla M de referencia (568.63px de ancho)
+  fontColor: string;  // #RRGGBB
+  fontWeight: 'normal' | 'bold';
+  textAlign: 'left' | 'center' | 'right';
+}
+
+// Diseño completo del uniforme: posición y estilo de cada texto
+export interface UniformDesignConfig {
+  jerseyFrontNumber: TextDesignConfig;
+  jerseyBackNumber: TextDesignConfig;
+  jerseyBackName: TextDesignConfig;
+  shortsNumber: TextDesignConfig & { side: 'left' | 'right' };
 }
