@@ -753,11 +753,17 @@ export const exportAsPNGDirect = async (
 
             // Configurar texto
             ctx.font = `bold ${tallaFontSize}px Arial, sans-serif`;
-            ctx.fillStyle = '#000000';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
 
-            // Dibujar texto centrado
+            // Contorno blanco
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3 * SCALE_FACTOR;
+            ctx.lineJoin = 'round';
+            ctx.strokeText(tallaText, textCenterX, textY);
+
+            // Relleno negro
+            ctx.fillStyle = '#000000';
             ctx.fillText(tallaText, textCenterX, textY);
 
             // Restaurar estado
@@ -1348,6 +1354,15 @@ export const exportAsPDFDirect = async (
               tallaPdfX = tallaPdfPos.x + textWidth / 2;
             }
 
+            const tallaOutlineOpts = { size: tallaFontSizeInPoints, font: fontBold, color: rgb(1, 1, 1), rotate: degrees(uniform.rotation) };
+            const outlineOffsets = [-0.5, 0, 0.5];
+            for (const dx of outlineOffsets) {
+              for (const dy of outlineOffsets) {
+                if (dx !== 0 || dy !== 0) {
+                  page.drawText(tallaText, { ...tallaOutlineOpts, x: tallaPdfX + dx, y: tallaPdfY + dy });
+                }
+              }
+            }
             page.drawText(tallaText, {
               x: tallaPdfX,
               y: tallaPdfY,
@@ -1762,6 +1777,15 @@ export const exportMultiPagePDFDirect = async (
                 tallaPdfX = tallaPdfPos.x + textWidth / 2;
               }
 
+              const tallaOutlineOpts2 = { size: tallaFontSizeInPoints, font: fontBold, color: rgb(1, 1, 1), rotate: degrees(uniform.rotation) };
+              const outlineOffsets2 = [-0.5, 0, 0.5];
+              for (const dx of outlineOffsets2) {
+                for (const dy of outlineOffsets2) {
+                  if (dx !== 0 || dy !== 0) {
+                    page.drawText(tallaText, { ...tallaOutlineOpts2, x: tallaPdfX + dx, y: tallaPdfY + dy });
+                  }
+                }
+              }
               page.drawText(tallaText, {
                 x: tallaPdfX,
                 y: tallaPdfY,

@@ -140,6 +140,8 @@ export const UniformElement: React.FC<UniformElementProps> = ({
             fontFamily="Arial"
             fontStyle="bold"
             fill="black"
+            stroke="white"
+            strokeWidth={2}
             align="center"
           />
         )}
@@ -179,6 +181,8 @@ export const UniformElement: React.FC<UniformElementProps> = ({
             fontFamily="Arial"
             fontStyle="bold"
             fill="black"
+            stroke="white"
+            strokeWidth={2}
             align="center"
           />
         )}
