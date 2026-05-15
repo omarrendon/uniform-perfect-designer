@@ -26,6 +26,7 @@ import {
   generateId,
   findValidPosition,
   hasSpaceForElement,
+  base64ToBlobUrl,
 } from "../utils/canvas";
 import { readExcelFile, validateExcelFile } from "../utils/excelReader";
 import { ErrorModal } from "../components/ErrorModal";
@@ -36,6 +37,7 @@ import {
   getValidFontOrFallback,
   ALL_FONTS,
 } from "../utils/fontLoader";
+import { optimizeLayoutAdvanced } from "../utils/binPacking";
 
 export const Toolbar: React.FC = () => {
   const {
@@ -210,55 +212,7 @@ export const Toolbar: React.FC = () => {
       }
 
       // Obtener el estado actual
-      const { canvasConfig, addPage } = useDesignerStore.getState();
-
-      // Función para obtener el molde de frente — usa el template único
-      const getMoldeFrenteUrl = (): string => {
-        const { uniformTemplateCompressed } = useDesignerStore.getState();
-        return uniformTemplateCompressed?.jerseyFront || "";
-      };
-
-      // Función para obtener el molde de espalda — usa el template único
-      const getMoldeEspaldaUrl = (): string => {
-        const { uniformTemplateCompressed } = useDesignerStore.getState();
-        return uniformTemplateCompressed?.jerseyBack || "";
-      };
-
-      // Función auxiliar para obtener dimensiones reales de una imagen desde base64/URL
-      const getImageDimensions = (imageUrl: string): Promise<{ width: number; height: number }> => {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            resolve({ width: img.width, height: img.height });
-          };
-          img.onerror = () => {
-            // Si falla, usar dimensiones por defecto
-            resolve({ width: 380, height: 265 });
-          };
-          img.src = imageUrl;
-        });
-      };
-
-      // Función para obtener el molde de short — usa el template único
-      const getShortsConfig = async (): Promise<{
-        left: { url: string; width: number; height: number };
-        right: { url: string; width: number; height: number };
-      }> => {
-        const { uniformTemplateCompressed } = useDesignerStore.getState();
-
-        const leftDimensions = uniformTemplateCompressed?.shortsLeft
-          ? await getImageDimensions(uniformTemplateCompressed.shortsLeft)
-          : { width: 380, height: 265 };
-
-        const rightDimensions = uniformTemplateCompressed?.shortsRight
-          ? await getImageDimensions(uniformTemplateCompressed.shortsRight)
-          : { width: 380, height: 265 };
-
-        return {
-          left: { url: uniformTemplateCompressed?.shortsLeft || "", ...leftDimensions },
-          right: { url: uniformTemplateCompressed?.shortsRight || "", ...rightDimensions },
-        };
-      };
+      const { canvasConfig, addPage, addElementsBatch, sizeConfigs } = useDesignerStore.getState();
 
       // Función para obtener la configuración de talla
       const getSizeConfig = (tallaExcel: string) => {
@@ -298,141 +252,101 @@ export const Toolbar: React.FC = () => {
       setShowBulkLoading(true);
       setBulkProgress({ current: 0, total: rows.length });
 
-      // Pequeño delay para que el loading se muestre antes de empezar el procesamiento
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Yield al event loop para que el loading se muestre
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       // COMPRIMIR el template una sola vez (mantiene originales para PDF)
-      console.log('Comprimiendo imágenes del template para canvas...');
       const storeState = useDesignerStore.getState();
       const uniformTemplateOriginal = storeState.uniformTemplate;
       const compressedTemplate: any = {};
 
-      if (uniformTemplateOriginal?.jerseyFront)
-        compressedTemplate.jerseyFront = await compressImageForCanvas(uniformTemplateOriginal.jerseyFront);
-      if (uniformTemplateOriginal?.jerseyBack)
-        compressedTemplate.jerseyBack = await compressImageForCanvas(uniformTemplateOriginal.jerseyBack);
-      if (uniformTemplateOriginal?.shortsLeft)
-        compressedTemplate.shortsLeft = await compressImageForCanvas(uniformTemplateOriginal.shortsLeft);
-      if (uniformTemplateOriginal?.shortsRight)
-        compressedTemplate.shortsRight = await compressImageForCanvas(uniformTemplateOriginal.shortsRight);
+      const pieces = ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight'] as const;
+      await Promise.all(
+        pieces.map(async (piece) => {
+          if (uniformTemplateOriginal?.[piece]) {
+            compressedTemplate[piece] = await compressImageForCanvas(uniformTemplateOriginal[piece]!);
+          }
+        })
+      );
 
       useDesignerStore.setState({ uniformTemplateCompressed: compressedTemplate });
-      console.log('✓ Template comprimido para canvas (originales intactos para PDF)');
 
-      // Pausa después de comprimir antes de procesar
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Convertir las 4 imágenes del template a blob URLs una sola vez.
+      // Todos los elementos que se creen apuntarán a estos blob URLs cortos (~60 bytes)
+      // en lugar de embeber la cadena base64 completa (~300KB) en cada elemento.
+      const { uniformTemplateCompressed: tmplCompressed } = useDesignerStore.getState();
+      const templateBlobUrls: Record<string, string> = {};
+      for (const piece of ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight'] as const) {
+        if (tmplCompressed?.[piece]) templateBlobUrls[piece] = base64ToBlobUrl(tmplCompressed[piece]!);
+      }
 
-      // Obtener todas las páginas actuales
-      const { pages } = useDesignerStore.getState();
+      // Staging arrays para MaxRects
+      const stagedUniforms: UniformTemplate[] = [];
+      const stagedTexts: Array<{ element: TextElement; parentId: string }> = [];
 
-      // Array temporal para mantener los elementos de la página actual
-      let currentElements = pages[0] ? [...pages[0]] : [];
-      let currentPageIndex = 0;
+      const shortsAspectRatio = 863.6 / 602.38; // ratio M como referencia
 
-      // Contadores para tracking
-      const shortsPerPage: { [pageIndex: number]: number } = {};
-
-      // Por cada fila del Excel, crear un juego de playera (espalda + frente)
       let processedCount = 0;
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
 
         if (!row.nombre || row.nombre.trim() === "") {
-          continue; // Saltar filas sin nombre
+          continue;
         }
 
-        // Obtener la talla de la fila (default "M" si no existe)
         const tallaExcel = row.talla || "m";
         const sizeConfig = getSizeConfig(tallaExcel);
-        // Talla para mostrar en el molde (usar la talla original del Excel en mayúsculas)
         const tallaMostrar = tallaExcel.toUpperCase().trim();
 
-        // Obtener la fuente de la fila (default "Arial" si no existe)
         const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
-
-        // Cargar la fuente si no es Arial
         if (fonteFila !== "Arial") {
           await loadFont(fonteFila);
         }
 
-        // Dimensiones de jersey con rotación 0°
         const jerseyDimensions = {
           width: sizeConfig.width,
           height: sizeConfig.height,
         };
 
-        const canvasWidth = canvasConfig.width * canvasConfig.pixelsPerCm;
-        const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
-        const elementGap = 5;
+        const shortsDimensions = {
+          width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
+          height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / shortsAspectRatio,
+        };
 
-        // 1. Crear Jersey ESPALDA (columna 1 - izquierda)
-        // Filtrar solo jerseys en la columna 1 (primera columna izquierda)
-        // Usar posición fija (x=0) en lugar de dimensiones variables para evitar problemas con tallas mixtas
-        const jerseysCol1 = currentElements.filter(
-          el => el.type === "uniform" && el.part === "jersey" && el.position.x === 0
-        );
-
-        let espaldaX = 0;
-        let espaldaY = 0;
-
-        if (jerseysCol1.length > 0) {
-          // Buscar el Y máximo en la columna 1
-          const maxY = Math.max(...jerseysCol1.map(j => j.position.y + j.dimensions.height));
-          espaldaY = maxY + elementGap;
-
-          // Verificar si cabe en la columna
-          if (espaldaY + jerseyDimensions.height > canvasHeight) {
-            // No cabe, crear nueva página
-            console.log(`🆕 Creando nueva página para jersey espalda. Uniforme: ${row.nombre}, Talla: ${tallaMostrar}`);
-            addPage();
-            currentPageIndex++;
-            // Sincronizar currentElements con el estado real de la nueva página
-            const { pages: updatedPages } = useDesignerStore.getState();
-            console.log(`   Total páginas después de addPage(): ${updatedPages.length}, currentPageIndex: ${currentPageIndex}`);
-            currentElements = updatedPages[currentPageIndex] ? [...updatedPages[currentPageIndex]] : [];
-            console.log(`   Elementos en nueva página: ${currentElements.length}`);
-            espaldaX = 0;
-            espaldaY = 0;
-          }
-        }
-
-        const jerseyEspalda = { x: espaldaX, y: espaldaY };
-
+        // 1. Jersey Espalda
+        const jerseyEspaldaId = generateId("uniform");
         const newJerseyEspalda: UniformTemplate = {
-          id: generateId("uniform"),
+          id: jerseyEspaldaId,
           type: "uniform",
           part: "jersey",
           size: tallaMostrar as any,
-          position: jerseyEspalda,
+          position: { x: 0, y: 0 },
           dimensions: jerseyDimensions,
-          rotation: 0, // Sin rotación
-          zIndex: currentElements.length,
+          rotation: 0,
+          zIndex: stagedUniforms.length,
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-        imageUrl: getMoldeEspaldaUrl(),
+          imageUrl: templateBlobUrls['jerseyBack'] ?? "",
+          source: "excel",
         };
+        stagedUniforms.push(newJerseyEspalda);
 
-        currentElements.push(newJerseyEspalda);
-        addElement(newJerseyEspalda, currentPageIndex);
-
-        // Crear elemento de texto con el nombre para el molde de espalda
+        // Nombre en espalda (posición relativa al jersey)
         const textoDimensions = { width: jerseyDimensions.width * 0.8, height: 50 };
-        const textoPosition = {
-          x: jerseyEspalda.x + (jerseyDimensions.width - textoDimensions.width) / 2 + 150, // Centrado horizontalmente + 150px a la derecha
-          y: jerseyEspalda.y + jerseyDimensions.height / 2 - 100, // Centrado y subido 100 píxeles
-        };
-
         const newTextoNombre: TextElement = {
           id: generateId("text"),
           type: "text",
           part: "jersey",
           size: tallaMostrar as any,
-          position: textoPosition,
+          position: {
+            x: (jerseyDimensions.width - textoDimensions.width) / 2 + 150,
+            y: jerseyDimensions.height / 2 - 100,
+          },
           dimensions: textoDimensions,
           rotation: 0,
-          zIndex: currentElements.length,
+          zIndex: 0,
           locked: false,
           visible: true,
           content: row.nombre,
@@ -444,28 +358,24 @@ export const Toolbar: React.FC = () => {
           opacity: 1,
           side: "front",
         };
+        stagedTexts.push({ element: newTextoNombre, parentId: jerseyEspaldaId });
 
-        currentElements.push(newTextoNombre);
-        addElement(newTextoNombre, currentPageIndex);
-
-        // Crear elemento de texto con el número trasero para el molde de espalda (si existe)
+        // Número trasero (si existe)
         if (row.numero_trasero) {
-          const numeroFontSize = 102; // 52 + 50 píxeles
-          const numeroTextoDimensions = { width: jerseyDimensions.width * 0.8, height: numeroFontSize + 20 };
-          const numeroTextoPosition = {
-            x: jerseyEspalda.x + (jerseyDimensions.width - numeroTextoDimensions.width) / 2 + 30, // Centrado horizontalmente + 30px a la derecha
-            y: jerseyEspalda.y + (jerseyDimensions.height - numeroTextoDimensions.height) / 2 + 20, // Centrado verticalmente + 20px abajo
-          };
-
+          const numeroFontSize = 102;
+          const numeroDims = { width: jerseyDimensions.width * 0.8, height: numeroFontSize + 20 };
           const newTextoNumero: TextElement = {
             id: generateId("text"),
             type: "text",
             part: "jersey",
             size: tallaMostrar as any,
-            position: numeroTextoPosition,
-            dimensions: numeroTextoDimensions,
+            position: {
+              x: (jerseyDimensions.width - numeroDims.width) / 2 + 30,
+              y: (jerseyDimensions.height - numeroDims.height) / 2 + 20,
+            },
+            dimensions: numeroDims,
             rotation: 0,
-            zIndex: currentElements.length,
+            zIndex: 0,
             locked: false,
             visible: true,
             content: String(row.numero_trasero),
@@ -477,83 +387,44 @@ export const Toolbar: React.FC = () => {
             opacity: 1,
             side: "front",
           };
-
-          currentElements.push(newTextoNumero);
-          addElement(newTextoNumero, currentPageIndex);
+          stagedTexts.push({ element: newTextoNumero, parentId: jerseyEspaldaId });
         }
 
-        // 2. Crear Jersey FRENTE (columna 2 - centro)
-        // Calcular posición X de la columna 2 basada en el uniforme actual
-        const col2X = jerseyDimensions.width + elementGap;
-        // Filtrar jerseys en columna 2 usando posición aproximada para manejar tallas mixtas
-        // Consideramos que están en columna 2 si su X está cerca de col2X (dentro de un rango razonable)
-        const jerseysCol2 = currentElements.filter(
-          el => el.type === "uniform" && el.part === "jersey" &&
-          el.position.x > elementGap && el.position.x < canvasWidth / 2
-        );
-
-        let frenteX = col2X;
-        let frenteY = 0;
-
-        if (jerseysCol2.length > 0) {
-          // Buscar el Y máximo en la columna 2
-          const maxY = Math.max(...jerseysCol2.map(j => j.position.y + j.dimensions.height));
-          frenteY = maxY + elementGap;
-
-          // Verificar si cabe en la columna
-          if (frenteY + jerseyDimensions.height > canvasHeight) {
-            // No cabe, crear nueva página
-            console.log(`🆕 Creando nueva página para jersey frente. Uniforme: ${row.nombre}, Talla: ${tallaMostrar}`);
-            addPage();
-            currentPageIndex++;
-            // Sincronizar currentElements con el estado real de la nueva página
-            const { pages: updatedPages } = useDesignerStore.getState();
-            console.log(`   Total páginas después de addPage(): ${updatedPages.length}, currentPageIndex: ${currentPageIndex}`);
-            currentElements = updatedPages[currentPageIndex] ? [...updatedPages[currentPageIndex]] : [];
-            console.log(`   Elementos en nueva página: ${currentElements.length}`);
-            frenteX = col2X;
-            frenteY = 0;
-          }
-        }
-
-        const jerseyFrente = { x: frenteX, y: frenteY };
-
+        // 2. Jersey Frente
+        const jerseyFrenteId = generateId("uniform");
         const newJerseyFrente: UniformTemplate = {
-          id: generateId("uniform"),
+          id: jerseyFrenteId,
           type: "uniform",
           part: "jersey",
           size: tallaMostrar as any,
-          position: jerseyFrente,
+          position: { x: 0, y: 0 },
           dimensions: jerseyDimensions,
-          rotation: 0, // Sin rotación
-          zIndex: currentElements.length,
+          rotation: 0,
+          zIndex: stagedUniforms.length,
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-        imageUrl: getMoldeFrenteUrl(),
+          imageUrl: templateBlobUrls['jerseyFront'] ?? "",
+          source: "excel",
         };
+        stagedUniforms.push(newJerseyFrente);
 
-        currentElements.push(newJerseyFrente);
-        addElement(newJerseyFrente, currentPageIndex);
-
-        // Crear elemento de texto con el número frontal para el molde de frente (si existe)
+        // Número frente (si existe)
         if (row.numero_frente) {
-          const numeroFrenteFontSize = 32; // Mismo tamaño que el nombre
-          const numeroFrenteTextoDimensions = { width: 100, height: numeroFrenteFontSize + 20 };
-          const numeroFrenteTextoPosition = {
-            x: jerseyFrente.x + jerseyDimensions.width - numeroFrenteTextoDimensions.width - 20, // Esquina superior derecha con margen
-            y: jerseyFrente.y + 20, // Parte superior con margen
-          };
-
+          const numeroFrenteFontSize = 32;
+          const numFrenteDims = { width: 100, height: numeroFrenteFontSize + 20 };
           const newTextoNumeroFrente: TextElement = {
             id: generateId("text"),
             type: "text",
             part: "jersey",
             size: tallaMostrar as any,
-            position: numeroFrenteTextoPosition,
-            dimensions: numeroFrenteTextoDimensions,
+            position: {
+              x: jerseyDimensions.width - numFrenteDims.width - 20,
+              y: 20,
+            },
+            dimensions: numFrenteDims,
             rotation: 0,
-            zIndex: currentElements.length,
+            zIndex: 0,
             locked: false,
             visible: true,
             content: String(row.numero_frente),
@@ -565,226 +436,97 @@ export const Toolbar: React.FC = () => {
             opacity: 1,
             side: "front",
           };
-
-          currentElements.push(newTextoNumeroFrente);
-          addElement(newTextoNumeroFrente, currentPageIndex);
+          stagedTexts.push({ element: newTextoNumeroFrente, parentId: jerseyFrenteId });
         }
 
-        // 3. Crear PAR DE SHORTS (columna 3 - UNA SOLA columna vertical pegada a la derecha)
-        // Obtener configuración de ambos shorts (URL y dimensiones reales)
-        const shortsConfig = await getShortsConfig();
-
-        // Calcular dimensiones proporcionales basadas en el sizeConfig del jersey
-        // Los shorts deben escalarse proporcionalmente al jersey
-        const realShortWidth = shortsConfig.left.width;
-        const realShortHeight = shortsConfig.left.height;
-
-        // Escalar los shorts para que sean proporcionales al jersey en el canvas
-        // Usar medidas PRECISAS de moldes reales si están disponibles
-        // Si no, usar fórmula antigua como fallback (45% del ancho del jersey)
-        const aspectRatio = realShortWidth / realShortHeight;
-
-        const shortsDimensions = {
-          width: sizeConfig.shortsWidth || sizeConfig.width * 0.45,
-          height: sizeConfig.shortsHeight || (sizeConfig.width * 0.45) / aspectRatio,
-        };
-
-        // Calcular espacio necesario para el par (dos shorts verticalmente)
-        const pairHeight = shortsDimensions.height * 2 + elementGap;
-
-        // Posición X FIJA: PEGADO AL BORDE DERECHO del canvas
-        // Esta X NUNCA cambia - todos los shorts van en esta misma X
-        // canvasWidth ya está definido arriba
-        const shortsColumnX = canvasWidth - shortsDimensions.width;
-
-        // ⚡ CRÍTICO: OBTENER ESTADO FRESCO del store DESPUÉS de agregar jerseys
-        // Esto asegura que tengamos la información actualizada de todas las páginas
-        let storeState = useDesignerStore.getState();
-        let allPages = storeState.pages;
-
-        // ESTRATEGIA: Intentar colocar shorts en página actual primero,
-        // si no caben, intentar en página anterior (si existe y tiene espacio),
-        // si tampoco, crear nueva página
-
-        let shortsPageIndex = currentPageIndex;
-        let pairY = 0;
-        let foundSpace = false;
-
-        // Verificar página actual (con estado FRESCO)
-        const currentPageElements = allPages[currentPageIndex] || [];
-        const shortsInCurrentPage = currentPageElements.filter(
-          el => el.type === "uniform" && el.part === "shorts"
-        );
-
-        if (shortsInCurrentPage.length > 0) {
-          const maxY = Math.max(...shortsInCurrentPage.map(s => s.position.y + s.dimensions.height));
-          pairY = maxY + elementGap;
-        }
-
-        // ESTRATEGIA MEJORADA: Buscar en TODAS las páginas desde la 0 hasta la actual
-        // Intentar llenar las páginas anteriores primero antes de usar la actual
-
-        // Buscar en todas las páginas existentes, empezando desde la 0
-        for (let pageIndex = 0; pageIndex <= currentPageIndex; pageIndex++) {
-          // Refrescar estado
-          storeState = useDesignerStore.getState();
-          allPages = storeState.pages;
-
-          const pageElements = allPages[pageIndex] || [];
-          const shortsInPage = pageElements.filter(
-            el => el.type === "uniform" && el.part === "shorts"
-          );
-
-          let pagePairY = 0;
-          if (shortsInPage.length > 0) {
-            const maxY = Math.max(...shortsInPage.map(s => s.position.y + s.dimensions.height));
-            pagePairY = maxY + elementGap;
-          }
-
-          // ¿Cabe en esta página?
-          if (pagePairY + pairHeight <= canvasHeight) {
-            foundSpace = true;
-            shortsPageIndex = pageIndex;
-            pairY = pagePairY;
-            break; // Usar la primera página donde cabe
-          }
-        }
-
-        // Si no encontró espacio en ninguna página existente, crear nueva
-        if (!foundSpace) {
-          addPage();
-          // NO incrementar currentPageIndex ni modificar currentElements
-          // porque son para JERSEYS, no para shorts
-          // Los shorts tienen su propio índice independiente
-          const { pages: updatedPages } = useDesignerStore.getState();
-          shortsPageIndex = updatedPages.length - 1; // Última página creada
-          pairY = 0;
-        }
-
-        // ⚡ REFRESCAR estado una vez más antes de obtener zIndex
-        storeState = useDesignerStore.getState();
-        allPages = storeState.pages;
-
-        // Obtener zIndex correcto basado en la página donde van los shorts
-        let targetPageElements = allPages[shortsPageIndex] || [];
-        const baseZIndex = targetPageElements.length;
-
-        // Crear SHORT IZQUIERDO (arriba, normal) - SIEMPRE en shortsColumnX
-        const short1Position = { x: shortsColumnX, y: pairY };
-        const newShort1: UniformTemplate = {
-          id: generateId("uniform"),
+        // 3. Short Izquierdo
+        const shortsLeftId = generateId("uniform");
+        stagedUniforms.push({
+          id: shortsLeftId,
           type: "uniform",
           part: "shorts",
           size: tallaMostrar as any,
-          position: short1Position,
+          position: { x: 0, y: 0 },
           dimensions: shortsDimensions,
           rotation: 0,
-          zIndex: baseZIndex,
+          zIndex: stagedUniforms.length,
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: shortsConfig.left.url,
+          imageUrl: templateBlobUrls['shortsLeft'] ?? "",
           side: "left",
-        };
+          source: "excel",
+        });
 
-        // Si los shorts van en página diferente a la actual, actualizar currentElements
-        if (shortsPageIndex === currentPageIndex) {
-          currentElements.push(newShort1);
-        }
-        addElement(newShort1, shortsPageIndex);
-
-        // Refrescar el estado después de agregar Short 1
-        const updatedState = useDesignerStore.getState();
-        targetPageElements = updatedState.pages[shortsPageIndex] || [];
-
-        // Crear SHORT DERECHO (abajo, invertido 180°) - SIEMPRE en shortsColumnX
-        const short2Position = {
-          x: shortsColumnX,
-          y: pairY + shortsDimensions.height + elementGap,
-        };
-
-        const newShort2: UniformTemplate = {
+        // 4. Short Derecho
+        stagedUniforms.push({
           id: generateId("uniform"),
           type: "uniform",
           part: "shorts",
           size: tallaMostrar as any,
-          position: short2Position,
+          position: { x: 0, y: 0 },
           dimensions: shortsDimensions,
-          rotation: 180, // Rotado 180° para quedar de cabeza
-          zIndex: targetPageElements.length, // Usar la longitud actualizada
+          rotation: 180,
+          zIndex: stagedUniforms.length,
           locked: false,
           visible: true,
           baseColor: "#3b82f6",
-          imageUrl: shortsConfig.right.url,
+          imageUrl: templateBlobUrls['shortsRight'] ?? "",
           side: "right",
-        };
+          source: "excel",
+        });
 
-        // Si los shorts van en página diferente a la actual, actualizar currentElements
-        if (shortsPageIndex === currentPageIndex) {
-          currentElements.push(newShort2);
-        }
-        addElement(newShort2, shortsPageIndex);
-
-        // Incrementar contador de shorts por página
-        if (!shortsPerPage[shortsPageIndex]) {
-          shortsPerPage[shortsPageIndex] = 0;
-        }
-        shortsPerPage[shortsPageIndex] += 2; // Un par = 2 shorts
-
-        // Actualizar progreso
         processedCount++;
         setBulkProgress({ current: processedCount, total: rows.length });
-
-        // PROCESAMIENTO POR LOTES: Cada 5 uniformes, hacer una pausa LARGA
-        // para permitir limpieza de memoria
-        if (processedCount % 5 === 0) {
-          // Pausa de 3 segundos cada 5 uniformes
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        } else {
-          // Pausa pequeña entre uniformes del mismo lote
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+        // Yield mínimo para actualizar barra de progreso
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
 
-      // Mostrar resumen final
-      console.log('\n========== RESUMEN DE DISTRIBUCIÓN DE SHORTS ==========');
-      const finalState = useDesignerStore.getState();
-      const finalPages = finalState.pages;
+      // --- POST-PROCESO: MaxRects ---
+      const result = optimizeLayoutAdvanced(stagedUniforms, canvasConfig, {
+        elementGap: 5,
+        canvasMargin: 0,
+        canvasMarginV: 0,
+        allowRotation: false,
+        sortStrategy: "area",
+        heuristic: "BSSF",
+      });
 
-      for (let i = 0; i < finalPages.length; i++) {
-        const pageElements = finalPages[i] || [];
-        const shortsInPage = pageElements.filter(el => el.type === "uniform" && el.part === "shorts");
-        const pairsInPage = shortsInPage.length / 2;
+      const { pages: existingPages } = useDesignerStore.getState();
+      for (let i = existingPages.length; i < result.pagesUsed; i++) addPage();
 
-        // Calcular espacio usado y disponible
-        if (shortsInPage.length > 0) {
-          const maxY = Math.max(...shortsInPage.map(s => s.position.y + s.dimensions.height));
-          const spaceUsed = maxY;
-          const spaceAvailable = canvasConfig.height * canvasConfig.pixelsPerCm - maxY;
-          const canvasHeight = canvasConfig.height * canvasConfig.pixelsPerCm;
+      const uniformPageMap = new Map<string, number>();
+      const uniformPositionMap = new Map<string, { x: number; y: number }>();
+      const batchMap = new Map<number, CanvasElement[]>();
 
-          // Obtener dimensiones del primer short para calcular cuántos más caben
-          const firstShort = shortsInPage[0];
-          const pairHeight = (firstShort.dimensions.height * 2) + 5; // 2 shorts + gap
-          const additionalPairsThatFit = Math.floor(spaceAvailable / pairHeight);
-          const maxPairsTheoretical = Math.floor(canvasHeight / pairHeight);
+      result.pages.forEach((pageEls, pageIndex) => {
+        const pageItems: CanvasElement[] = [];
+        pageEls.forEach(el => {
+          pageItems.push(el as UniformTemplate);
+          uniformPageMap.set(el.id, pageIndex);
+          uniformPositionMap.set(el.id, el.position);
+        });
+        batchMap.set(pageIndex, pageItems);
+      });
 
-          console.log(`📄 Página ${i}:`);
-          console.log(`   - Shorts REALES agregados: ${shortsInPage.length} (${pairsInPage} pares)`);
-          console.log(`   - Shorts TEÓRICOS que caben: ${maxPairsTheoretical * 2} (${maxPairsTheoretical} pares)`);
-          console.log(`   - Espacio usado: ${spaceUsed.toFixed(0)}px / ${canvasHeight.toFixed(0)}px (${(spaceUsed/canvasHeight*100).toFixed(1)}%)`);
-          console.log(`   - Espacio disponible: ${spaceAvailable.toFixed(0)}px (caben ${additionalPairsThatFit} pares más)`);
-
-          if (pairsInPage < maxPairsTheoretical) {
-            console.log(`   ⚠️ ADVERTENCIA: Faltan ${maxPairsTheoretical - pairsInPage} pares que deberían caber!`);
-          } else if (pairsInPage === maxPairsTheoretical) {
-            console.log(`   ✅ Página optimizada al máximo`);
-          }
-        }
+      for (const { element, parentId } of stagedTexts) {
+        const parentPos = uniformPositionMap.get(parentId);
+        const pageIndex = uniformPageMap.get(parentId);
+        if (parentPos === undefined || pageIndex === undefined) continue;
+        const absElement = {
+          ...element,
+          position: {
+            x: parentPos.x + element.position.x,
+            y: parentPos.y + element.position.y,
+          },
+        } as TextElement;
+        const page = batchMap.get(pageIndex) ?? [];
+        page.push(absElement);
+        batchMap.set(pageIndex, page);
       }
-      console.log('=======================================================\n');
 
-      const totalPagesUsed = currentPageIndex + 1;
+      // Un solo set() de Zustand → un solo re-render del canvas
+      addElementsBatch(batchMap);
 
       // Ocultar loading
       setShowBulkLoading(false);
@@ -792,7 +534,7 @@ export const Toolbar: React.FC = () => {
       // MOSTRAR EL CANVAS nuevamente
       setCanvasHidden(false);
 
-      alert(`Se crearon ${rows.length} juegos completos (espalda + frente + 2 shorts) exitosamente en ${totalPagesUsed} página(s)!`);
+      alert(`Se crearon ${rows.length} juegos completos (espalda + frente + 2 shorts) exitosamente en ${result.pagesUsed} página(s)!`);
     } catch (error) {
       console.error("Error al procesar el archivo Excel:", error);
 

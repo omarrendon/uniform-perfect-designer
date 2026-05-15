@@ -160,6 +160,24 @@ export const generateId = (prefix: string): string => {
 };
 
 /**
+ * Convierte una imagen base64 en un Blob URL (~60 bytes vs ~300KB).
+ * Usar cuando se necesita guardar una referencia a una imagen en el estado
+ * sin almacenar el string base64 completo.
+ * IMPORTANTE: El llamador es responsable de revocar el URL con URL.revokeObjectURL()
+ * cuando ya no sea necesario.
+ */
+export const base64ToBlobUrl = (base64: string): string => {
+  const [header, data] = base64.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+};
+
+/**
  * Valida si un elemento está dentro de los límites del canvas
  */
 export const isWithinCanvas = (

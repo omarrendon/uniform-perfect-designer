@@ -41,7 +41,6 @@ interface PlacementResult {
   position: Position;
   rotated: boolean;
   score: number;                // Menor es mejor
-  rectIndex: number;            // Índice del rectángulo libre usado
 }
 
 /**
@@ -121,7 +120,6 @@ class MaxRectsBinPack {
             position: { x: rect.x, y: rect.y },
             rotated: false,
             score,
-            rectIndex: i,
           };
         }
       }
@@ -134,7 +132,6 @@ class MaxRectsBinPack {
             position: { x: rect.x, y: rect.y },
             rotated: true,
             score,
-            rectIndex: i,
           };
         }
       }
@@ -144,7 +141,7 @@ class MaxRectsBinPack {
       // Actualizar los rectángulos libres
       const finalWidth = bestResult.rotated ? paddedHeight : paddedWidth;
       const finalHeight = bestResult.rotated ? paddedWidth : paddedHeight;
-      this.splitFreeRectangle(bestResult.rectIndex, bestResult.position, finalWidth, finalHeight);
+      this.splitFreeRectangles(bestResult.position, finalWidth, finalHeight);
     }
 
     return bestResult;
@@ -174,65 +171,48 @@ class MaxRectsBinPack {
   }
 
   /**
-   * Divide un rectángulo libre después de colocar un elemento
-   * Usa el método "MaxRects split" que maximiza el espacio aprovechable
+   * Actualiza TODOS los rectángulos libres después de colocar un elemento.
+   * Cualquier rect que intersecte con el área colocada se divide en hasta 4 franjas
+   * (izquierda, derecha, arriba, abajo) que excluyen el área ocupada.
    */
-  private splitFreeRectangle(
-    rectIndex: number,
-    position: Position,
-    width: number,
-    height: number
-  ): void {
-    const rect = this.freeRectangles[rectIndex];
-    const newRects: FreeRectangle[] = [];
+  private splitFreeRectangles(position: Position, width: number, height: number): void {
+    const placedLeft = position.x;
+    const placedRight = position.x + width;
+    const placedTop = position.y;
+    const placedBottom = position.y + height;
 
-    // Crear hasta 4 rectángulos libres alrededor del elemento colocado
-    // Esto maximiza las opciones de colocación futura
+    const survivingRects: FreeRectangle[] = [];
 
-    // Rectángulo a la derecha (toda la altura del rectángulo original)
-    if (rect.x + rect.width > position.x + width) {
-      newRects.push({
-        x: position.x + width,
-        y: rect.y,
-        width: rect.x + rect.width - (position.x + width),
-        height: rect.height,
-      });
+    for (const rect of this.freeRectangles) {
+      const noIntersect = (
+        rect.x >= placedRight ||
+        rect.x + rect.width <= placedLeft ||
+        rect.y >= placedBottom ||
+        rect.y + rect.height <= placedTop
+      );
+      if (noIntersect) {
+        survivingRects.push(rect);
+        continue;
+      }
+      // Franja izquierda
+      if (rect.x < placedLeft) {
+        survivingRects.push({ x: rect.x, y: rect.y, width: placedLeft - rect.x, height: rect.height });
+      }
+      // Franja derecha
+      if (rect.x + rect.width > placedRight) {
+        survivingRects.push({ x: placedRight, y: rect.y, width: rect.x + rect.width - placedRight, height: rect.height });
+      }
+      // Franja superior
+      if (rect.y < placedTop) {
+        survivingRects.push({ x: rect.x, y: rect.y, width: rect.width, height: placedTop - rect.y });
+      }
+      // Franja inferior
+      if (rect.y + rect.height > placedBottom) {
+        survivingRects.push({ x: rect.x, y: placedBottom, width: rect.width, height: rect.y + rect.height - placedBottom });
+      }
     }
 
-    // Rectángulo a la izquierda (si el elemento no está en el borde izquierdo)
-    if (position.x > rect.x) {
-      newRects.push({
-        x: rect.x,
-        y: rect.y,
-        width: position.x - rect.x,
-        height: rect.height,
-      });
-    }
-
-    // Rectángulo debajo (todo el ancho del rectángulo original)
-    if (rect.y + rect.height > position.y + height) {
-      newRects.push({
-        x: rect.x,
-        y: position.y + height,
-        width: rect.width,
-        height: rect.y + rect.height - (position.y + height),
-      });
-    }
-
-    // Rectángulo arriba (si el elemento no está en el borde superior)
-    if (position.y > rect.y) {
-      newRects.push({
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: position.y - rect.y,
-      });
-    }
-
-    // Eliminar el rectángulo usado y agregar los nuevos
-    this.freeRectangles.splice(rectIndex, 1, ...newRects);
-
-    // Eliminar rectángulos que se volvieron redundantes (contenidos en otros)
+    this.freeRectangles = survivingRects;
     this.pruneRedundantRectangles();
   }
 
@@ -244,14 +224,13 @@ class MaxRectsBinPack {
 
     for (let i = 0; i < this.freeRectangles.length; i++) {
       for (let j = 0; j < this.freeRectangles.length; j++) {
-        if (i !== j && !toRemove.has(i) && this.isContainedIn(this.freeRectangles[i], this.freeRectangles[j])) {
+        if (i !== j && !toRemove.has(i) && !toRemove.has(j) && this.isContainedIn(this.freeRectangles[i], this.freeRectangles[j])) {
           toRemove.add(i);
           break;
         }
       }
     }
 
-    // Eliminar de atrás hacia adelante para mantener índices válidos
     const indices = Array.from(toRemove).sort((a, b) => b - a);
     for (const idx of indices) {
       this.freeRectangles.splice(idx, 1);

@@ -298,6 +298,7 @@ interface DesignerState {
   elements: CanvasElement[];
   selectedElementId: string | null;
   addElement: (element: CanvasElement, pageIndex?: number) => void;
+  addElementsBatch: (pageElements: Map<number, CanvasElement[]>) => void;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   deleteElement: (id: string) => void;
   selectElement: (id: string | null) => void;
@@ -552,6 +553,23 @@ export const useDesignerStore = create<DesignerState>()(
             return {
               pages: newPages,
               elements: targetPage === state.currentPage ? newPages[targetPage] : state.elements,
+            };
+          }),
+
+        // Agrega múltiples elementos distribuidos en páginas en un solo set() → un solo re-render.
+        // pageElements: Map<pageIndex, elementos de esa página>
+        addElementsBatch: (pageElements) =>
+          set(state => {
+            const newPages = [...state.pages];
+
+            pageElements.forEach((els, pageIndex) => {
+              while (newPages.length <= pageIndex) newPages.push([]);
+              newPages[pageIndex] = [...newPages[pageIndex], ...els];
+            });
+
+            return {
+              pages: newPages,
+              elements: newPages[state.currentPage] ?? [],
             };
           }),
 
