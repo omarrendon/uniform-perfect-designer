@@ -126,10 +126,26 @@ const PieceImage: React.FC<{
   y: number;
   width: number;
   height: number;
-}> = ({ url, x, y, width, height }) => {
+  rotation?: number;
+}> = ({ url, x, y, width, height, rotation = 0 }) => {
   const [img] = useImage(url);
   if (!img) return null;
-  return <KonvaImage image={img} x={x} y={y} width={width} height={height} />;
+  if (rotation === 0) {
+    return <KonvaImage image={img} x={x} y={y} width={width} height={height} />;
+  }
+
+  return (
+    <KonvaImage
+      image={img}
+      x={x + width / 2}
+      y={y + height / 2}
+      width={width}
+      height={height}
+      offsetX={width / 2}
+      offsetY={height / 2}
+      rotation={rotation}
+    />
+  );
 };
 
 // ─── Panel de propiedades para un elemento de texto ──────────────────────────
@@ -411,9 +427,13 @@ export const UniformDesignPreviewModal: React.FC<UniformDesignPreviewModalProps>
   const getDisplayPos = (key: DesignKey, cfg: UniformDesignConfig) => {
     const piece = getPieceForKey(key, cfg);
     const el = cfg[key];
+    const isShortRight = key === 'shortsNumber' && cfg.shortsNumber.side === 'right';
+    const relX = isShortRight ? 1 - el.relativeX : el.relativeX;
+    const relY = isShortRight ? 1 - el.relativeY : el.relativeY;
+
     return {
-      x: piece.x + el.relativeX * piece.width,
-      y: piece.y + el.relativeY * piece.height,
+      x: piece.x + relX * piece.width,
+      y: piece.y + relY * piece.height,
     };
   };
 
@@ -535,7 +555,7 @@ export const UniformDesignPreviewModal: React.FC<UniformDesignPreviewModalProps>
                     <PieceImage url={imgs.shortsLeft} {...PIECES.shortsLeft} />
                   )}
                   {imgs?.shortsRight && (
-                    <PieceImage url={imgs.shortsRight} {...PIECES.shortsRight} />
+                    <PieceImage url={imgs.shortsRight} {...PIECES.shortsRight} rotation={180} />
                   )}
 
                   {/* Textos draggables */}
@@ -547,6 +567,7 @@ export const UniformDesignPreviewModal: React.FC<UniformDesignPreviewModalProps>
                     const pos = getDisplayPos(key, config);
                     const displayFontSize = getDisplayFontSize(el);
                     const isSelected = selectedKey === key;
+                    const isShortRight = key === 'shortsNumber' && config.shortsNumber.side === 'right';
 
                     return (
                       <KonvaText
@@ -558,6 +579,7 @@ export const UniformDesignPreviewModal: React.FC<UniformDesignPreviewModalProps>
                         fontFamily={el.fontFamily}
                         fill={el.fontColor}
                         fontStyle={el.fontWeight === 'bold' ? 'bold' : 'normal'}
+                        rotation={isShortRight ? 180 : 0}
                         draggable
                         strokeWidth={isSelected ? 1 : 0}
                         stroke={isSelected ? '#3b82f6' : undefined}
@@ -570,8 +592,15 @@ export const UniformDesignPreviewModal: React.FC<UniformDesignPreviewModalProps>
                           return { x: clampedX, y: clampedY };
                         }}
                         onDragEnd={e => {
-                          const newRelX = Math.max(0, Math.min(1, (e.target.x() - piece.x) / piece.width));
-                          const newRelY = Math.max(0, Math.min(1, (e.target.y() - piece.y) / piece.height));
+                          let newRelX = Math.max(0, Math.min(1, (e.target.x() - piece.x) / piece.width));
+                          let newRelY = Math.max(0, Math.min(1, (e.target.y() - piece.y) / piece.height));
+
+                          // El short derecho se previsualiza rotado 180°, por eso guardamos en espacio no rotado.
+                          if (key === 'shortsNumber' && config.shortsNumber.side === 'right') {
+                            newRelX = 1 - newRelX;
+                            newRelY = 1 - newRelY;
+                          }
+
                           updateElement(key, { relativeX: newRelX, relativeY: newRelY } as any);
                         }}
                       />

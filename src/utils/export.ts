@@ -1398,8 +1398,21 @@ export const exportAsPDFDirect = async (
           // yOffsetPts compensa el espacio transparente superior de la imagen
           const xInPts = (textEl.position.x / canvasConfig.pixelsPerCm) * 28.35;
           const yInPts = (textEl.position.y / canvasConfig.pixelsPerCm) * 28.35;
-          const pdfX = xInPts;
-          const pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
+          let pdfX = xInPts;
+          let pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
+
+          // Alinear textos rotation=180° entre Konva y PDF.
+          // En Konva, rotation=180° rota alrededor del top-left del nodo: el contenido
+          // va hacia ARRIBA e IZQUIERDA desde el anchor (cx, cy).
+          // pdf-lib hace translate(pdfX,pdfY) → rotate(180°) → scale(w,h), por lo que
+          // la imagen ocupa PDF x∈[pdfX-w, pdfX] e y∈[pdfY-h, pdfY].
+          // Para que canvas x=[cx-w,cx] e y=[cy-h,cy] coincidan:
+          //   pdfX = xInPts  (la imagen irá de xInPts-w a xInPts)
+          //   pdfY = H - yInPts + heightPts - yOffsetPts
+          if (textEl.rotation === 180) {
+            pdfX = xInPts;
+            pdfY = heightInPoints - yInPts + textImg.heightPts - textImg.yOffsetPts;
+          }
 
           page.drawImage(textImg.pdfImage, {
             x: pdfX,
@@ -1815,8 +1828,14 @@ export const exportMultiPagePDFDirect = async (
           if (textImg) {
             const xInPts = (textEl.position.x / canvasConfig.pixelsPerCm) * 28.35;
             const yInPts = (textEl.position.y / canvasConfig.pixelsPerCm) * 28.35;
-            const pdfX = xInPts;
-            const pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
+            let pdfX = xInPts;
+            let pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
+
+            // Alinear textos rotation=180° entre Konva y PDF (ver exportDirectPDF).
+            if (textEl.rotation === 180) {
+              pdfX = xInPts;
+              pdfY = heightInPoints - yInPts + textImg.heightPts - textImg.yOffsetPts;
+            }
 
             page.drawImage(textImg.pdfImage, {
               x: pdfX,

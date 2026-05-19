@@ -671,7 +671,7 @@ export const processExcelFile = async (
           size: tallaMostrar as any,
           position: { x: offsetX, y: offsetY },
           dimensions: { width: 40, height: 30 },
-          rotation: 180,
+          rotation: 0,
           zIndex: elementCount + 2000,
           locked: false,
           visible: true,
@@ -710,14 +710,17 @@ export const processExcelFile = async (
     // Construir mapas de posición/página y acumular todos los elementos por página
     const uniformPageMap = new Map<string, number>();
     const uniformPositionMap = new Map<string, { x: number; y: number }>();
+    const uniformElementMap = new Map<string, UniformTemplate>();
     const batchMap = new Map<number, CanvasElement[]>();
 
     result.pages.forEach((pageEls, pageIndex) => {
       const pageItems: CanvasElement[] = [];
       pageEls.forEach(el => {
-        pageItems.push(el as UniformTemplate);
-        uniformPageMap.set(el.id, pageIndex);
-        uniformPositionMap.set(el.id, el.position);
+        const uniformEl = el as UniformTemplate;
+        pageItems.push(uniformEl);
+        uniformPageMap.set(uniformEl.id, pageIndex);
+        uniformPositionMap.set(uniformEl.id, uniformEl.position);
+        uniformElementMap.set(uniformEl.id, uniformEl);
       });
       batchMap.set(pageIndex, pageItems);
     });
@@ -726,13 +729,36 @@ export const processExcelFile = async (
     for (const { element, parentId } of stagedTexts) {
       const parentPos = uniformPositionMap.get(parentId);
       const pageIndex = uniformPageMap.get(parentId);
-      if (parentPos === undefined || pageIndex === undefined) continue;
+      const parentUniform = uniformElementMap.get(parentId);
+      if (parentPos === undefined || pageIndex === undefined || !parentUniform) continue;
+
+      let localX = element.position.x;
+      let localY = element.position.y;
+      let finalRotation = element.rotation;
+
+      // Replicar posicionamiento de un texto dentro de un uniforme rotado (p.ej. short derecho a 180°).
+      if (parentUniform.rotation !== 0) {
+        const centerX = parentUniform.dimensions.width / 2;
+        const centerY = parentUniform.dimensions.height / 2;
+        const relX = localX - centerX;
+        const relY = localY - centerY;
+        const angleRad = (parentUniform.rotation * Math.PI) / 180;
+
+        const rotatedRelX = relX * Math.cos(angleRad) - relY * Math.sin(angleRad);
+        const rotatedRelY = relX * Math.sin(angleRad) + relY * Math.cos(angleRad);
+
+        localX = centerX + rotatedRelX;
+        localY = centerY + rotatedRelY;
+        finalRotation = (finalRotation + parentUniform.rotation) % 360;
+      }
+
       const absElement = {
         ...element,
         position: {
-          x: parentPos.x + element.position.x,
-          y: parentPos.y + element.position.y,
-        }
+          x: parentPos.x + localX,
+          y: parentPos.y + localY,
+        },
+        rotation: finalRotation,
       } as TextElement;
       const page = batchMap.get(pageIndex) ?? [];
       page.push(absElement);
