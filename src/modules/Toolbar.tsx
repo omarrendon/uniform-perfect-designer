@@ -31,6 +31,7 @@ import {
 import { readExcelFile, validateExcelFile } from "../utils/excelReader";
 import { ErrorModal } from "../components/ErrorModal";
 import { BulkLoadingOverlay } from "../components/BulkLoadingOverlay";
+import { FontUploadButton } from "../components/FontUploadButton";
 import { compressImageForCanvas } from "../utils/imageCompressorForCanvas";
 import {
   loadFont,
@@ -755,6 +756,14 @@ const AddTab: React.FC<{
         </div>
       </div>
 
+      {/* Fuentes propias */}
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+          Mis Fuentes
+        </h3>
+        <FontUploadButton />
+      </div>
+
       {/* Texto */}
       <div>
         <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
@@ -811,7 +820,7 @@ const EditTab: React.FC<{
   onBringToFront,
   onSendToBack,
 }) => {
-  const { sizeConfigs } = useDesignerStore();
+  const { sizeConfigs, userFonts } = useDesignerStore();
 
   if (!element) {
     return (
@@ -1077,14 +1086,25 @@ const EditTab: React.FC<{
                   }}
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 >
-                  {ALL_FONTS.map(font => (
-                    <option key={font} value={font} style={{ fontFamily: font }}>
-                      {font}
-                    </option>
-                  ))}
+                  {userFonts.length > 0 && (
+                    <optgroup label="Mis Fuentes">
+                      {userFonts.map(f => (
+                        <option key={f.name} value={f.name} style={{ fontFamily: f.name }}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Google Fonts / Personalizadas">
+                    {ALL_FONTS.map(font => (
+                      <option key={font} value={font} style={{ fontFamily: font }}>
+                        {font}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
                 <p className="text-[10px] text-gray-500 mt-1.5">
-                  Fuentes disponibles (Google Fonts + Personalizadas)
+                  Fuentes disponibles (Mis Fuentes + Google Fonts + Personalizadas)
                 </p>
               </div>
 

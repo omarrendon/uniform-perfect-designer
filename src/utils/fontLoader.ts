@@ -338,6 +338,9 @@ interface CustomFontConfig {
 
 const customFontRegistry: Map<string, CustomFontConfig> = new Map();
 
+// Nombres de fuentes subidas por el usuario (en memoria, se hidratan al arrancar)
+const userFontNames = new Set<string>();
+
 /**
  * Carga una fuente de Google Fonts dinámicamente
  * @param fontName Nombre de la fuente a cargar
@@ -473,6 +476,51 @@ export const isCustomFont = (fontName: string): boolean => {
 };
 
 /**
+ * Verifica si una fuente fue subida por el usuario
+ */
+export const isUserFont = (fontName: string): boolean => {
+  return userFontNames.has(fontName);
+};
+
+/**
+ * Carga una fuente subida por el usuario desde un data URL (base64)
+ * @param name Nombre de la fuente
+ * @param dataUrl Data URL base64 del archivo de fuente
+ * @param format Formato de la fuente
+ */
+export const loadUserFontFromDataUrl = async (
+  name: string,
+  dataUrl: string,
+  format: "truetype" | "opentype" | "woff" | "woff2"
+): Promise<void> => {
+  if (loadedFonts.has(name)) return;
+
+  const fontFace = new FontFace(
+    name,
+    `url(${dataUrl}) format('${format}')`,
+    { weight: "normal", style: "normal" }
+  );
+
+  const loaded = await fontFace.load();
+  (document as any).fonts.add(loaded);
+  loadedFonts.add(name);
+  userFontNames.add(name);
+};
+
+/**
+ * Hidrata todas las fuentes de usuario desde el store al arrancar la app
+ * @param fonts Array de UserFont desde el store persistido
+ */
+export const hydrateUserFonts = async (
+  fonts: Array<{ name: string; dataUrl: string; format: "truetype" | "opentype" | "woff" | "woff2" }>
+): Promise<void> => {
+  if (fonts.length === 0) return;
+  await Promise.allSettled(
+    fonts.map(f => loadUserFontFromDataUrl(f.name, f.dataUrl, f.format))
+  );
+};
+
+/**
  * Carga una fuente (Google o personalizada) dinámicamente
  * @param fontName Nombre de la fuente a cargar
  * @returns Promise que se resuelve cuando la fuente está cargada
@@ -499,7 +547,8 @@ export const loadFont = async (fontName: string): Promise<void> => {
 export const isValidFont = (fontName: string): boolean => {
   return (
     GOOGLE_FONTS.includes(fontName as GoogleFont) ||
-    CUSTOM_FONTS.includes(fontName as CustomFont)
+    CUSTOM_FONTS.includes(fontName as CustomFont) ||
+    userFontNames.has(fontName)
   );
 };
 

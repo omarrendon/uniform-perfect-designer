@@ -41,6 +41,7 @@ import {
 } from "../utils/canvas";
 import type { UniformTemplate, TextElement } from "../types";
 import { ALL_FONTS, loadFont } from "../utils/fontLoader";
+import { FontUploadButton } from "../components/FontUploadButton";
 
 export const Header: React.FC = () => {
   const {
@@ -66,6 +67,7 @@ export const Header: React.FC = () => {
     setBulkImages,
     processBulkImages,
     bulkImageUpload,
+    userFonts,
   } = useDesignerStore();
 
   const [showExportModal, setShowExportModal] = useState(false);
@@ -484,6 +486,13 @@ export const Header: React.FC = () => {
     console.log(`🔍 Búsqueda: "${fontSearchTerm}" → ${filtered.length} fuentes encontradas`);
     return filtered;
   }, [fontSearchTerm]);
+
+  // Fuentes del usuario filtradas por búsqueda
+  const filteredUserFonts = React.useMemo(() => {
+    if (!fontSearchTerm || fontSearchTerm.trim() === "") return userFonts;
+    const s = fontSearchTerm.toLowerCase().trim();
+    return userFonts.filter(f => f.name.toLowerCase().includes(s));
+  }, [fontSearchTerm, userFonts]);
 
   // Handler para cambiar la fuente del elemento de texto seleccionado
   const handleFontChange = async (fontName: string) => {
@@ -1420,7 +1429,7 @@ export const Header: React.FC = () => {
                     Selector de Fuentes
                   </h3>
                   <span style={{ fontSize: "12px", color: "#9ca3af", fontWeight: "500" }}>
-                    {filteredFonts.length} fuentes
+                    {filteredFonts.length + filteredUserFonts.length} fuentes
                   </span>
                 </div>
 
@@ -1481,6 +1490,11 @@ export const Header: React.FC = () => {
                   </div>
                 )}
 
+                {/* Cargar fuente propia */}
+                <div style={{ marginBottom: "12px" }}>
+                  <FontUploadButton />
+                </div>
+
                 {/* Lista de fuentes */}
                 <div
                   className="font-list-scroll"
@@ -1495,6 +1509,58 @@ export const Header: React.FC = () => {
                     paddingRight: "5px",
                   }}
                 >
+                  {/* Fuentes del usuario */}
+                  {filteredUserFonts.length > 0 && (
+                    <>
+                      <div style={{ fontSize: "10px", fontWeight: "700", color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.08em", padding: "4px 4px 2px" }}>
+                        Mis Fuentes
+                      </div>
+                      {filteredUserFonts.map(f => (
+                        <button
+                          key={f.name}
+                          onClick={() => handleFontChange(f.name)}
+                          disabled={!selectedElement || selectedElement.type !== "text"}
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            backgroundColor:
+                              selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily === f.name
+                                ? "#374151"
+                                : "transparent",
+                            color: (!selectedElement || selectedElement.type !== "text") ? "#6b7280" : "#e5e7eb",
+                            border:
+                              selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily === f.name
+                                ? "1px solid #7c3aed"
+                                : "1px solid transparent",
+                            borderRadius: "6px",
+                            fontSize: "16px",
+                            fontFamily: f.name,
+                            cursor: (!selectedElement || selectedElement.type !== "text") ? "not-allowed" : "pointer",
+                            transition: "all 0.15s",
+                            textAlign: "left",
+                            opacity: (!selectedElement || selectedElement.type !== "text") ? 0.5 : 1,
+                          }}
+                          onMouseEnter={e => {
+                            if (selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily !== f.name) {
+                              e.currentTarget.style.backgroundColor = "#374151";
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (selectedElement && selectedElement.type === "text" && (selectedElement as TextElement).fontFamily !== f.name) {
+                              e.currentTarget.style.backgroundColor = "transparent";
+                            }
+                          }}
+                        >
+                          {f.name}
+                        </button>
+                      ))}
+                      <div style={{ height: "1px", backgroundColor: "#374151", margin: "4px 0" }} />
+                      <div style={{ fontSize: "10px", fontWeight: "700", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.08em", padding: "2px 4px" }}>
+                        Google Fonts / Personalizadas
+                      </div>
+                    </>
+                  )}
+
                   {filteredFonts.length > 0 ? (
                     filteredFonts.map(font => (
                       <button

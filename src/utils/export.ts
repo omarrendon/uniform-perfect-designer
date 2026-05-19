@@ -6,7 +6,7 @@ import { convertImageRGBtoCMYK, type CMYKConversionOptions } from './colorConver
 import { addPrintMarks, expandPageForMarks, generatePrintFileName } from './printMarks';
 import { runPreflight, generatePreflightReport } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
-import { CUSTOM_FONTS } from './fontLoader';
+import { CUSTOM_FONTS, loadUserFontFromDataUrl } from './fontLoader';
 
 
 /**
@@ -472,10 +472,14 @@ export const exportAsPNG = async (
 const ensureCustomFontsLoaded = async (elements: any[]): Promise<void> => {
   const fontsToLoad = new Set<string>();
 
-  // Identificar fuentes personalizadas usadas
+  // Fuentes del usuario (subidas vía FontUploadButton)
+  const { userFonts } = useDesignerStore.getState();
+  const userFontMap = new Map(userFonts.map(f => [f.name, f]));
+
+  // Identificar fuentes personalizadas y de usuario usadas
   elements.forEach(element => {
     if (element.type === 'text' && element.fontFamily) {
-      if (CUSTOM_FONTS.includes(element.fontFamily as any)) {
+      if (CUSTOM_FONTS.includes(element.fontFamily as any) || userFontMap.has(element.fontFamily)) {
         fontsToLoad.add(element.fontFamily);
       }
     }
@@ -497,14 +501,27 @@ const ensureCustomFontsLoaded = async (elements: any[]): Promise<void> => {
   // Esperar a que todas las fuentes personalizadas estén listas
   const fontPromises = Array.from(fontsToLoad).map(async (fontName) => {
     try {
-      // Buscar la fuente en document.fonts
+      // Para fuentes del usuario: rehidratar desde dataUrl si no están en document.fonts
+      const userFont = userFontMap.get(fontName);
+      if (userFont) {
+        const alreadyLoaded = Array.from(document.fonts).some(
+          (f: any) => f.family === fontName || f.family.toLowerCase() === fontName.toLowerCase()
+        );
+        if (!alreadyLoaded) {
+          await loadUserFontFromDataUrl(userFont.name, userFont.dataUrl, userFont.format);
+          console.log(`  ✓ Fuente de usuario "${fontName}" rehidratada para exportación`);
+        }
+        return;
+      }
+
+      // Para fuentes personalizadas estáticas: buscar en document.fonts
       const fontFace = Array.from(document.fonts).find(
         (f: any) => f.family === fontName || f.family.toLowerCase() === fontName.toLowerCase()
       );
 
       if (fontFace) {
         await fontFace.load();
-        console.log(`  ✓ Fuente "${fontName}" lista (familia real: "${fontFace.family}")`);
+        console.log(`  ✓ Fuente "${fontName}" lista (familia real: "${(fontFace as any).family}")`);
       } else {
         console.warn(`  ⚠️ Fuente "${fontName}" NO encontrada en document.fonts`);
         console.warn(`  📋 Fuentes disponibles:`, Array.from(document.fonts).map((f: any) => f.family));

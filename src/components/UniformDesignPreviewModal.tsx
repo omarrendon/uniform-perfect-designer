@@ -162,6 +162,7 @@ const TextSection: React.FC<TextSectionProps> = ({
   label, configKey, config, isSelected, onSelect, onChange,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const userFonts = useDesignerStore(s => s.userFonts);
 
   // Auto-expandir cuando está seleccionado
   useEffect(() => {
@@ -256,6 +257,13 @@ const TextSection: React.FC<TextSectionProps> = ({
                 fontFamily: config.fontFamily,
               }}
             >
+              {userFonts.length > 0 && (
+                <optgroup label="Mis Fuentes">
+                  {userFonts.map(f => (
+                    <option key={f.name} value={f.name} style={{ fontFamily: f.name }}>{f.name}</option>
+                  ))}
+                </optgroup>
+              )}
               {FEATURED_FONTS.map(f => (
                 <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
               ))}

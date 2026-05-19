@@ -145,3 +145,11 @@ export interface UniformDesignConfig {
   jerseyBackName: TextDesignConfig;
   shortsNumber: TextDesignConfig & { side: 'left' | 'right' };
 }
+
+// Fuente cargada por el usuario (base64 persistida en localStorage)
+export interface UserFont {
+  name: string;
+  dataUrl: string;
+  format: 'truetype' | 'opentype' | 'woff' | 'woff2';
+  uploadedAt: number;
+}

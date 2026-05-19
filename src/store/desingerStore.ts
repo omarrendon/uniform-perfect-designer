@@ -277,6 +277,7 @@ import type {
   SizeImages,
   UniformDesignConfig,
   UniformSizesConfig,
+  UserFont,
 } from "../types";
 import { findValidPosition } from "../utils/canvas";
 
@@ -366,6 +367,11 @@ interface DesignerState {
   setBulkImages: (type: 'jerseyFronts' | 'jerseyBacks' | 'shortsRights' | 'shortsLefts', files: File[]) => void;
   processBulkImages: () => Promise<void>;
   clearBulkImages: () => void;
+
+  // Fuentes del usuario
+  userFonts: UserFont[];
+  addUserFont: (font: UserFont) => void;
+  removeUserFont: (name: string) => void;
 }
 
 const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
@@ -463,8 +469,12 @@ export const useDesignerStore = create<DesignerState>()(
         isCanvasHidden: false,
         isExporting: false,
 
+        // Fuentes del usuario
+        userFonts: [],
+
         // Bulk Image Upload initial state
         bulkImageUpload: {
+
           jerseyFronts: [],
           jerseyBacks: [],
           shortsRights: [],
@@ -1036,6 +1046,17 @@ export const useDesignerStore = create<DesignerState>()(
               shortsLefts: [],
             },
           })),
+
+        // Fuentes del usuario
+        addUserFont: (font: UserFont) =>
+          set(state => ({
+            userFonts: [...state.userFonts.filter(f => f.name !== font.name), font],
+          })),
+
+        removeUserFont: (name: string) =>
+          set(state => ({
+            userFonts: state.userFonts.filter(f => f.name !== name),
+          })),
       }),
       {
         name: "designer-storage-v7", // uniformSizesConfig NO se persiste (solo en memoria)
@@ -1045,6 +1066,7 @@ export const useDesignerStore = create<DesignerState>()(
           // uniformSizesConfig: NO se guarda en localStorage para evitar problemas de espacio
           showGrid: state.showGrid,
           uniformDesignConfig: state.uniformDesignConfig,
+          userFonts: state.userFonts,
         }),
       }
     )
