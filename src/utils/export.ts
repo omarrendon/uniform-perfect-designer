@@ -4,6 +4,7 @@ import type { ExportOptions, UniformTemplate, TextElement } from '../types';
 import { useDesignerStore } from '../store/desingerStore';
 import { convertImageRGBtoCMYK, type CMYKConversionOptions } from './colorConversion';
 import { addPrintMarks, expandPageForMarks, generatePrintFileName } from './printMarks';
+import { renderSvgToPdfPage } from './svgToPdf';
 import { runPreflight, generatePreflightReport } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
 import { CUSTOM_FONTS, loadUserFontFromDataUrl } from './fontLoader';
@@ -1594,6 +1595,12 @@ export const exportMultiPagePDFDirect = async (
 
     let processedCount = 0;
     for (const imageUrl of uniqueImages) {
+      // SVG no necesita conversión PNG ni cálculo TAC — se renderiza como vector
+      if (imageUrl.startsWith('data:image/svg+xml')) {
+        console.log(`  [${++processedCount}/${uniqueImages.size}] SVG vectorial — omitiendo conversión: ${imageUrl.substring(0, 50)}...`);
+        continue;
+      }
+
       console.log(`  [${++processedCount}/${uniqueImages.size}] Procesando: ${imageUrl.substring(0, 50)}...`);
 
       // Convertir a PNG si es necesario
@@ -1695,27 +1702,7 @@ export const exportMultiPagePDFDirect = async (
           }
 
           if (originalImageUrl) {
-            // OPTIMIZACIÓN: Usar PNG y TAC stats pre-calculados
-            const pngDataUrl = imagePngCache.get(originalImageUrl);
-            const tacStats = imageTacCache.get(originalImageUrl);
-
-            if (!pngDataUrl) {
-              console.log(`  ⚠️  Advertencia: No se encontró PNG en caché para ${originalImageUrl.substring(0, 50)}`);
-              continue;
-            }
-
-            // Embeber la imagen PNG desde caché (operación rápida)
-            const pdfImage = await pdfDoc.embedPng(pngDataUrl);
-            totalImagesEmbedded++;
-            totalImagesFromCache++; // Todas vienen del caché ahora
-
-            if (tacStats) {
-              maxTAC = Math.max(maxTAC, tacStats.max);
-              avgTAC += tacStats.average;
-              tacCount++;
-            }
-
-            // Calcular posición y dimensiones
+            // Calcular posición y dimensiones (común para SVG y PNG)
             const xInCm = uniform.position.x / canvasConfig.pixelsPerCm;
             const yInCm = uniform.position.y / canvasConfig.pixelsPerCm;
             const widthInCm = uniform.dimensions.width / canvasConfig.pixelsPerCm;
@@ -1726,22 +1713,58 @@ export const exportMultiPagePDFDirect = async (
             const widthInPts = widthInCm * 28.35;
             const heightInPts = heightInCm * 28.35;
 
-            let pdfY = heightInPoints - yInPoints - heightInPts;
-            let pdfX = xInPoints;
+            const pdfYBottom = heightInPoints - yInPoints - heightInPts;
+            const pdfX = xInPoints;
 
-            // Ajustar posición para rotación de 180° (short derecho)
-            if (uniform.rotation === 180) {
-              pdfX = xInPoints + widthInPts;
-              pdfY = pdfY + heightInPts;
+            if (originalImageUrl.startsWith('data:image/svg+xml')) {
+              // SVG: renderizar como paths vectoriales — sin rasterización
+              await renderSvgToPdfPage(
+                page,
+                originalImageUrl,
+                pdfX,
+                pdfYBottom,
+                widthInPts,
+                heightInPts,
+                uniform.rotation,
+              );
+              totalImagesEmbedded++;
+            } else {
+              // PNG/JPEG: usar caché pre-procesado
+              const pngDataUrl = imagePngCache.get(originalImageUrl);
+              const tacStats = imageTacCache.get(originalImageUrl);
+
+              if (!pngDataUrl) {
+                console.log(`  ⚠️  Advertencia: No se encontró PNG en caché para ${originalImageUrl.substring(0, 50)}`);
+                continue;
+              }
+
+              const pdfImage = await pdfDoc.embedPng(pngDataUrl);
+              totalImagesEmbedded++;
+              totalImagesFromCache++;
+
+              if (tacStats) {
+                maxTAC = Math.max(maxTAC, tacStats.max);
+                avgTAC += tacStats.average;
+                tacCount++;
+              }
+
+              let pdfY = pdfYBottom;
+              let adjustedPdfX = pdfX;
+
+              // Ajustar posición para rotación de 180° (short derecho)
+              if (uniform.rotation === 180) {
+                adjustedPdfX = xInPoints + widthInPts;
+                pdfY = pdfYBottom + heightInPts;
+              }
+
+              page.drawImage(pdfImage, {
+                x: adjustedPdfX,
+                y: pdfY,
+                width: widthInPts,
+                height: heightInPts,
+                rotate: degrees(uniform.rotation),
+              });
             }
-
-            page.drawImage(pdfImage, {
-              x: pdfX,
-              y: pdfY,
-              width: widthInPts,
-              height: heightInPts,
-              rotate: degrees(uniform.rotation),
-            });
 
             // Agregar texto de talla SOLO si proviene de Excel
             if (uniform.source === 'excel') {

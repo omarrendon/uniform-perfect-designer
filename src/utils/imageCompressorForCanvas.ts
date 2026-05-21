@@ -13,6 +13,10 @@ export const compressImageForCanvas = (
   base64Image: string,
   quality: number = 0.4
 ): Promise<string> => {
+  // SVG: pasar sin comprimir — ya es texto optimizado y escala perfectamente
+  if (base64Image.startsWith('data:image/svg+xml')) {
+    return Promise.resolve(base64Image);
+  }
   if (supportsOffscreenCanvas) {
     return getWorkerPool()
       .run(base64Image, quality)
