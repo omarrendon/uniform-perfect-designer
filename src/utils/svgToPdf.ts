@@ -6,7 +6,7 @@
 // Elementos <image> embebidos se omiten (no son uniformes vectoriales).
 // Transformaciones: translate, scale, rotate, matrix(a,b,c,d,e,f).
 
-import { PDFPage, rgb, degrees } from 'pdf-lib';
+import { PDFPage, rgb } from 'pdf-lib';
 
 // ---------------------------------------------------------------------------
 // Tipos internos
@@ -245,19 +245,172 @@ function getComputedStyle(el: Element, inherited: StyleContext): StyleContext {
 }
 
 // ---------------------------------------------------------------------------
-// Transformación de comandos path SVG (aplica matriz de transformación)
+// Tokenizador de path SVG
 // ---------------------------------------------------------------------------
 
-function applyMatrixToPathD(pathD: string, m: Matrix): string {
-  // Transformar todos los pares de coordenadas en el path.
-  // Solo soporta paths donde los arcos (A) no requieren rotación de eje (casos simples).
-  return pathD.replace(
-    /(-?[\d.]+(?:e[-+]?\d+)?)\s+(-?[\d.]+(?:e[-+]?\d+)?)/gi,
-    (_, xs, ys) => {
-      const [tx, ty] = transformPoint(m, parseFloat(xs), parseFloat(ys));
-      return `${tx} ${ty}`;
+function tokenizeSvgPath(d: string): Array<string | number> {
+  const tokens: Array<string | number> = [];
+  let i = 0;
+  while (i < d.length) {
+    if (/[\s,]/.test(d[i])) { i++; continue; }
+    if (/[a-zA-Z]/.test(d[i])) { tokens.push(d[i]); i++; continue; }
+    const m = d.slice(i).match(/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/);
+    if (m) { tokens.push(parseFloat(m[0])); i += m[0].length; }
+    else { i++; }
+  }
+  return tokens;
+}
+
+// ---------------------------------------------------------------------------
+// Transformación de path: aplica CTM del elemento + escala viewBox → pts PDF
+// ---------------------------------------------------------------------------
+
+// Nota sobre el sistema de coordenadas:
+// page.drawSvgPath(path, { x: drawX, y: drawY }) en pdf-lib mapea:
+//   SVG (px, py) → PDF (drawX + px, drawY - py)
+// Por eso las coordenadas del path deben estar en escala de puntos PDF
+// relativas al origen del viewBox — SIN flip de Y ni traslación absoluta.
+// El flip de Y lo maneja internamente drawSvgPath.
+function transformSvgPath(
+  pathD: string,
+  ctm: Matrix,
+  sx: number,
+  sy: number,
+  vbX: number,
+  vbY: number,
+  rot180: boolean,
+  totalW: number,
+  totalH: number,
+): string {
+  const tokens = tokenizeSvgPath(pathD);
+  let out = '';
+  let i = 0;
+
+  const isCmd = (t: string | number | undefined): t is string => typeof t === 'string';
+
+  // Transforma coordenadas absolutas SVG → pts relativos al origen del viewBox
+  const absXY = (svgX: number, svgY: number): [number, number] => {
+    const [cx, cy] = transformPoint(ctm, svgX, svgY);
+    let px = (cx - vbX) * sx;
+    let py = (cy - vbY) * sy;
+    if (rot180) { px = totalW - px; py = totalH - py; }
+    return [px, py];
+  };
+
+  // Transforma deltas relativos SVG → deltas en pts (solo parte lineal del CTM)
+  const relXY = (dvgX: number, dvgY: number): [number, number] => {
+    const cx = ctm.a * dvgX + ctm.c * dvgY;
+    const cy = ctm.b * dvgX + ctm.d * dvgY;
+    let px = cx * sx;
+    let py = cy * sy;
+    if (rot180) { px = -px; py = -py; }
+    return [px, py];
+  };
+
+  while (i < tokens.length) {
+    const tok = tokens[i++];
+    if (!isCmd(tok)) continue;
+
+    const cmd = tok;
+    const upper = cmd.toUpperCase();
+    const isRel = cmd !== cmd.toUpperCase() && upper !== 'Z';
+
+    const args: number[] = [];
+    while (i < tokens.length && !isCmd(tokens[i])) args.push(tokens[i++] as number);
+
+    let j = 0;
+    const take = (): number => args[j++] ?? 0;
+    const more = (): boolean => j < args.length;
+
+    out += cmd;
+
+    switch (upper) {
+      case 'Z': break;
+
+      case 'M': case 'L': case 'T': {
+        while (more()) {
+          const x = take(), y = take();
+          const [px, py] = isRel ? relXY(x, y) : absXY(x, y);
+          out += ` ${px.toFixed(3)} ${py.toFixed(3)}`;
+        }
+        break;
+      }
+
+      case 'H': {
+        while (more()) {
+          const x = take();
+          if (isRel) {
+            const dx = (ctm.a * x) * sx * (rot180 ? -1 : 1);
+            out += ` ${dx.toFixed(3)}`;
+          } else {
+            const [cx] = transformPoint(ctm, x, 0);
+            let px = (cx - vbX) * sx;
+            if (rot180) px = totalW - px;
+            out += ` ${px.toFixed(3)}`;
+          }
+        }
+        break;
+      }
+
+      case 'V': {
+        while (more()) {
+          const y = take();
+          if (isRel) {
+            const dy = (ctm.d * y) * sy * (rot180 ? -1 : 1);
+            out += ` ${dy.toFixed(3)}`;
+          } else {
+            const [, cy] = transformPoint(ctm, 0, y);
+            let py = (cy - vbY) * sy;
+            if (rot180) py = totalH - py;
+            out += ` ${py.toFixed(3)}`;
+          }
+        }
+        break;
+      }
+
+      case 'C': {
+        while (more()) {
+          const x1 = take(), y1 = take(), x2 = take(), y2 = take(), x = take(), y = take();
+          const [p1x, p1y] = isRel ? relXY(x1, y1) : absXY(x1, y1);
+          const [p2x, p2y] = isRel ? relXY(x2, y2) : absXY(x2, y2);
+          const [px, py]   = isRel ? relXY(x, y)   : absXY(x, y);
+          out += ` ${p1x.toFixed(3)} ${p1y.toFixed(3)} ${p2x.toFixed(3)} ${p2y.toFixed(3)} ${px.toFixed(3)} ${py.toFixed(3)}`;
+        }
+        break;
+      }
+
+      case 'S': case 'Q': {
+        while (more()) {
+          const x1 = take(), y1 = take(), x = take(), y = take();
+          const [p1x, p1y] = isRel ? relXY(x1, y1) : absXY(x1, y1);
+          const [px, py]   = isRel ? relXY(x, y)   : absXY(x, y);
+          out += ` ${p1x.toFixed(3)} ${p1y.toFixed(3)} ${px.toFixed(3)} ${py.toFixed(3)}`;
+        }
+        break;
+      }
+
+      case 'A': {
+        while (more()) {
+          const rx = take(), ry = take(), xrot = take(), laf = take(), sf = take(), x = take(), y = take();
+          const prx = Math.abs(rx * sx);
+          const pry = Math.abs(ry * sy);
+          const [px, py] = isRel ? relXY(x, y) : absXY(x, y);
+          const finalSf = rot180 ? 1 - sf : sf;
+          out += ` ${prx.toFixed(3)} ${pry.toFixed(3)} ${xrot} ${laf} ${finalSf} ${px.toFixed(3)} ${py.toFixed(3)}`;
+        }
+        break;
+      }
+
+      default: {
+        for (const a of args) out += ` ${a}`;
+        break;
+      }
     }
-  );
+
+    out += ' ';
+  }
+
+  return out.trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -303,24 +456,13 @@ export async function renderSvgToPdfPage(
   const scaleX = widthPts  / vbW;
   const scaleY = heightPts / vbH;
 
-  // 4. Coordenada de origen en PDF (pdf-lib coloca SVG origin en (x,y))
-  //    Con rotación 180° ajustamos igual que el código PNG existente.
-  let originX = xPdf;
-  let originY = yPdfBottom; // punto inferior-izquierdo del uniforme en PDF
-
-  if (rotation === 180) {
-    originX = xPdf + widthPts;
-    originY = yPdfBottom + heightPts;
-  }
-
-  // Helper: convierte coordenada SVG (Y hacia abajo) a PDF (Y hacia arriba)
-  const svgYToPdf = (svgY: number): number => {
-    // SVG local → puntos → PDF Y
-    return originY + heightPts - (svgY - vbY) * scaleY;
-  };
-  const svgXToPdf = (svgX: number): number => {
-    return originX + (svgX - vbX) * scaleX;
-  };
+  // 4. Origen para drawSvgPath:
+  //    page.drawSvgPath(path, { x, y }) mapea SVG(px, py) → PDF(x + px, y - py)
+  //    Queremos que SVG(0,0) quede en la esquina superior-izquierda del uniforme:
+  //      PDF superior-izquierda = (xPdf, yPdfBottom + heightPts)
+  const drawX = xPdf;
+  const drawY = yPdfBottom + heightPts;
+  const rot180 = rotation === 180;
 
   // 5. Estado de herencia inicial
   const rootStyle: StyleContext = {
@@ -395,19 +537,9 @@ export async function renderSvgToPdfPage(
 
     if (!pathD) return;
 
-    // Aplicar transformación acumulada al path
-    pathD = applyMatrixToPathD(pathD, localCTM);
-
-    // Escalar coordenadas SVG → PDF
-    // Reemplazamos los números aplicando la escala del viewBox
-    const scaledD = pathD.replace(
-      /(-?[\d.]+(?:e[-+]?\d+)?)\s+(-?[\d.]+(?:e[-+]?\d+)?)/gi,
-      (_, xs, ys) => {
-        const pdfX = svgXToPdf(parseFloat(xs));
-        const pdfY = svgYToPdf(parseFloat(ys));
-        return `${pdfX.toFixed(3)} ${pdfY.toFixed(3)}`;
-      }
-    );
+    // Aplicar CTM del elemento + escala viewBox → pts PDF
+    // (transformSvgPath reemplaza applyMatrixToPathD + el antiguo regex de escala)
+    const scaledD = transformSvgPath(pathD, localCTM, scaleX, scaleY, vbX, vbY, rot180, widthPts, heightPts);
 
     const effectiveOpacity = style.opacity;
 
@@ -417,12 +549,11 @@ export async function renderSvgToPdfPage(
       const fillOpacity = style.fillOpacity * effectiveOpacity;
       try {
         page.drawSvgPath(scaledD, {
-          x: 0,
-          y: 0,
+          x: drawX,
+          y: drawY,
           borderWidth: 0,
           color: rgb(fillColor.r, fillColor.g, fillColor.b),
           opacity: Math.min(1, Math.max(0, fillOpacity)),
-          rotate: degrees(rotation),
         });
       } catch {
         // Ignorar paths malformados
@@ -436,13 +567,12 @@ export async function renderSvgToPdfPage(
       const strokeW = style.strokeWidth * Math.min(scaleX, scaleY);
       try {
         page.drawSvgPath(scaledD, {
-          x: 0,
-          y: 0,
+          x: drawX,
+          y: drawY,
           borderColor: rgb(strokeColor.r, strokeColor.g, strokeColor.b),
           borderWidth: strokeW,
           borderOpacity: Math.min(1, Math.max(0, strokeOpacity)),
           color: undefined,
-          rotate: degrees(rotation),
         });
       } catch {
         // Ignorar

@@ -330,6 +330,7 @@ export const Toolbar: React.FC = () => {
           visible: true,
           baseColor: "#3b82f6",
           imageUrl: templateBlobUrls['jerseyBack'] ?? "",
+          templatePiece: 'jerseyBack',
           source: "excel",
         };
         stagedUniforms.push(newJerseyEspalda);
@@ -406,6 +407,7 @@ export const Toolbar: React.FC = () => {
           visible: true,
           baseColor: "#3b82f6",
           imageUrl: templateBlobUrls['jerseyFront'] ?? "",
+          templatePiece: 'jerseyFront',
           source: "excel",
         };
         stagedUniforms.push(newJerseyFrente);
@@ -455,6 +457,7 @@ export const Toolbar: React.FC = () => {
           visible: true,
           baseColor: "#3b82f6",
           imageUrl: templateBlobUrls['shortsLeft'] ?? "",
+          templatePiece: 'shortsLeft',
           side: "left",
           source: "excel",
         });
@@ -473,6 +476,7 @@ export const Toolbar: React.FC = () => {
           visible: true,
           baseColor: "#3b82f6",
           imageUrl: templateBlobUrls['shortsRight'] ?? "",
+          templatePiece: 'shortsRight',
           side: "right",
           source: "excel",
         });

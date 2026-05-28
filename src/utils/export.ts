@@ -267,6 +267,9 @@ const convertToPng = async (imageDataUrl: string): Promise<string> => {
         return;
       }
 
+      // Fondo blanco para que las áreas transparentes sean visibles en PDF (fondo blanco)
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
       const pngDataUrl = canvas.toDataURL('image/png');
       resolve(pngDataUrl);
@@ -1624,6 +1627,11 @@ export const exportMultiPagePDFDirect = async (
     let totalImagesEmbedded = 0;
     let totalImagesFromCache = 0;
 
+    // Caché de PNG independiente para el loop de renderizado
+    // Persiste entre páginas para evitar reconversiones, pero es INDEPENDIENTE
+    // de imagePngCache (que puede tener datos obsoletos del pre-caché)
+    const renderPngCache = new Map<string, string>();
+
     // Procesar cada página como un PDF separado
     for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
       console.log(`\n📑 Procesando página ${pageIndex + 1}/${totalPages}...`);
@@ -1729,13 +1737,27 @@ export const exportMultiPagePDFDirect = async (
               );
               totalImagesEmbedded++;
             } else {
-              // PNG/JPEG: usar caché pre-procesado
-              const pngDataUrl = imagePngCache.get(originalImageUrl);
+              // PNG/JPEG: usar caché de renderizado (independiente del pre-caché)
+              // renderPngCache se declara al inicio del loop de páginas para persistir entre páginas
+              let pngDataUrl = renderPngCache.get(originalImageUrl);
+              if (!pngDataUrl) {
+                // También intentar desde el pre-caché si tiene datos
+                pngDataUrl = imagePngCache.get(originalImageUrl);
+              }
               const tacStats = imageTacCache.get(originalImageUrl);
 
               if (!pngDataUrl) {
-                console.log(`  ⚠️  Advertencia: No se encontró PNG en caché para ${originalImageUrl.substring(0, 50)}`);
-                continue;
+                console.log(`  🔄 Convirtiendo imagen para PDF: ${originalImageUrl.substring(0, 60)}...`);
+                try {
+                  pngDataUrl = originalImageUrl.startsWith('data:image/png')
+                    ? originalImageUrl
+                    : await convertToPng(originalImageUrl);
+                  renderPngCache.set(originalImageUrl, pngDataUrl);
+                  imagePngCache.set(originalImageUrl, pngDataUrl);
+                } catch (convErr) {
+                  console.error(`  ✗ Error convirtiendo imagen:`, convErr);
+                  continue;
+                }
               }
 
               const pdfImage = await pdfDoc.embedPng(pngDataUrl);

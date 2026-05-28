@@ -11,20 +11,101 @@ interface UniformElementProps {
   isSelected: boolean;
 }
 
-const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
+// Cache de canvases offscreen renderizados a 2× DPR por URL de SVG
+const _svgCanvasCache = new Map<string, HTMLCanvasElement | 'loading' | 'error'>();
+const _svgCanvasCallbacks = new Map<string, Array<(c: HTMLCanvasElement | null) => void>>();
+
+function _loadSvgOffscreen(
+  url: string,
+  width: number,
+  height: number,
+  callback: (c: HTMLCanvasElement | null) => void,
+): void {
+  const cached = _svgCanvasCache.get(url);
+  if (cached === 'error') { callback(null); return; }
+  if (cached instanceof HTMLCanvasElement) { callback(cached); return; }
+  if (cached === 'loading') {
+    _svgCanvasCallbacks.get(url)!.push(callback);
+    return;
+  }
+
+  _svgCanvasCache.set(url, 'loading');
+  _svgCanvasCallbacks.set(url, [callback]);
+
+  const dpr = (typeof window !== 'undefined' ? window.devicePixelRatio : 2) || 2;
+  const img = new Image();
+
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    _svgCanvasCache.set(url, canvas);
+    _svgCanvasCallbacks.get(url)!.forEach(l => l(canvas));
+    _svgCanvasCallbacks.delete(url);
+  };
+
+  img.onerror = () => {
+    _svgCanvasCache.set(url, 'error');
+    _svgCanvasCallbacks.get(url)!.forEach(l => l(null));
+    _svgCanvasCallbacks.delete(url);
+  };
+
+  img.src = url;
+}
+
+// Renderiza SVG con el renderer nativo del browser via canvas offscreen (2× DPR)
+const SvgUniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (!element.imageUrl) { setCanvas(null); return; }
+    _loadSvgOffscreen(
+      element.imageUrl,
+      element.dimensions.width,
+      element.dimensions.height,
+      setCanvas,
+    );
+  }, [element.imageUrl, element.dimensions.width, element.dimensions.height]);
+
+  if (!canvas) {
+    return (
+      <Rect
+        x={0}
+        y={0}
+        width={element.dimensions.width}
+        height={element.dimensions.height}
+        fill={element.baseColor}
+        cornerRadius={element.part === 'jersey' ? 10 : 5}
+        opacity={0.3}
+      />
+    );
+  }
+
+  return (
+    <KonvaImage
+      image={canvas}
+      x={0}
+      y={0}
+      width={element.dimensions.width}
+      height={element.dimensions.height}
+    />
+  );
+};
+
+// Renderiza una imagen raster (PNG/JPEG) con KonvaImage — flujo legado
+const RasterUniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
     if (element.imageUrl) {
-      loadImage(element.imageUrl, (img) => {
-        setImage(img);
-      });
+      loadImage(element.imageUrl, (img) => setImage(img));
     } else {
       setImage(null);
     }
   }, [element.imageUrl]);
 
-  // Si hay imagen, mostrarla sin rotación (la rotación se aplica al Group)
   if (image) {
     return (
       <KonvaImage
@@ -38,7 +119,6 @@ const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
     );
   }
 
-  // Forma básica del uniforme (rectángulo con esquinas redondeadas) cuando no hay imagen
   return (
     <Rect
       x={0}
@@ -51,6 +131,13 @@ const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
       shadowOpacity={0.3}
     />
   );
+};
+
+const UniformShape: React.FC<{ element: UniformTemplate }> = ({ element }) => {
+  if (element.isSvg) {
+    return <SvgUniformShape element={element} />;
+  }
+  return <RasterUniformShape element={element} />;
 };
 
 export const UniformElement: React.FC<UniformElementProps> = ({
@@ -77,7 +164,6 @@ export const UniformElement: React.FC<UniformElementProps> = ({
 
   // Función para limitar el arrastre en tiempo real (sin margen)
   const dragBoundFunc = (pos: { x: number; y: number }) => {
-    // Limitar dentro del canvas sin margen
     const x = Math.max(0, Math.min(pos.x, canvasWidth - element.dimensions.width));
     const y = Math.max(0, Math.min(pos.y, canvasHeight - element.dimensions.height));
     return { x, y };
@@ -96,27 +182,19 @@ export const UniformElement: React.FC<UniformElementProps> = ({
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    // Usar las dimensiones originales del elemento multiplicadas por la escala
-    // No usar node.width()/height() porque el Group no tiene tamaño explícito
     const newWidth = Math.max(20, element.dimensions.width * scaleX);
     const newHeight = Math.max(20, element.dimensions.height * scaleY);
 
-    // Ajustar posición sin margen
     const x = Math.max(0, Math.min(node.x(), canvasWidth - newWidth));
     const y = Math.max(0, Math.min(node.y(), canvasHeight - newHeight));
-    const constrainedPosition = { x, y };
 
-    // Reset scale
     node.scaleX(1);
     node.scaleY(1);
-    node.position(constrainedPosition);
+    node.position({ x, y });
 
     updateElement(element.id, {
-      dimensions: {
-        width: newWidth,
-        height: newHeight,
-      },
-      position: constrainedPosition,
+      dimensions: { width: newWidth, height: newHeight },
+      position: { x, y },
       rotation: node.rotation(),
     });
   };
@@ -129,7 +207,6 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         rotation={element.rotation}
       >
         <UniformShape element={element} />
-        {/* Texto de talla (siempre visible para Excel, oculto durante exportación para manual) */}
         {(!isExporting || element.source === 'excel') && (
           <Text
             x={0}
@@ -149,7 +226,6 @@ export const UniformElement: React.FC<UniformElementProps> = ({
     );
   }
 
-  // Calcular offset para rotación desde el centro del elemento
   const offsetX = element.rotation !== 0 ? element.dimensions.width / 2 : 0;
   const offsetY = element.rotation !== 0 ? element.dimensions.height / 2 : 0;
 
@@ -170,7 +246,6 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         onTap={() => selectElement(element.id)}
       >
         <UniformShape element={element} />
-        {/* Texto de talla (siempre visible para Excel, oculto durante exportación para manual) */}
         {(!isExporting || element.source === 'excel') && (
           <Text
             x={0}
@@ -192,23 +267,12 @@ export const UniformElement: React.FC<UniformElementProps> = ({
         <Transformer
           ref={transformerRef}
           boundBoxFunc={(oldBox, newBox) => {
-            // Limitar tamaño mínimo
-            if (newBox.width < 20 || newBox.height < 20) {
-              return oldBox;
-            }
-
-            // Verificar que no exceda los límites del canvas (sin margen)
-            if (newBox.x < 0 || newBox.y < 0) {
-              return oldBox;
-            }
-
+            if (newBox.width < 20 || newBox.height < 20) return oldBox;
+            if (newBox.x < 0 || newBox.y < 0) return oldBox;
             if (
               newBox.x + newBox.width > canvasWidth ||
               newBox.y + newBox.height > canvasHeight
-            ) {
-              return oldBox;
-            }
-
+            ) return oldBox;
             return newBox;
           }}
           keepRatio={false}

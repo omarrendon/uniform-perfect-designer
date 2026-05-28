@@ -215,6 +215,9 @@ export const processExcelFile = async (
     // VALIDACIÓN: Verificar que el template del uniforme esté completamente configurado
     const { isTemplateComplete, uniformTemplate } = useDesignerStore.getState();
 
+    // Detectar si el template es SVG (aplica a todos los elementos creados desde este template)
+    const isSvgTemplate = uniformTemplate?.jerseyFront?.startsWith('data:image/svg+xml') ?? false;
+
     if (!isTemplateComplete()) {
       const faltantes: string[] = [];
       if (!uniformTemplate?.jerseyFront) faltantes.push('Playera Delantera');
@@ -432,6 +435,7 @@ export const processExcelFile = async (
         imageUrl: getMoldeFrenteUrl(tallaExcel, genero),
         templatePiece: 'jerseyFront',
         source: 'excel',
+        isSvg: isSvgTemplate,
       };
       stagedUniforms.push(newJerseyFrente);
 
@@ -495,6 +499,7 @@ export const processExcelFile = async (
         imageUrl: getMoldeEspaldaUrl(tallaExcel, genero),
         templatePiece: 'jerseyBack',
         source: 'excel',
+        isSvg: isSvgTemplate,
       };
       stagedUniforms.push(newJerseyEspalda);
 
@@ -619,6 +624,7 @@ export const processExcelFile = async (
         templatePiece: 'shortsLeft',
         side: "left",
         source: 'excel',
+        isSvg: isSvgTemplate,
       };
       stagedUniforms.push(newShortLeft);
 
@@ -640,6 +646,7 @@ export const processExcelFile = async (
         templatePiece: 'shortsRight',
         side: "right",
         source: 'excel',
+        isSvg: isSvgTemplate,
       };
       stagedUniforms.push(newShortRight);
 
