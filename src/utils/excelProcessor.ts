@@ -5,6 +5,7 @@ import { generateId, base64ToBlobUrl } from "./canvas";
 import { compressImageForCanvas } from "./imageCompressorForCanvas";
 import { loadFont } from "./fontLoader";
 import { optimizeLayoutAdvanced } from "./binPacking";
+import { generateBitmapMask, type BitmapMask } from "./svgBitmap";
 
 export interface ExcelProcessorCallbacks {
   onError: (title: string, message: string, details?: string[]) => void;
@@ -698,6 +699,30 @@ export const processExcelFile = async (
       await new Promise(resolve => setTimeout(resolve, 0));
     }
 
+    // --- Generar máscaras bitmap para compaction por silueta real ---
+    const bitmaps = new Map<string, BitmapMask>();
+    if (isSvgTemplate) {
+      const seenKeys = new Set<string>();
+      const maskPromises: Promise<void>[] = [];
+
+      for (const u of stagedUniforms) {
+        if (!u.imageUrl || !u.isSvg) continue;
+        const wk = Math.round(u.dimensions.width);
+        const hk = Math.round(u.dimensions.height);
+        const key = u.rotation !== 0
+          ? `${u.imageUrl}:${wk}:${hk}:${u.rotation}`
+          : `${u.imageUrl}:${wk}:${hk}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        maskPromises.push(
+          generateBitmapMask(u.imageUrl, u.dimensions.width, u.dimensions.height, u.rotation)
+            .then(mask => { if (mask) bitmaps.set(key, mask); }),
+        );
+      }
+
+      await Promise.all(maskPromises);
+    }
+
     // --- POST-PROCESO: MaxRects asigna posiciones óptimas ---
     const result = optimizeLayoutAdvanced(stagedUniforms, canvasConfig, {
       elementGap: 5,
@@ -705,7 +730,8 @@ export const processExcelFile = async (
       canvasMarginV: 0,
       allowRotation: false,
       sortStrategy: 'area',
-      heuristic: 'BSSF',
+      heuristic: 'BL',
+      bitmaps: bitmaps.size > 0 ? bitmaps : undefined,
     });
 
     // Crear páginas adicionales si son necesarias

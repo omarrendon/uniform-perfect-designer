@@ -2,7 +2,7 @@
 // Soporta data URLs (data:image/svg+xml) y Blob URLs (blob:...).
 
 import { parseSvgFromText, type ParsedSvg } from './svgParser';
-export type { ParsedSvg } from './svgParser';
+export type { ParsedSvg, ParsedElement, ParsedPath, ParsedImage } from './svgParser';
 
 interface SvgCacheEntry {
   svg: ParsedSvg | null;
