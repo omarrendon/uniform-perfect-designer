@@ -240,6 +240,11 @@ export const cmykToRGB = (
   return { r, g, b };
 };
 
+export const cmykToHex = (c: number, m: number, y: number, k: number): string => {
+  const { r, g, b } = cmykToRGB(c, m, y, k);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
+};
+
 /**
  * Simula cómo se verá el color CMYK en papel (soft proofing)
  * @param c Cyan (0-100)
