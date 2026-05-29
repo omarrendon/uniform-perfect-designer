@@ -2,9 +2,10 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Stage, Layer, Image as KonvaImage, Text as KonvaText, Rect } from 'react-konva';
 import useImage from 'use-image';
 import { X, RotateCcw, Eye, EyeOff, Check, ChevronDown, ChevronUp } from 'lucide-react';
-import type { UniformDesignConfig, TextDesignConfig } from '../types';
+import type { UniformDesignConfig, TextDesignConfig, CmykColor } from '../types';
 import { useDesignerStore } from '../store/desingerStore';
 import { loadFont, GOOGLE_FONTS } from '../utils/fontLoader';
+import { hexToCMYK, cmykToHex } from '../utils/colorConversion';
 
 // Dimensiones de referencia (talla M Hombre)
 const M_JERSEY_W = 568.63;
@@ -296,31 +297,66 @@ const TextSection: React.FC<TextSectionProps> = ({
             />
           </div>
 
-          {/* Color */}
+          {/* Color CMYK */}
           <div>
-            <label style={{ fontSize: '11px', color: '#6b7280', display: 'block', marginBottom: '4px' }}>Color</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input
-                type="color"
-                value={config.fontColor}
-                onChange={e => onChange({ fontColor: e.target.value.toUpperCase() })}
-                style={{ width: '40px', height: '32px', border: 'none', cursor: 'pointer', borderRadius: '4px' }}
-              />
-              <input
-                type="text"
-                value={config.fontColor}
-                maxLength={7}
-                onChange={e => {
-                  const v = e.target.value.toUpperCase();
-                  if (/^#[0-9A-F]{0,6}$/.test(v)) onChange({ fontColor: v });
-                }}
-                style={{
-                  flex: 1, padding: '5px 8px', fontSize: '12px',
-                  border: '1px solid #d1d5db', borderRadius: '6px',
-                  fontFamily: 'monospace',
-                }}
-              />
-            </div>
+            <label style={{ fontSize: '11px', color: '#6b7280', display: 'block', marginBottom: '6px' }}>Color (CMYK)</label>
+            {(() => {
+              const cmyk: CmykColor = config.fontColorCmyk ?? hexToCMYK(config.fontColor || '#000000');
+              const channels: { key: keyof CmykColor; label: string; color: string }[] = [
+                { key: 'c', label: 'C', color: '#06b6d4' },
+                { key: 'm', label: 'M', color: '#ec4899' },
+                { key: 'y', label: 'Y', color: '#eab308' },
+                { key: 'k', label: 'K', color: '#374151' },
+              ];
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {/* Preview swatch */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '6px',
+                      backgroundColor: config.fontColor || '#000000',
+                      border: '1px solid #d1d5db', flexShrink: 0,
+                    }} />
+                    <span style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>
+                      {config.fontColor?.toUpperCase()}
+                    </span>
+                  </div>
+                  {channels.map(({ key, label, color }) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color, width: '12px', flexShrink: 0 }}>{label}</span>
+                      <input
+                        type="range" min="0" max="100"
+                        value={cmyk[key]}
+                        onChange={e => {
+                          const newCmyk = { ...cmyk, [key]: Number(e.target.value) };
+                          onChange({
+                            fontColorCmyk: newCmyk,
+                            fontColor: cmykToHex(newCmyk.c, newCmyk.m, newCmyk.y, newCmyk.k),
+                          });
+                        }}
+                        style={{ flex: 1, accentColor: color, height: '4px' }}
+                      />
+                      <input
+                        type="number" min="0" max="100"
+                        value={cmyk[key]}
+                        onChange={e => {
+                          const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                          const newCmyk = { ...cmyk, [key]: val };
+                          onChange({
+                            fontColorCmyk: newCmyk,
+                            fontColor: cmykToHex(newCmyk.c, newCmyk.m, newCmyk.y, newCmyk.k),
+                          });
+                        }}
+                        style={{
+                          width: '44px', padding: '3px 4px', fontSize: '11px',
+                          border: '1px solid #d1d5db', borderRadius: '4px', textAlign: 'right',
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Grosor */}

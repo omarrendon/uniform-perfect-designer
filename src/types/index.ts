@@ -2,6 +2,14 @@
 
 export type Size = 'XS' | 'S' | 'M' | 'L' | 'XL';
 
+// Color CMYK para impresión directa (valores 0-100)
+export interface CmykColor {
+  c: number;
+  m: number;
+  y: number;
+  k: number;
+}
+
 // Género del uniforme
 export type Gender = 'Hombre' | 'Mujer';
 
@@ -82,7 +90,8 @@ export interface TextElement extends UniformElement {
   content: string;
   fontFamily: string;
   fontSize: number;
-  fontColor: string;
+  fontColor: string;        // hex #RRGGBB — usado por Konva para preview
+  fontColorCmyk?: CmykColor; // CMYK directo para PDF (cuando está presente, tiene precedencia)
   textAlign: 'left' | 'center' | 'right';
   fontWeight: 'normal' | 'bold';
   opacity: number;
@@ -130,11 +139,12 @@ export interface ExportOptions {
 // Configuración de diseño para un elemento de texto en el uniforme
 export interface TextDesignConfig {
   enabled: boolean;
-  relativeX: number;  // 0–1, fracción del ancho de la pieza
-  relativeY: number;  // 0–1, fracción del alto de la pieza
+  relativeX: number;
+  relativeY: number;
   fontFamily: string;
-  fontSize: number;   // px a talla M de referencia (568.63px de ancho)
-  fontColor: string;  // #RRGGBB
+  fontSize: number;
+  fontColor: string;        // #RRGGBB — hex para Konva
+  fontColorCmyk?: CmykColor; // CMYK directo para PDF
   fontWeight: 'normal' | 'bold';
   textAlign: 'left' | 'center' | 'right';
 }

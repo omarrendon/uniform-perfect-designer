@@ -2,7 +2,7 @@ import { toPng } from 'html-to-image';
 import { PDFDocument, PDFImage, rgb, StandardFonts, degrees } from 'pdf-lib';
 import type { ExportOptions, UniformTemplate, TextElement } from '../types';
 import { useDesignerStore } from '../store/desingerStore';
-import { convertImageRGBtoCMYK, type CMYKConversionOptions } from './colorConversion';
+import { convertImageRGBtoCMYK, cmykToHex, type CMYKConversionOptions } from './colorConversion';
 import { addPrintMarks, expandPageForMarks, generatePrintFileName } from './printMarks';
 import { runPreflight, generatePreflightReport } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
@@ -849,7 +849,9 @@ export const exportAsPNGDirect = async (
           : fontFamily;
 
         ctx.font = `${fontWeight} ${fontSize}px ${fontFamilyFormatted}, sans-serif`;
-        ctx.fillStyle = textEl.fontColor || '#000000';
+        ctx.fillStyle = textEl.fontColorCmyk
+          ? cmykToHex(textEl.fontColorCmyk.c, textEl.fontColorCmyk.m, textEl.fontColorCmyk.y, textEl.fontColorCmyk.k)
+          : (textEl.fontColor || '#000000');
         ctx.globalAlpha = textEl.opacity || 1;
 
         console.log(`    Font aplicada: ${ctx.font} | Es custom: ${isCustomFont}`);
@@ -1424,7 +1426,9 @@ export const exportAsPDFDirect = async (
         console.log(`  📝 Procesando texto: "${textEl.content}" | Fuente: ${textEl.fontFamily || 'Arial'}`);
 
         const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
-        const hexColor = textEl.fontColor || '#000000';
+        const hexColor = textEl.fontColorCmyk
+          ? cmykToHex(textEl.fontColorCmyk.c, textEl.fontColorCmyk.m, textEl.fontColorCmyk.y, textEl.fontColorCmyk.k)
+          : (textEl.fontColor || '#000000');
 
         // Renderizar texto como imagen PNG usando el navegador (garantiza fuente correcta)
         const textImg = await renderTextAsImage(
