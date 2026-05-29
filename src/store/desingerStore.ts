@@ -825,12 +825,9 @@ export const useDesignerStore = create<DesignerState>()(
 
         isTemplateComplete: () => {
           const { uniformTemplate } = get();
-          return !!(
-            uniformTemplate?.jerseyFront &&
-            uniformTemplate?.jerseyBack &&
-            uniformTemplate?.shortsLeft &&
-            uniformTemplate?.shortsRight
-          );
+          const hasJerseys = !!(uniformTemplate?.jerseyFront && uniformTemplate?.jerseyBack);
+          const hasShorts  = !!(uniformTemplate?.shortsLeft  && uniformTemplate?.shortsRight);
+          return hasJerseys || hasShorts;
         },
 
         clearUniformTemplate: () =>

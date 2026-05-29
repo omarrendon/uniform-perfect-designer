@@ -100,6 +100,8 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   };
 
   const templateComplete = isTemplateComplete();
+  const hasJerseys = !!(uniformTemplate?.jerseyFront && uniformTemplate?.jerseyBack);
+  const hasShorts  = !!(uniformTemplate?.shortsLeft  && uniformTemplate?.shortsRight);
   const uploadedCount = [
     uniformTemplate?.jerseyFront,
     uniformTemplate?.jerseyBack,
@@ -146,7 +148,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               Plantilla de Uniforme
             </h2>
             <p style={{ fontSize: '14px', color: '#6b7280' }}>
-              Carga una vez las 4 imágenes del uniforme — se escalan automáticamente a cada talla
+              Carga las playeras (delantera + trasera) o los shorts (izquierdo + derecho), o las 4 imágenes
             </p>
           </div>
           <button
@@ -171,7 +173,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
             }}>
               <Check style={{ width: '18px', height: '18px', color: '#10b981' }} />
               <span style={{ fontSize: '14px', color: '#065f46', fontWeight: '600' }}>
-                Plantilla completa — lista para usar en la carga masiva
+                {hasJerseys && hasShorts ? 'Plantilla completa (4/4)' : hasJerseys ? 'Playeras listas — puedes procesar sin shorts' : 'Shorts listos — puedes procesar sin playeras'}
               </span>
             </div>
           ) : (
@@ -182,7 +184,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
             }}>
               <AlertCircle style={{ width: '18px', height: '18px', color: '#f59e0b' }} />
               <span style={{ fontSize: '14px', color: '#92400e', fontWeight: '500' }}>
-                {uploadedCount}/4 imágenes cargadas — faltan {4 - uploadedCount} para continuar
+                {uploadedCount}/4 imágenes — carga al menos el par de playeras o el par de shorts
               </span>
             </div>
           )}
@@ -339,7 +341,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
 
             {!templateComplete && excelFile && (
               <p style={{ fontSize: '11px', color: '#ef4444', marginTop: '8px' }}>
-                Completa las 4 imágenes de la plantilla antes de procesar el Excel
+                Carga al menos las 2 playeras o los 2 shorts antes de procesar
               </p>
             )}
 

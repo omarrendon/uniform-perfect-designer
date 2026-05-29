@@ -194,7 +194,7 @@ export const Toolbar: React.FC = () => {
         return;
       }
 
-      // VALIDACIÓN: Verificar que el template esté completo
+      // VALIDACIÓN: Verificar que al menos un par completo esté configurado
       if (!isTemplateComplete()) {
         const { uniformTemplate } = useDesignerStore.getState();
         const faltantes: string[] = [];
@@ -205,7 +205,7 @@ export const Toolbar: React.FC = () => {
 
         setErrorDetails({
           title: "Plantilla no configurada",
-          message: "Debes cargar la plantilla del uniforme antes de importar el Excel.",
+          message: "Debes cargar al menos las 2 playeras o los 2 shorts para importar el Excel.",
           details: faltantes.map(f => `✗ Falta: ${f}`),
         });
         setShowErrorModal(true);

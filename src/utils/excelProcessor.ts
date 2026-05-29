@@ -213,11 +213,11 @@ export const processExcelFile = async (
       return `${genderPrefix}-${sizeSpanish}`;
     };
 
-    // VALIDACIÓN: Verificar que el template del uniforme esté completamente configurado
+    // VALIDACIÓN: Verificar que al menos un par completo esté configurado
     const { isTemplateComplete, uniformTemplate } = useDesignerStore.getState();
 
-    // Detectar si el template es SVG (aplica a todos los elementos creados desde este template)
-    const isSvgTemplate = uniformTemplate?.jerseyFront?.startsWith('data:image/svg+xml') ?? false;
+    const hasJerseys = !!(uniformTemplate?.jerseyFront && uniformTemplate?.jerseyBack);
+    const hasShorts  = !!(uniformTemplate?.shortsLeft  && uniformTemplate?.shortsRight);
 
     if (!isTemplateComplete()) {
       const faltantes: string[] = [];
@@ -228,11 +228,16 @@ export const processExcelFile = async (
 
       onError(
         "Plantilla no configurada",
-        "Debes cargar la plantilla del uniforme antes de procesar el Excel. Las 4 imágenes son obligatorias.",
+        "Debes cargar al menos las 2 playeras o los 2 shorts para continuar.",
         faltantes.map(f => `✗ Falta: ${f}`)
       );
       return;
     }
+
+    // Detectar si el template es SVG
+    const isSvgTemplate = uniformTemplate?.jerseyFront?.startsWith('data:image/svg+xml')
+      ?? uniformTemplate?.shortsLeft?.startsWith('data:image/svg+xml')
+      ?? false;
 
     // Blob URLs por pieza y por talla — declarados aquí para que las funciones helper
     // puedan capturarlos por referencia; se populan antes del loop principal.
@@ -420,6 +425,7 @@ export const processExcelFile = async (
       const elementCount = stagedUniforms.length + stagedTexts.length;
 
       // --- JERSEY FRENTE ---
+      if (hasJerseys) {
       const jerseyFrenteId = generateId("uniform");
       const newJerseyFrente: UniformTemplate = {
         id: jerseyFrenteId,
@@ -606,8 +612,10 @@ export const processExcelFile = async (
         };
         stagedTexts.push({ element: nombreEspaldaText, parentId: jerseyEspaldaId });
       }
+      } // end hasJerseys
 
       // --- SHORT IZQUIERDO ---
+      if (hasShorts) {
       const shortsLeftId = generateId("uniform");
       const newShortLeft: UniformTemplate = {
         id: shortsLeftId,
@@ -694,6 +702,7 @@ export const processExcelFile = async (
         };
         stagedTexts.push({ element: numeroShortRightText, parentId: shortParentId });
       }
+      } // end hasShorts
 
       onProgress(processedCount, rows.length);
       await new Promise(resolve => setTimeout(resolve, 0));
