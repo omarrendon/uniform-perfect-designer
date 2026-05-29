@@ -929,6 +929,7 @@ export const useDesignerStore = create<DesignerState>()(
                 imageUrl,
                 originalImageUrl: imageUrl, // Misma URL para original
                 source: 'manual' as const, // Carga masiva de imágenes manuales
+                isSvg: file.type === 'image/svg+xml',
               };
             };
 

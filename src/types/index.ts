@@ -74,6 +74,7 @@ export interface UniformTemplate extends UniformElement {
   templatePiece?: TemplatePiece; // Para carga Excel: identifica la pieza sin duplicar los datos de imagen
   side?: 'front' | 'back' | 'right' | 'left'; // Lado del uniforme
   source?: 'excel' | 'manual'; // Origen: carga masiva Excel o imágenes manuales
+  isSvg?: boolean; // true cuando imageUrl apunta a un SVG (para elegir renderer vectorial)
 }
 
 export interface TextElement extends UniformElement {

@@ -9,6 +9,11 @@ declare const self: {
 
 self.onmessage = async (e) => {
   const { imageBase64, quality } = e.data;
+  // SVG: retornar sin procesar — comprimir SVG como JPEG destruye el vector
+  if (imageBase64.startsWith('data:image/svg+xml')) {
+    self.postMessage({ result: imageBase64 });
+    return;
+  }
   try {
     const result = await compressImage(imageBase64, quality);
     self.postMessage({ result });

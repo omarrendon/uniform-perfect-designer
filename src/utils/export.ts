@@ -8,6 +8,38 @@ import { runPreflight, generatePreflightReport } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
 import { CUSTOM_FONTS, loadUserFontFromDataUrl } from './fontLoader';
 
+// Rasteriza un SVG a PNG usando el renderer nativo del browser.
+// Para rotation 90°/270°, aplica la rotación durante la rasterización de modo que
+// el PNG resultante ya está en la orientación correcta (sin necesidad de rotate en drawImage).
+const convertSvgToPng = (url: string, widthPx: number, heightPx: number, rotation = 0): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(widthPx);
+      canvas.height = Math.round(heightPx);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('No canvas context')); return; }
+
+      if (rotation === 90) {
+        // 90° CW: translate to right edge, rotate, draw at original (swapped) dims
+        ctx.translate(widthPx, 0);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(img, 0, 0, heightPx, widthPx);
+      } else if (rotation === 270) {
+        // 270° CW (= 90° CCW): translate to bottom-left, rotate
+        ctx.translate(0, widthPx);
+        ctx.rotate(-Math.PI / 2);
+        ctx.drawImage(img, 0, 0, heightPx, widthPx);
+      } else {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error(`Error rasterizando SVG`));
+    img.src = url;
+  });
+
 
 /**
  * Sistema de transformación de coordenadas Canvas (Konva) → PDF
@@ -266,6 +298,9 @@ const convertToPng = async (imageDataUrl: string): Promise<string> => {
         return;
       }
 
+      // Fondo blanco para que las áreas transparentes sean visibles en PDF (fondo blanco)
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
       const pngDataUrl = canvas.toDataURL('image/png');
       resolve(pngDataUrl);
@@ -274,10 +309,6 @@ const convertToPng = async (imageDataUrl: string): Promise<string> => {
     img.src = imageDataUrl;
   });
 };
-
-/**
-/**
- * Selecciona la fuente correcta para un texto basándose en fontFamily y fontWeight
 
 /**
  * Crea una imagen CMYK para pdf-lib con validación preflight
@@ -714,26 +745,34 @@ export const exportAsPNGDirect = async (
           // Calcular posición y dimensiones escaladas (ajustadas al bounding box)
           const x = (uniform.position.x - minX) * SCALE_FACTOR;
           const y = (uniform.position.y - minY) * SCALE_FACTOR;
-          const width = uniform.dimensions.width * SCALE_FACTOR;
-          const height = uniform.dimensions.height * SCALE_FACTOR;
+          const sw = uniform.dimensions.width * SCALE_FACTOR;   // stored (bounding box) width
+          const sh = uniform.dimensions.height * SCALE_FACTOR;  // stored (bounding box) height
+          const is90or270 = uniform.rotation === 90 || uniform.rotation === 270;
+          const imageW = is90or270 ? sh : sw;
+          const imageH = is90or270 ? sw : sh;
 
           // Guardar estado del contexto
           ctx.save();
 
-          // Aplicar rotación si es necesario
-          if (uniform.rotation !== 0) {
-            // Calcular centro de rotación
-            const centerX = x + width / 2;
-            const centerY = y + height / 2;
-
-            // Trasladar al centro, rotar, trasladar de vuelta
+          // Aplicar rotación correctamente según el ángulo
+          if (uniform.rotation === 90) {
+            ctx.translate(x + sw, y);
+            ctx.rotate(Math.PI / 2);
+            ctx.drawImage(img, 0, 0, imageW, imageH);
+          } else if (uniform.rotation === 270) {
+            ctx.translate(x, y + sh);
+            ctx.rotate(-Math.PI / 2);
+            ctx.drawImage(img, 0, 0, imageW, imageH);
+          } else if (uniform.rotation === 180) {
+            const centerX = x + sw / 2;
+            const centerY = y + sh / 2;
             ctx.translate(centerX, centerY);
-            ctx.rotate((uniform.rotation * Math.PI) / 180);
+            ctx.rotate(Math.PI);
             ctx.translate(-centerX, -centerY);
+            ctx.drawImage(img, x, y, sw, sh);
+          } else {
+            ctx.drawImage(img, x, y, sw, sh);
           }
-
-          // Dibujar imagen
-          ctx.drawImage(img, x, y, width, height);
 
           // Restaurar estado del contexto
           ctx.restore();
@@ -748,25 +787,20 @@ export const exportAsPNGDirect = async (
             // Guardar estado
             ctx.save();
 
-            // En Konva, el texto está en posición (0, height-11) relativa al uniforme
-            // y se dibuja con align='center' y width=uniform.width
+            // Texto siempre en la parte inferior del bounding box (sin rotar)
+            // Para 90°/270° el bounding box ya tiene sw×sh correctos
+            const textX = (uniform.position.x - minX) * SCALE_FACTOR;
+            const textY = (uniform.position.y - minY) * SCALE_FACTOR + sh - 11 * SCALE_FACTOR;
+            const textCenterX = textX + sw / 2;
 
-            // Aplicar las mismas transformaciones que la imagen
-            if (uniform.rotation !== 0) {
-              // Calcular centro del uniforme en coordenadas escaladas
+            // Para rotation=180°, aplicar misma rotación al texto
+            if (uniform.rotation === 180) {
               const centerX = (uniform.position.x - minX + uniform.dimensions.width / 2) * SCALE_FACTOR;
               const centerY = (uniform.position.y - minY + uniform.dimensions.height / 2) * SCALE_FACTOR;
-
-              // Trasladar al centro, rotar, trasladar de vuelta
               ctx.translate(centerX, centerY);
-              ctx.rotate((uniform.rotation * Math.PI) / 180);
+              ctx.rotate(Math.PI);
               ctx.translate(-centerX, -centerY);
             }
-
-            // Calcular posición del texto relativa al uniforme (ajustada al bounding box y escalada)
-            const textX = (uniform.position.x - minX) * SCALE_FACTOR;
-            const textY = (uniform.position.y - minY + uniform.dimensions.height - 11) * SCALE_FACTOR;
-            const textCenterX = textX + (uniform.dimensions.width * SCALE_FACTOR) / 2;
 
             // Configurar texto
             ctx.font = `bold ${tallaFontSize}px Arial, sans-serif`;
@@ -1253,27 +1287,7 @@ export const exportAsPDFDirect = async (
         if (originalImageUrl) {
           console.log(`  🖼️  Procesando uniforme: ${uniform.id}`);
 
-          // Convertir imagen a CMYK con perfil ICC
-          const conversionOptions: CMYKConversionOptions = {
-            profile: cmykConfig.profile,
-            gcrMethod: cmykConfig.gcrMethod,
-            customTAC: cmykConfig.customTAC,
-            applyDotGain: cmykConfig.applyDotGain,
-          };
-
-          const { image: pdfImage, tacStats } = await embedImageWithCMYK(
-            pdfDoc,
-            originalImageUrl,
-            conversionOptions
-          );
-
-          // Actualizar estadísticas TAC
-          maxTAC = Math.max(maxTAC, tacStats.max);
-          avgTAC += tacStats.average;
-          tacCount++;
-
           // Calcular posición y dimensiones en puntos
-          // El canvas usa pixelsPerCm = 10, entonces 1cm = 10 pixels
           const xInCm = uniform.position.x / canvasConfig.pixelsPerCm;
           const yInCm = uniform.position.y / canvasConfig.pixelsPerCm;
           const widthInCm = uniform.dimensions.width / canvasConfig.pixelsPerCm;
@@ -1284,27 +1298,37 @@ export const exportAsPDFDirect = async (
           const widthInPts = widthInCm * 28.35;
           const heightInPts = heightInCm * 28.35;
 
-          // PDF usa coordenadas desde abajo-izquierda, canvas desde arriba-izquierda
-          let pdfY = heightInPoints - yInPoints - heightInPts;
+          const pdfYBottom = heightInPoints - yInPoints - heightInPts;
+
+          // SVG: rasterizar a alta resolución via browser (renderiza completo: <image>, máscaras, gradientes)
+          // Para 90°/270°, la rotación se aplica durante la rasterización — no en drawImage
+          // PNG/JPEG: usar directamente con conversión CMYK
+          const SVG_PDF_SCALE = 4; // ~288 DPI para SVGs de 72 DPI nativo
+          const imageUrlForEmbed = originalImageUrl.startsWith('data:image/svg+xml')
+            ? await convertSvgToPng(originalImageUrl, widthInPts * SVG_PDF_SCALE, heightInPts * SVG_PDF_SCALE, uniform.rotation)
+            : originalImageUrl;
+
+          const conversionOptions: CMYKConversionOptions = {
+            profile: cmykConfig.profile,
+            gcrMethod: cmykConfig.gcrMethod,
+            customTAC: cmykConfig.customTAC,
+            applyDotGain: cmykConfig.applyDotGain,
+          };
+
+          const { image: pdfImage, tacStats } = await embedImageWithCMYK(pdfDoc, imageUrlForEmbed, conversionOptions);
+
+          maxTAC = Math.max(maxTAC, tacStats.max);
+          avgTAC += tacStats.average;
+          tacCount++;
+
+          let pdfY = pdfYBottom;
           let pdfX = xInPoints;
+          // For 90°/270°, the SVG is pre-rotated — draw without rotation
+          // For 180°, adjust anchor point for pdf-lib's bottom-left rotation pivot
+          if (uniform.rotation === 180) { pdfX = xInPoints + widthInPts; pdfY = pdfYBottom + heightInPts; }
+          const pdfRotation = (uniform.rotation === 90 || uniform.rotation === 270) ? 0 : uniform.rotation;
 
-          // Ajustar posición para rotación de 180° (short derecho)
-          // En PDF, la rotación se aplica alrededor del punto (x,y), entonces
-          // cuando rotamos 180°, necesitamos ajustar la posición
-          if (uniform.rotation === 180) {
-            pdfX = xInPoints + widthInPts;
-            pdfY = pdfY + heightInPts;
-          }
-
-          // Dibujar imagen con rotación si es necesario
-          page.drawImage(pdfImage, {
-            x: pdfX,
-            y: pdfY,
-            width: widthInPts,
-            height: heightInPts,
-            rotate: degrees(uniform.rotation),
-          });
-
+          page.drawImage(pdfImage, { x: pdfX, y: pdfY, width: widthInPts, height: heightInPts, rotate: degrees(pdfRotation) });
           console.log(`  ✓ Uniforme renderizado (TAC: ${tacStats.max.toFixed(1)}%)`);
 
           // Agregar texto de talla SOLO si proviene de Excel
@@ -1371,7 +1395,9 @@ export const exportAsPDFDirect = async (
               tallaPdfX = tallaPdfPos.x + textWidth / 2;
             }
 
-            const tallaOutlineOpts = { size: tallaFontSizeInPoints, font: fontBold, color: rgb(1, 1, 1), rotate: degrees(uniform.rotation) };
+            // Para 90°/270°, el SVG fue pre-rotado — el texto no necesita rotación adicional
+            const tallaTextRotation = (uniform.rotation === 90 || uniform.rotation === 270) ? 0 : uniform.rotation;
+            const tallaOutlineOpts = { size: tallaFontSizeInPoints, font: fontBold, color: rgb(1, 1, 1), rotate: degrees(tallaTextRotation) };
             const outlineOffsets = [-0.5, 0, 0.5];
             for (const dx of outlineOffsets) {
               for (const dy of outlineOffsets) {
@@ -1386,7 +1412,7 @@ export const exportAsPDFDirect = async (
               size: tallaFontSizeInPoints,
               font: fontBold,
               color: rgb(0, 0, 0),
-              rotate: degrees(uniform.rotation),
+              rotate: degrees(tallaTextRotation),
             });
 
             console.log(`  ✓ Texto de talla agregado: "${tallaText}" (rotación: ${uniform.rotation}°)`);
@@ -1594,6 +1620,13 @@ export const exportMultiPagePDFDirect = async (
 
     let processedCount = 0;
     for (const imageUrl of uniqueImages) {
+      // SVG no necesita conversión PNG ni cálculo TAC — se renderiza como vector
+      if (imageUrl.startsWith('data:image/svg+xml')) {
+        // SVG: rasterizar via browser para capturar diseños embebidos
+        console.log(`  [${++processedCount}/${uniqueImages.size}] SVG — rasterizando: ${imageUrl.substring(0, 50)}...`);
+        continue; // se rasteriza on-demand en el loop de páginas (necesita widthInPts/heightInPts)
+      }
+
       console.log(`  [${++processedCount}/${uniqueImages.size}] Procesando: ${imageUrl.substring(0, 50)}...`);
 
       // Convertir a PNG si es necesario
@@ -1616,6 +1649,11 @@ export const exportMultiPagePDFDirect = async (
     // Estadísticas
     let totalImagesEmbedded = 0;
     let totalImagesFromCache = 0;
+
+    // Caché de PNG independiente para el loop de renderizado
+    // Persiste entre páginas para evitar reconversiones, pero es INDEPENDIENTE
+    // de imagePngCache (que puede tener datos obsoletos del pre-caché)
+    const renderPngCache = new Map<string, string>();
 
     // Procesar cada página como un PDF separado
     for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
@@ -1695,27 +1733,7 @@ export const exportMultiPagePDFDirect = async (
           }
 
           if (originalImageUrl) {
-            // OPTIMIZACIÓN: Usar PNG y TAC stats pre-calculados
-            const pngDataUrl = imagePngCache.get(originalImageUrl);
-            const tacStats = imageTacCache.get(originalImageUrl);
-
-            if (!pngDataUrl) {
-              console.log(`  ⚠️  Advertencia: No se encontró PNG en caché para ${originalImageUrl.substring(0, 50)}`);
-              continue;
-            }
-
-            // Embeber la imagen PNG desde caché (operación rápida)
-            const pdfImage = await pdfDoc.embedPng(pngDataUrl);
-            totalImagesEmbedded++;
-            totalImagesFromCache++; // Todas vienen del caché ahora
-
-            if (tacStats) {
-              maxTAC = Math.max(maxTAC, tacStats.max);
-              avgTAC += tacStats.average;
-              tacCount++;
-            }
-
-            // Calcular posición y dimensiones
+            // Calcular posición y dimensiones (común para SVG y PNG)
             const xInCm = uniform.position.x / canvasConfig.pixelsPerCm;
             const yInCm = uniform.position.y / canvasConfig.pixelsPerCm;
             const widthInCm = uniform.dimensions.width / canvasConfig.pixelsPerCm;
@@ -1726,22 +1744,82 @@ export const exportMultiPagePDFDirect = async (
             const widthInPts = widthInCm * 28.35;
             const heightInPts = heightInCm * 28.35;
 
-            let pdfY = heightInPoints - yInPoints - heightInPts;
-            let pdfX = xInPoints;
+            const pdfYBottom = heightInPoints - yInPoints - heightInPts;
+            const pdfX = xInPoints;
 
-            // Ajustar posición para rotación de 180° (short derecho)
-            if (uniform.rotation === 180) {
-              pdfX = xInPoints + widthInPts;
-              pdfY = pdfY + heightInPts;
+            if (originalImageUrl.startsWith('data:image/svg+xml')) {
+              // SVG: rasterizar via browser a alta resolución.
+              // Para 90°/270°, la rotación se aplica durante la rasterización — no en drawImage.
+              const SVG_PDF_SCALE = 4;
+              const svgCacheKey = `${originalImageUrl}:${uniform.rotation}`;
+              let pngDataUrl = renderPngCache.get(svgCacheKey);
+              if (!pngDataUrl) {
+                pngDataUrl = await convertSvgToPng(originalImageUrl, widthInPts * SVG_PDF_SCALE, heightInPts * SVG_PDF_SCALE, uniform.rotation);
+                renderPngCache.set(svgCacheKey, pngDataUrl);
+              }
+              const { image: pdfImage, tacStats } = await embedImageWithCMYK(pdfDoc, pngDataUrl, conversionOptions);
+              maxTAC = Math.max(maxTAC, tacStats.max);
+              avgTAC += tacStats.average;
+              tacCount++;
+
+              let pdfY = pdfYBottom;
+              let adjustedPdfX = pdfX;
+              // For 90°/270°, SVG is pre-rotated — draw without rotation
+              if (uniform.rotation === 180) { adjustedPdfX = xInPoints + widthInPts; pdfY = pdfYBottom + heightInPts; }
+              const svgPdfRotation = (uniform.rotation === 90 || uniform.rotation === 270) ? 0 : uniform.rotation;
+              page.drawImage(pdfImage, { x: adjustedPdfX, y: pdfY, width: widthInPts, height: heightInPts, rotate: degrees(svgPdfRotation) });
+              totalImagesEmbedded++;
+            } else {
+              // PNG/JPEG: usar caché de renderizado (independiente del pre-caché)
+              // renderPngCache se declara al inicio del loop de páginas para persistir entre páginas
+              let pngDataUrl = renderPngCache.get(originalImageUrl);
+              if (!pngDataUrl) {
+                // También intentar desde el pre-caché si tiene datos
+                pngDataUrl = imagePngCache.get(originalImageUrl);
+              }
+              const tacStats = imageTacCache.get(originalImageUrl);
+
+              if (!pngDataUrl) {
+                console.log(`  🔄 Convirtiendo imagen para PDF: ${originalImageUrl.substring(0, 60)}...`);
+                try {
+                  pngDataUrl = originalImageUrl.startsWith('data:image/png')
+                    ? originalImageUrl
+                    : await convertToPng(originalImageUrl);
+                  renderPngCache.set(originalImageUrl, pngDataUrl);
+                  imagePngCache.set(originalImageUrl, pngDataUrl);
+                } catch (convErr) {
+                  console.error(`  ✗ Error convirtiendo imagen:`, convErr);
+                  continue;
+                }
+              }
+
+              const pdfImage = await pdfDoc.embedPng(pngDataUrl);
+              totalImagesEmbedded++;
+              totalImagesFromCache++;
+
+              if (tacStats) {
+                maxTAC = Math.max(maxTAC, tacStats.max);
+                avgTAC += tacStats.average;
+                tacCount++;
+              }
+
+              let pdfY = pdfYBottom;
+              let adjustedPdfX = pdfX;
+
+              // Ajustar posición para rotación de 180° (short derecho)
+              if (uniform.rotation === 180) {
+                adjustedPdfX = xInPoints + widthInPts;
+                pdfY = pdfYBottom + heightInPts;
+              }
+
+              page.drawImage(pdfImage, {
+                x: adjustedPdfX,
+                y: pdfY,
+                width: widthInPts,
+                height: heightInPts,
+                rotate: degrees(uniform.rotation),
+              });
             }
-
-            page.drawImage(pdfImage, {
-              x: pdfX,
-              y: pdfY,
-              width: widthInPts,
-              height: heightInPts,
-              rotate: degrees(uniform.rotation),
-            });
 
             // Agregar texto de talla SOLO si proviene de Excel
             if (uniform.source === 'excel') {
@@ -1807,7 +1885,9 @@ export const exportMultiPagePDFDirect = async (
                 tallaPdfX = tallaPdfPos.x + textWidth / 2;
               }
 
-              const tallaOutlineOpts2 = { size: tallaFontSizeInPoints, font: fontBold, color: rgb(1, 1, 1), rotate: degrees(uniform.rotation) };
+              // Para 90°/270°, el SVG fue pre-rotado — el texto no necesita rotación adicional
+              const tallaTextRotation2 = (uniform.rotation === 90 || uniform.rotation === 270) ? 0 : uniform.rotation;
+              const tallaOutlineOpts2 = { size: tallaFontSizeInPoints, font: fontBold, color: rgb(1, 1, 1), rotate: degrees(tallaTextRotation2) };
               const outlineOffsets2 = [-0.5, 0, 0.5];
               for (const dx of outlineOffsets2) {
                 for (const dy of outlineOffsets2) {
@@ -1822,7 +1902,7 @@ export const exportMultiPagePDFDirect = async (
                 size: tallaFontSizeInPoints,
                 font: fontBold,
                 color: rgb(0, 0, 0),
-                rotate: degrees(uniform.rotation),
+                rotate: degrees(tallaTextRotation2),
               });
             }
           }

@@ -1,5 +1,7 @@
-import type { CanvasElement, Position, CanvasConfig } from "../types";
+import type { CanvasElement, Position, Dimensions, CanvasConfig } from "../types";
+import type { UniformTemplate } from "../types";
 import { cmToPixels } from "./canvas";
+import { type BitmapMask, BITMAP_SCALE, masksOverlap } from "./svgBitmap";
 
 /**
  * Representa un rectángulo libre disponible para colocar elementos
@@ -21,6 +23,7 @@ export interface LayoutOptions {
   allowRotation: boolean;       // Permitir rotar elementos 90°
   sortStrategy: 'area' | 'height' | 'width' | 'perimeter';
   heuristic: 'BSSF' | 'BLSF' | 'BAF' | 'BL';
+  bitmaps?: Map<string, BitmapMask>; // Máscaras SVG para compaction por silueta real
 }
 
 /**
@@ -258,43 +261,109 @@ class MaxRectsBinPack {
 }
 
 /**
- * Ordena los elementos según la estrategia especificada
+ * Paso real en píxeles para el compaction (1 píxel de bitmap = 1/BITMAP_SCALE reales)
  */
-function sortElements(
-  elements: CanvasElement[],
-  strategy: LayoutOptions['sortStrategy']
-): CanvasElement[] {
-  return [...elements].sort((a, b) => {
-    switch (strategy) {
-      case 'area':
-        return (b.dimensions.width * b.dimensions.height) - (a.dimensions.width * a.dimensions.height);
-      case 'height':
-        return b.dimensions.height - a.dimensions.height;
-      case 'width':
-        return b.dimensions.width - a.dimensions.width;
-      case 'perimeter':
-        return (2 * (b.dimensions.width + b.dimensions.height)) - (2 * (a.dimensions.width + a.dimensions.height));
-      default:
-        return 0;
-    }
-  });
+const COMPACT_STEP = Math.round(1 / BITMAP_SCALE); // 15 px
+
+/**
+ * Construye la key del bitmap para un elemento (url:w:h[:rot]).
+ * Retorna null si el elemento no es SVG o no tiene imageUrl.
+ */
+function getBitmapKey(el: CanvasElement): string | null {
+  if (el.type !== 'uniform') return null;
+  const u = el as UniformTemplate;
+  if (!u.imageUrl || !u.isSvg) return null;
+  const wk = Math.round(u.dimensions.width);
+  const hk = Math.round(u.dimensions.height);
+  return u.rotation !== 0
+    ? `${u.imageUrl}:${wk}:${hk}:${u.rotation}`
+    : `${u.imageUrl}:${wk}:${hk}`;
+}
+
+function bboxOverlapWithGap(
+  pos1: Position, dim1: Dimensions,
+  pos2: Position, dim2: Dimensions,
+  gap: number,
+): boolean {
+  return !(
+    pos1.x + dim1.width  + gap <= pos2.x ||
+    pos2.x + dim2.width  + gap <= pos1.x ||
+    pos1.y + dim1.height + gap <= pos2.y ||
+    pos2.y + dim2.height + gap <= pos1.y
+  );
 }
 
 /**
- * Agrupa elementos por tamaño similar para mejor acomodo
+ * Post-proceso de compactación 2D: desliza cada elemento hacia arriba y hacia la izquierda
+ * usando colisión de silueta real (bitmap). Procesa de arriba-izquierda hacia abajo-derecha
+ * para que los elementos ya asentados sirvan de tope real a los que vienen detrás.
+ * Las áreas cóncavas (axilas, cintura, cuello) permiten que otras piezas encajen ahí.
+ * Converge en MAX_PASSES pasadas o cuando ningún elemento se mueve.
  */
-function groupBySize(elements: CanvasElement[]): Map<string, CanvasElement[]> {
-  const groups = new Map<string, CanvasElement[]>();
+function compactLayout(
+  elements: CanvasElement[],
+  options: LayoutOptions,
+): CanvasElement[] {
+  const { bitmaps, elementGap } = options;
+  if (!bitmaps?.size || elements.length < 2) return elements;
+  const bitmapsSafe = bitmaps;
 
-  for (const element of elements) {
-    const key = `${element.dimensions.width}x${element.dimensions.height}`;
-    if (!groups.has(key)) {
-      groups.set(key, []);
+  const positions = elements.map(el => ({ ...el.position }));
+  const MAX_PASSES = 10;
+
+  function hasConflict(i: number, candidate: Position): boolean {
+    const el = elements[i];
+    const key = getBitmapKey(el);
+    const mask = key ? bitmapsSafe.get(key) : undefined;
+
+    for (let j = 0; j < elements.length; j++) {
+      if (j === i) continue;
+      const elj = elements[j];
+      const keyj = getBitmapKey(elj);
+      const maskj = keyj ? bitmapsSafe.get(keyj) : undefined;
+
+      if (mask && maskj) {
+        if (masksOverlap(mask, candidate, maskj, positions[j], elementGap)) return true;
+      } else {
+        if (bboxOverlapWithGap(candidate, el.dimensions, positions[j], elj.dimensions, elementGap)) return true;
+      }
     }
-    groups.get(key)!.push(element);
+    return false;
   }
 
-  return groups;
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    let moved = false;
+
+    // Procesar de arriba-izquierda a abajo-derecha:
+    // los elementos ya asentados en la parte superior sirven de tope bitmap real.
+    const order = elements
+      .map((_, i) => i)
+      .sort((a, b) => positions[a].y !== positions[b].y
+        ? positions[a].y - positions[b].y
+        : positions[a].x - positions[b].x);
+
+    for (const i of order) {
+      // 1. Deslizar hacia ARRIBA — permite que piezas encajen en concavidades superiores
+      while (positions[i].y >= COMPACT_STEP) {
+        const candidate = { x: positions[i].x, y: positions[i].y - COMPACT_STEP };
+        if (hasConflict(i, candidate)) break;
+        positions[i] = candidate;
+        moved = true;
+      }
+
+      // 2. Deslizar hacia la IZQUIERDA
+      while (positions[i].x >= COMPACT_STEP) {
+        const candidate = { x: positions[i].x - COMPACT_STEP, y: positions[i].y };
+        if (hasConflict(i, candidate)) break;
+        positions[i] = candidate;
+        moved = true;
+      }
+    }
+
+    if (!moved) break;
+  }
+
+  return elements.map((el, i) => ({ ...el, position: positions[i] }));
 }
 
 /**
@@ -321,24 +390,24 @@ export function optimizeLayoutAdvanced(
   const canvasHeight = cmToPixels(canvasConfig.height, canvasConfig.pixelsPerCm);
   const canvasArea = canvasWidth * canvasHeight;
 
-  // Ordenar elementos según estrategia
-  const sortedElements = sortElements(elements, finalOptions.sortStrategy);
+  // Interleave complementario: short más ancho + playera más angosta comparten fila.
+  // Short XL (~952px) + Jersey XS (~513px) ≈ ancho canvas → fila casi sin desperdicio.
+  const isShort = (el: CanvasElement) =>
+    el.type === 'uniform' && (el as UniformTemplate).part === 'shorts';
 
-  // Agrupar por tamaño para mejor eficiencia
-  const sizeGroups = groupBySize(sortedElements);
+  const shortsDesc = [...elements]
+    .filter(isShort)
+    .sort((a, b) => b.dimensions.width - a.dimensions.width);
 
-  // Reordenar: grupos más grandes primero, dentro de cada grupo mantener orden
+  const jerseysAsc = [...elements]
+    .filter(el => !isShort(el))
+    .sort((a, b) => a.dimensions.width - b.dimensions.width);
+
   const orderedElements: CanvasElement[] = [];
-  const sortedGroups = Array.from(sizeGroups.entries()).sort((a, b) => {
-    const [keyA] = a;
-    const [keyB] = b;
-    const [wA, hA] = keyA.split('x').map(Number);
-    const [wB, hB] = keyB.split('x').map(Number);
-    return (wB * hB) - (wA * hA);
-  });
-
-  for (const [, group] of sortedGroups) {
-    orderedElements.push(...group);
+  const maxLen = Math.max(shortsDesc.length, jerseysAsc.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < shortsDesc.length) orderedElements.push(shortsDesc[i]);
+    if (i < jerseysAsc.length) orderedElements.push(jerseysAsc[i]);
   }
 
   // Inicializar el packer
@@ -390,6 +459,13 @@ export function optimizeLayoutAdvanced(
   const totalCanvasArea = canvasArea * pagesUsed;
   const efficiency = (totalUsedArea / totalCanvasArea) * 100;
   const wastedSpace = totalCanvasArea - totalUsedArea;
+
+  // Compaction por silueta real si hay bitmaps disponibles
+  if (finalOptions.bitmaps?.size) {
+    for (let p = 0; p < pages.length; p++) {
+      pages[p] = compactLayout(pages[p], finalOptions);
+    }
+  }
 
   return {
     pages,
