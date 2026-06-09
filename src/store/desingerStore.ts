@@ -380,62 +380,51 @@ const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
   pixelsPerCm: 10,
 };
 
-// Configuraciones de tallas HOMBRE - Medidas reales verificadas
+// Configuraciones de tallas HOMBRE — Medidas oficiales TABLA-TALLAS.xlsx (jun 2026)
 const SIZE_CONFIGS_HOMBRE: SizeConfig[] = [
   {
-    size: "XS", gender: "Hombre",
-    width: 513.19, height: 714.38,     // Playera: 51.319cm × 71.438cm (medida real verificada)
-    shortsWidth: 780.66, shortsHeight: 544.3 // Shorts:  78.066cm × 54.43cm (medida real verificada)
-  },
-  {
     size: "S", gender: "Hombre",
-    width: 540.98, height: 752.76,     // Playera: 54.098cm × 75.276cm (medida real verificada)
-    shortsWidth: 821.74, shortsHeight: 572.95 // Shorts:  82.174cm × 57.295cm (medida real verificada)
+    width: 535.75, height: 743.44,     // Playera: 53.575cm × 74.344cm
+    shortsWidth: 720.50, shortsHeight: 523.80 // Shorts:  72.05cm × 52.38cm
   },
   {
     size: "M", gender: "Hombre",
-    width: 568.63, height: 791.56,     // Playera: 56.863cm × 79.156cm (medida real verificada)
-    shortsWidth: 863.6, shortsHeight: 602.38 // Shorts:  86.36cm × 60.238cm (medida real verificada)
+    width: 559.04, height: 775.77,     // Playera: 55.904cm × 77.577cm
+    shortsWidth: 751.83, shortsHeight: 546.58 // Shorts:  75.183cm × 54.658cm
   },
   {
     size: "L", gender: "Hombre",
-    width: 599.34, height: 834,        // Playera: 59.934cm × 83.4cm (medida real verificada)
-    shortsWidth: 906.75, shortsHeight: 632.46 // Shorts:  90.675cm × 63.246cm (medida real verificada)
+    width: 582.33, height: 808.09,     // Playera: 58.233cm × 80.809cm
+    shortsWidth: 783.15, shortsHeight: 569.35 // Shorts:  78.315cm × 56.935cm
   },
   {
     size: "XL", gender: "Hombre",
-    width: 629.26, height: 875.66,     // Playera: 62.926cm × 87.566cm (medida real verificada)
-    shortsWidth: 952.04, shortsHeight: 664.04 // Shorts:  95.204cm × 66.404cm (medida real verificada)
+    width: 605.63, height: 840.41,     // Playera: 60.563cm × 84.041cm
+    shortsWidth: 814.48, shortsHeight: 592.13 // Shorts:  81.448cm × 59.213cm
   },
 ];
 
-// Configuraciones de tallas MUJER - Usando medidas de hombre temporalmente
-// TODO: Actualizar con medidas reales de uniformes de mujer
+// Configuraciones de tallas MUJER — Medidas oficiales TABLA-TALLAS.xlsx (jun 2026)
 const SIZE_CONFIGS_MUJER: SizeConfig[] = [
   {
-    size: "XS", gender: "Mujer",
-    width: 513.19, height: 714.38,     // TEMPORAL: usar medidas de hombre
-    shortsWidth: 780.66, shortsHeight: 544.3
-  },
-  {
     size: "S", gender: "Mujer",
-    width: 540.98, height: 752.76,     // TEMPORAL: usar medidas de hombre
-    shortsWidth: 821.74, shortsHeight: 572.95
+    width: 501.03, height: 691.80,     // Playera: 50.103cm × 69.18cm
+    shortsWidth: 669.72, shortsHeight: 485.89 // Shorts:  66.972cm × 48.589cm
   },
   {
     size: "M", gender: "Mujer",
-    width: 568.63, height: 791.56,     // TEMPORAL: usar medidas de hombre
-    shortsWidth: 863.6, shortsHeight: 602.38
+    width: 526.08, height: 726.39,     // Playera: 52.608cm × 72.639cm
+    shortsWidth: 706.93, shortsHeight: 512.88 // Shorts:  70.693cm × 51.288cm
   },
   {
     size: "L", gender: "Mujer",
-    width: 599.34, height: 834,        // TEMPORAL: usar medidas de hombre
-    shortsWidth: 906.75, shortsHeight: 632.46
+    width: 551.13, height: 760.98,     // Playera: 55.113cm × 76.098cm
+    shortsWidth: 744.14, shortsHeight: 539.88 // Shorts:  74.414cm × 53.988cm
   },
   {
     size: "XL", gender: "Mujer",
-    width: 629.26, height: 875.66,     // TEMPORAL: usar medidas de hombre
-    shortsWidth: 952.04, shortsHeight: 664.04
+    width: 576.18, height: 795.56,     // Playera: 57.618cm × 79.556cm
+    shortsWidth: 781.34, shortsHeight: 566.87 // Shorts:  78.134cm × 56.687cm
   },
 ];
 
@@ -1057,7 +1046,7 @@ export const useDesignerStore = create<DesignerState>()(
           })),
       }),
       {
-        name: "designer-storage-v7", // uniformSizesConfig NO se persiste (solo en memoria)
+        name: "designer-storage-v8", // uniformSizesConfig NO se persiste (solo en memoria)
         partialize: state => ({
           canvasConfig: state.canvasConfig,
           sizeConfigs: state.sizeConfigs,

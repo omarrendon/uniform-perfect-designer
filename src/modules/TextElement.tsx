@@ -113,6 +113,8 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
         align={element.textAlign}
         fontStyle={element.fontWeight === "bold" ? "bold" : "normal"}
         opacity={element.opacity}
+        width={element.dimensions.width > 450 ? element.dimensions.width : undefined}
+        wrap="none"
       />
     );
   }
@@ -131,6 +133,8 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
         align={element.textAlign}
         fontStyle={element.fontWeight === "bold" ? "bold" : "normal"}
         opacity={element.opacity}
+        width={element.dimensions.width > 450 ? element.dimensions.width : undefined}
+        wrap="none"
         draggable={!element.locked}
         dragBoundFunc={dragBoundFunc}
         onDragEnd={handleDragEnd}

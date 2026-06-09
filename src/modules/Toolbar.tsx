@@ -73,7 +73,7 @@ export const Toolbar: React.FC = () => {
   const selectedElement = elements.find(el => el.id === selectedElementId);
 
   // Verificar si hay espacio para agregar nuevos uniformes
-  const sizeConfig = sizeConfigs[2]; // Default M
+  const sizeConfig = sizeConfigs.find(s => s.size === 'M' && s.gender === 'Hombre') ?? sizeConfigs[0];
   // ROTACIÓN 0°: Dimensiones normales (sin rotación)
   const jerseyDimensions = {
     width: sizeConfig.width,
@@ -97,7 +97,7 @@ export const Toolbar: React.FC = () => {
   );
 
   const handleAddUniform = (part: "jersey" | "shorts") => {
-    const sizeConfig = sizeConfigs[2]; // Default M
+    const sizeConfig = sizeConfigs.find(s => s.size === 'M' && s.gender === 'Hombre') ?? sizeConfigs[0];
     const { canvasConfig } = useDesignerStore.getState();
 
     // Dimensiones ajustadas según el tipo de uniforme
@@ -219,18 +219,18 @@ export const Toolbar: React.FC = () => {
       const getSizeConfig = (tallaExcel: string) => {
         const tallaUpper = tallaExcel.toUpperCase().trim();
 
-        // Mapeo de tallas en español a inglés
+        // Mapeo de tallas en español a inglés (XS/XCH → S por eliminación de XS)
         const tallaMapping: { [key: string]: Size } = {
           // Español
-          'XCH': 'XS',
+          'XCH': 'S',
           'CH': 'S',
           'M': 'M',
-          'G': 'L',      // ← CRÍTICO: Grande = Large
+          'G': 'L',
           'XG': 'XL',
           '2XG': 'XL',
           '3XG': 'XL',
           // Inglés (también soportado)
-          'XS': 'XS',
+          'XS': 'S',
           'S': 'S',
           'L': 'L',
           'XL': 'XL',
@@ -238,12 +238,13 @@ export const Toolbar: React.FC = () => {
           '3XL': 'XL',
         };
 
-        // Obtener talla mapeada o usar la original
         const tallaMapped = tallaMapping[tallaUpper] || tallaUpper as Size;
 
         return (
-          sizeConfigs.find(s => s.size === tallaMapped) || sizeConfigs[2]
-        ); // Default M
+          sizeConfigs.find(s => s.size === tallaMapped && s.gender === 'Hombre') ||
+          sizeConfigs.find(s => s.size === 'M' && s.gender === 'Hombre') ||
+          sizeConfigs[0]
+        );
       };
 
       // OCULTAR EL CANVAS para evitar renderizados intermedios
@@ -335,16 +336,26 @@ export const Toolbar: React.FC = () => {
         };
         stagedUniforms.push(newJerseyEspalda);
 
-        // Nombre en espalda (posición relativa al jersey)
-        const textoDimensions = { width: jerseyDimensions.width * 0.8, height: 50 };
+        // Nombre en espalda: fit-to-width proporcional, centrado sobre ancho del jersey
+        const nombreTextoToolbar = (row.nombre || '').toString().toUpperCase();
+        const targetWidthToolbar = jerseyDimensions.width * 0.70;
+        let nombreFontSize = targetWidthToolbar / Math.max(1, nombreTextoToolbar.length * 0.70);
+        nombreFontSize = Math.max(
+          jerseyDimensions.width * 0.04,
+          Math.min(jerseyDimensions.height * 0.11, nombreFontSize)
+        );
+        const textoDimensions = {
+          width: jerseyDimensions.width,
+          height: Math.ceil(nombreFontSize * 1.3),
+        };
         const newTextoNombre: TextElement = {
           id: generateId("text"),
           type: "text",
           part: "jersey",
           size: tallaMostrar as any,
           position: {
-            x: (jerseyDimensions.width - textoDimensions.width) / 2 + 150,
-            y: jerseyDimensions.height / 2 - 100,
+            x: 0,
+            y: jerseyDimensions.height * 0.17,
           },
           dimensions: textoDimensions,
           rotation: 0,
@@ -353,7 +364,7 @@ export const Toolbar: React.FC = () => {
           visible: true,
           content: row.nombre,
           fontFamily: fonteFila,
-          fontSize: 32,
+          fontSize: nombreFontSize,
           fontColor: "#000000",
           textAlign: "center",
           fontWeight: "bold",
@@ -842,7 +853,7 @@ const EditTab: React.FC<{
     );
   }
 
-  const sizes: Size[] = ["XS", "S", "M", "L", "XL"];
+  const sizes: Size[] = ["S", "M", "L", "XL"];
 
   const handleSizeChange = (newSize: Size) => {
     const sizeConfig = sizeConfigs.find(s => s.size === newSize);

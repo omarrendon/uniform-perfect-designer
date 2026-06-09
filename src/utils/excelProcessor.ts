@@ -32,118 +32,33 @@ interface SizeTextConfig {
   shortsRight: TextPositionConfig;      // Número en short derecho
 }
 
+// Offsets escalados proporcionalmente desde las medidas anteriores a las medidas
+// oficiales de TABLA-TALLAS.xlsx (jun 2026). XS eliminado — tallas disponibles: S, M, L, XL.
 const TEXT_POSITIONS_BY_SIZE: Record<string, SizeTextConfig> = {
-  'XS': {
-    jerseyFront: {
-      offsetX: 296,      // Offset desde jerseyFrentePos (estimado)
-      offsetY: 107,
-      fontSize: 105.14
-    },
-    jerseyBackNumber: {
-      offsetX: 128,      // Offset desde jerseyEspaldaPos (estimado)
-      offsetY: 198,      // Estimado basado en patrón de M
-      fontSize: 286.28
-    },
-    jerseyBackName: {
-      offsetX: 164,      // Offset desde jerseyEspaldaPos (estimado)
-      offsetY: 130,      // Estimado basado en patrón de M
-      fontSize: 81.98
-    },
-    shortsRight: {
-      offsetX: 307,      // 337 - 30 (ajustado 30px a la izquierda)
-      offsetY: 278,      // 293 - 15 (ajustado 15px más arriba)
-      fontSize: 134.34
-    }
-  },
   'S': {
-    jerseyFront: {
-      offsetX: 312,      // Offset desde jerseyFrentePos (estimado)
-      offsetY: 113,
-      fontSize: 107.99
-    },
-    jerseyBackNumber: {
-      offsetX: 145,      // Offset desde jerseyEspaldaPos (actualizado)
-      offsetY: 222,      // Estimado basado en nuevas coordenadas
-      fontSize: 283.43
-    },
-    jerseyBackName: {
-      offsetX: 163,      // Offset desde jerseyEspaldaPos (actualizado)
-      offsetY: 136,      // Estimado basado en nuevas coordenadas (884 - 748)
-      fontSize: 86.52
-    },
-    shortsRight: {
-      offsetX: 305,      // Actualizado basado en nuevas coordenadas (873 - ~568)
-      offsetY: 280,      // Actualizado basado en nuevas coordenadas (870 - ~590)
-      fontSize: 145.73
-    }
+    jerseyFront:      { offsetX: 309, offsetY: 112, fontSize: 106.95 },
+    jerseyBackNumber: { offsetX: 144, offsetY: 219, fontSize: 280.70 },
+    jerseyBackName:   { offsetX: 162, offsetY: 134, fontSize:  85.69 },
+    shortsRight:      { offsetX: 267, offsetY: 256, fontSize: 127.79 },
   },
   'M': {
-    jerseyFront: {
-      offsetX: 330,      // Offset desde jerseyFrentePos
-      offsetY: 116,
-      fontSize: 116.76
-    },
-    jerseyBackNumber: {
-      offsetX: 148,      // Offset desde jerseyEspaldaPos
-      offsetY: 204,
-      fontSize: 319.02
-    },
-    jerseyBackName: {
-      offsetX: 189,      // Offset desde jerseyEspaldaPos
-      offsetY: 130,
-      fontSize: 94.59
-    },
-    shortsRight: {
-      offsetX: 337,      // 911 - 574 (posición base del short)
-      offsetY: 308,      // 915 - 607 (posición base del short)
-      fontSize: 150.47
-    }
+    jerseyFront:      { offsetX: 324, offsetY: 114, fontSize: 114.79 },
+    jerseyBackNumber: { offsetX: 146, offsetY: 200, fontSize: 313.63 },
+    jerseyBackName:   { offsetX: 186, offsetY: 127, fontSize:  93.00 },
+    shortsRight:      { offsetX: 293, offsetY: 280, fontSize: 130.98 },
   },
   'L': {
-    jerseyFront: {
-      offsetX: 351,      // Offset desde jerseyFrentePos (estimado)
-      offsetY: 128,
-      fontSize: 119.38
-    },
-    jerseyBackNumber: {
-      offsetX: 160,      // Offset desde jerseyEspaldaPos (estimado)
-      offsetY: 225,      // Estimado basado en patrón
-      fontSize: 311.90
-    },
-    jerseyBackName: {
-      offsetX: 196,      // Offset desde jerseyEspaldaPos (estimado)
-      offsetY: 131,      // Estimado basado en patrón
-      fontSize: 88.02
-    },
-    shortsRight: {
-      offsetX: 307,      // Usando patrón similar a otras tallas
-      offsetY: 278,      // Usando patrón similar a otras tallas
-      fontSize: 147.05
-    }
+    jerseyFront:      { offsetX: 341, offsetY: 124, fontSize: 115.99 },
+    jerseyBackNumber: { offsetX: 156, offsetY: 218, fontSize: 303.04 },
+    jerseyBackName:   { offsetX: 190, offsetY: 127, fontSize:  85.52 },
+    shortsRight:      { offsetX: 265, offsetY: 250, fontSize: 127.02 },
   },
   'XL': {
-    jerseyFront: {
-      offsetX: 357,      // Offset desde jerseyFrentePos (x: 0)
-      offsetY: 137,
-      fontSize: 121.64
-    },
-    jerseyBackNumber: {
-      offsetX: 137,      // Offset desde jerseyEspaldaPos (x: 634) → 771 - 634 = 137
-      offsetY: 246,      // Offset desde jerseyEspaldaPos (y: 0) → 246 - 0 = 246
-      fontSize: 330.79
-    },
-    jerseyBackName: {
-      offsetX: 211,      // Offset desde jerseyEspaldaPos (x: 634) → 845 - 634 = 211
-      offsetY: 149,      // Offset desde jerseyEspaldaPos (y: 0) → 149 - 0 = 149
-      fontSize: 98.06
-    },
-    shortsRight: {
-      offsetX: 389,      // Offset desde shortRightPos (x: 0) → 389 - 0 = 389
-      offsetY: 332,      // Offset desde shortRightPos (y: 1550) → 1882 - 1550 = 332
-      fontSize: 161.13
-    }
+    jerseyFront:      { offsetX: 344, offsetY: 132, fontSize: 117.08 },
+    jerseyBackNumber: { offsetX: 132, offsetY: 236, fontSize: 318.38 },
+    jerseyBackName:   { offsetX: 203, offsetY: 143, fontSize:  94.38 },
+    shortsRight:      { offsetX: 333, offsetY: 296, fontSize: 137.89 },
   },
-  // Todas las tallas principales están configuradas
 };
 
 /**
@@ -184,10 +99,10 @@ export const processExcelFile = async (
       addElementsBatch
     } = useDesignerStore.getState();
 
-    // Mapeo de tallas Excel a tallas en español
+    // Mapeo de tallas Excel a tallas en español (XS/XCH ya no disponibles → CH/S)
     const excelToSpanish: Record<string, SizeSpanish> = {
-      'xs': 'XCH',
-      'xch': 'XCH',
+      'xs': 'CH',
+      'xch': 'CH',
       's': 'CH',
       'ch': 'CH',
       'm': 'M',
@@ -281,18 +196,18 @@ export const processExcelFile = async (
     const getSizeConfig = (tallaExcel: string, genero: 'Hombre' | 'Mujer') => {
       const tallaUpper = tallaExcel.toUpperCase().trim();
 
-      // Mapeo de tallas en español a inglés
+      // Mapeo de tallas en español a inglés (XS/XCH → S por eliminación de XS)
       const tallaMapping: { [key: string]: Size } = {
         // Español
-        'XCH': 'XS',
+        'XCH': 'S',
         'CH': 'S',
         'M': 'M',
-        'G': 'L',      // ← CRÍTICO: Grande = Large
+        'G': 'L',
         'XG': 'XL',
         '2XG': 'XL',
         '3XG': 'XL',
         // Inglés (también soportado)
-        'XS': 'XS',
+        'XS': 'S',
         'S': 'S',
         'L': 'L',
         'XL': 'XL',
@@ -392,9 +307,9 @@ export const processExcelFile = async (
       const tallaMostrar = tallaExcel.toUpperCase().trim();
 
       const tallaMapping: { [key: string]: Size } = {
-        'XCH': 'XS', 'CH': 'S', 'M': 'M',
+        'XCH': 'S', 'CH': 'S', 'M': 'M',
         'G': 'L', 'XG': 'XL',
-        'XS': 'XS', 'S': 'S', 'L': 'L',
+        'XS': 'S', 'S': 'S', 'L': 'L',
         'XL': 'XL',
       };
       const tallaMapeada = tallaMapping[tallaMostrar] || tallaMostrar;
@@ -417,8 +332,8 @@ export const processExcelFile = async (
       };
 
       const textPosConfig = getTextPositionConfig(tallaMapeada);
-      const M_JERSEY_W_REF = 568.63;
-      const M_SHORTS_W_REF = 863.6;
+      const M_JERSEY_W_REF = 559.04; // ancho M Hombre según TABLA-TALLAS.xlsx jun 2026
+      const M_SHORTS_W_REF = 751.83; // ancho shorts M Hombre según TABLA-TALLAS.xlsx jun 2026
       const jerseyScale = jerseyDimensions.width / M_JERSEY_W_REF;
       const shortsScale = shortsDimensions.width / M_SHORTS_W_REF;
 
@@ -557,39 +472,29 @@ export const processExcelFile = async (
         let offsetX: number, offsetY: number, fontSize: number;
         const nombreTexto = String(row.nombre).toUpperCase();
 
+        // X siempre en 0: el contenedor abarca el ancho completo del jersey y
+        // textAlign="center" centra el nombre dentro del molde, sin importar la talla.
+        offsetX = 0;
+
+        // Constantes compartidas: factor 0.70 cubre letras bold uppercase anchas (R, M, W…)
+        // targetWidth al 70% del ancho garantiza que 7+ chars queden bajo el cap de altura.
+        const _charW = 0.70;
+        const _targetW = jerseyDimensions.width * 0.70;
+        const _maxFs = jerseyDimensions.height * 0.11;
+        const _minFs = jerseyDimensions.width * 0.04;
+
         if (designConfig?.jerseyBackName) {
           const cfg = designConfig.jerseyBackName;
-          offsetX = cfg.relativeX * jerseyDimensions.width;
           offsetY = cfg.relativeY * jerseyDimensions.height;
-          fontSize = cfg.fontSize * jerseyScale;
-        } else if (textPosConfig) {
-          offsetX = textPosConfig.jerseyBackName.offsetX;
-          offsetY = textPosConfig.jerseyBackName.offsetY;
-          fontSize = textPosConfig.jerseyBackName.fontSize;
-
-          if (nombreTexto.length > 5) {
-            let desplazamientoIzquierda = 0;
-            let desplazamientoAbajo = 0;
-            if (nombreTexto.length >= 6 && nombreTexto.length <= 7) {
-              desplazamientoIzquierda = 40;
-            } else if (nombreTexto.length >= 8) {
-              desplazamientoIzquierda = 45;
-              desplazamientoAbajo = 15;
-            }
-            offsetX -= desplazamientoIzquierda;
-            offsetY += desplazamientoAbajo;
-          }
+          // Tamaño configurado en el modal, escalado a la talla actual
+          const configFs = cfg.fontSize * jerseyScale;
+          // Cap fit-to-width: para nombres largos, nunca superar el ancho disponible
+          const fitFs = _targetW / (nombreTexto.length * _charW);
+          fontSize = Math.max(_minFs, Math.min(_maxFs, configFs, fitFs));
         } else {
-          offsetX = jerseyDimensions.width / 2 - 120;
-          offsetY = 130;
-          fontSize = 16;
-        }
-
-        const anchoMaximoNombre = jerseyDimensions.width * 0.75;
-        const anchoAproximadoTexto = fontSize * nombreTexto.length * 0.75;
-        if (anchoAproximadoTexto > anchoMaximoNombre) {
-          const factorReduccion = anchoMaximoNombre / anchoAproximadoTexto;
-          fontSize = Math.max(35, fontSize * factorReduccion);
+          offsetY = textPosConfig?.jerseyBackName.offsetY ?? jerseyDimensions.height * 0.17;
+          // Fit-to-width puro: nombres ≤6 quedan en el cap de altura; 7+ se reducen automáticamente
+          fontSize = Math.max(_minFs, Math.min(_maxFs, _targetW / (nombreTexto.length * _charW)));
         }
 
         const nombreEspaldaText: TextElement = {
@@ -598,7 +503,7 @@ export const processExcelFile = async (
           part: "jersey",
           size: tallaMostrar as any,
           position: { x: offsetX, y: offsetY },
-          dimensions: { width: 120, height: 30 },
+          dimensions: { width: jerseyDimensions.width, height: Math.ceil(fontSize * 1.3) },
           rotation: 0,
           zIndex: elementCount + 1000,
           locked: false,

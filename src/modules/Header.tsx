@@ -255,7 +255,7 @@ export const Header: React.FC = () => {
 
   // Funciones para agregar elementos
   const handleAddUniform = (part: "jersey" | "shorts") => {
-    const sizeConfig = sizeConfigs[2]; // Default M
+    const sizeConfig = sizeConfigs.find(s => s.size === 'M' && s.gender === 'Hombre') ?? sizeConfigs[0];
 
     const dimensions =
       part === "shorts"
@@ -323,7 +323,7 @@ export const Header: React.FC = () => {
   };
 
   // Verificar si hay espacio para agregar nuevos uniformes
-  const sizeConfig = sizeConfigs[2]; // Default M
+  const sizeConfig = sizeConfigs.find(s => s.size === 'M' && s.gender === 'Hombre') ?? sizeConfigs[0];
   const jerseyDimensions = {
     width: sizeConfig.width,
     height: sizeConfig.height,
