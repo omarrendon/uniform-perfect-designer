@@ -115,8 +115,8 @@ Desde la refactorización, la carga masiva desde Excel usa **una sola plantilla 
 | `clearUniformTemplate()` | Limpia el template y su versión comprimida |
 
 **Por qué es posible escalar:** Las proporciones de todas las tallas son prácticamente idénticas:
-- Playera: ratio ~0.718 en XS, S, M, L, XL
-- Shorts: ratio ~1.433 en XS, S, M, L, XL
+- Playera: ratio ~0.720 en S, M, L, XL (Hombre) | ~0.724 en S, M, L, XL (Mujer)
+- Shorts: ratio ~1.375 en S, M, L, XL (Hombre) | ~1.379 en S, M, L, XL (Mujer)
 
 Konva aplica el escalado automáticamente vía `width={element.dimensions.width}` en `UniformElement.tsx`.
 
@@ -167,15 +167,25 @@ El algoritmo de bin-packing usa heurística BL (Bottom-Left) con orden por área
 
 ## Tallas — medidas en píxeles (`pixelsPerCm = 10`)
 
-| Talla | Jersey (w×h) | Shorts (w×h) |
-|---|---|---|
-| XS | 513×714 | 780×544 |
-| S | 540×752 | 821×572 |
-| M | 568×791 | 863×602 |
-| L | 599×834 | 906×632 |
-| XL | 629×875 | 952×664 |
+Fuente oficial: `TABLA-TALLAS.xlsx` (jun 2026). XS/XCH eliminados temporalmente.
 
-> Las medidas femeninas (`Gender = 'Mujer'`) aún usan los valores masculinos como placeholder. Actualizar con valores reales cuando estén disponibles.
+### Hombre
+
+| Talla | Jersey (w×h px) | Jersey (cm) | Shorts (w×h px) | Shorts (cm) |
+|---|---|---|---|---|
+| S | 535.75×743.44 | 53.575×74.344 | 720.50×523.80 | 72.05×52.38 |
+| M | 559.04×775.77 | 55.904×77.577 | 751.83×546.58 | 75.183×54.658 |
+| L | 582.33×808.09 | 58.233×80.809 | 783.15×569.35 | 78.315×56.935 |
+| XL | 605.63×840.41 | 60.563×84.041 | 814.48×592.13 | 81.448×59.213 |
+
+### Mujer
+
+| Talla | Jersey (w×h px) | Jersey (cm) | Shorts (w×h px) | Shorts (cm) |
+|---|---|---|---|---|
+| S | 501.03×691.80 | 50.103×69.18 | 669.72×485.89 | 66.972×48.589 |
+| M | 526.08×726.39 | 52.608×72.639 | 706.93×512.88 | 70.693×51.288 |
+| L | 551.13×760.98 | 55.113×76.098 | 744.14×539.88 | 74.414×53.988 |
+| XL | 576.18×795.56 | 57.618×79.556 | 781.34×566.87 | 78.134×56.687 |
 
 ---
 
