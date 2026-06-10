@@ -380,27 +380,39 @@ const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
   pixelsPerCm: 10,
 };
 
+// Cuello: medida única para todas las tallas y géneros — TABLA-TALLAS.xlsx (jun 2026)
+const COLLAR_W = 650; // 65 cm × 10 px/cm
+const COLLAR_H =  60; //  6 cm × 10 px/cm
+
 // Configuraciones de tallas HOMBRE — Medidas oficiales TABLA-TALLAS.xlsx (jun 2026)
 const SIZE_CONFIGS_HOMBRE: SizeConfig[] = [
   {
     size: "S", gender: "Hombre",
-    width: 535.75, height: 743.44,     // Playera: 53.575cm × 74.344cm
-    shortsWidth: 720.50, shortsHeight: 523.80 // Shorts:  72.05cm × 52.38cm
+    width: 535.75, height: 743.44,         // Playera: 53.575cm × 74.344cm
+    shortsWidth: 720.50, shortsHeight: 523.80, // Shorts: 72.05cm × 52.38cm
+    sleeveWidth: 430.32, sleeveHeight: 250.60, // Manga:  43.032cm × 25.06cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
   {
     size: "M", gender: "Hombre",
-    width: 559.04, height: 775.77,     // Playera: 55.904cm × 77.577cm
-    shortsWidth: 751.83, shortsHeight: 546.58 // Shorts:  75.183cm × 54.658cm
+    width: 559.04, height: 775.77,         // Playera: 55.904cm × 77.577cm
+    shortsWidth: 751.83, shortsHeight: 546.58, // Shorts: 75.183cm × 54.658cm
+    sleeveWidth: 449.03, sleeveHeight: 261.49, // Manga:  44.903cm × 26.149cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
   {
     size: "L", gender: "Hombre",
-    width: 582.33, height: 808.09,     // Playera: 58.233cm × 80.809cm
-    shortsWidth: 783.15, shortsHeight: 569.35 // Shorts:  78.315cm × 56.935cm
+    width: 582.33, height: 808.09,         // Playera: 58.233cm × 80.809cm
+    shortsWidth: 783.15, shortsHeight: 569.35, // Shorts: 78.315cm × 56.935cm
+    sleeveWidth: 467.74, sleeveHeight: 272.39, // Manga:  46.774cm × 27.239cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
   {
     size: "XL", gender: "Hombre",
-    width: 605.63, height: 840.41,     // Playera: 60.563cm × 84.041cm
-    shortsWidth: 814.48, shortsHeight: 592.13 // Shorts:  81.448cm × 59.213cm
+    width: 605.63, height: 840.41,         // Playera: 60.563cm × 84.041cm
+    shortsWidth: 814.48, shortsHeight: 592.13, // Shorts: 81.448cm × 59.213cm
+    sleeveWidth: 486.45, sleeveHeight: 283.29, // Manga:  48.645cm × 28.329cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
 ];
 
@@ -408,23 +420,31 @@ const SIZE_CONFIGS_HOMBRE: SizeConfig[] = [
 const SIZE_CONFIGS_MUJER: SizeConfig[] = [
   {
     size: "S", gender: "Mujer",
-    width: 501.03, height: 691.80,     // Playera: 50.103cm × 69.18cm
-    shortsWidth: 669.72, shortsHeight: 485.89 // Shorts:  66.972cm × 48.589cm
+    width: 501.03, height: 691.80,         // Playera: 50.103cm × 69.18cm
+    shortsWidth: 669.72, shortsHeight: 485.89, // Shorts: 66.972cm × 48.589cm
+    sleeveWidth: 382.82, sleeveHeight: 225.83, // Manga:  38.282cm × 22.583cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
   {
     size: "M", gender: "Mujer",
-    width: 526.08, height: 726.39,     // Playera: 52.608cm × 72.639cm
-    shortsWidth: 706.93, shortsHeight: 512.88 // Shorts:  70.693cm × 51.288cm
+    width: 526.08, height: 726.39,         // Playera: 52.608cm × 72.639cm
+    shortsWidth: 706.93, shortsHeight: 512.88, // Shorts: 70.693cm × 51.288cm
+    sleeveWidth: 401.96, sleeveHeight: 237.12, // Manga:  40.196cm × 23.712cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
   {
     size: "L", gender: "Mujer",
-    width: 551.13, height: 760.98,     // Playera: 55.113cm × 76.098cm
-    shortsWidth: 744.14, shortsHeight: 539.88 // Shorts:  74.414cm × 53.988cm
+    width: 551.13, height: 760.98,         // Playera: 55.113cm × 76.098cm
+    shortsWidth: 744.14, shortsHeight: 539.88, // Shorts: 74.414cm × 53.988cm
+    sleeveWidth: 421.10, sleeveHeight: 248.41, // Manga:  42.11cm  × 24.841cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
   {
     size: "XL", gender: "Mujer",
-    width: 576.18, height: 795.56,     // Playera: 57.618cm × 79.556cm
-    shortsWidth: 781.34, shortsHeight: 566.87 // Shorts:  78.134cm × 56.687cm
+    width: 576.18, height: 795.56,         // Playera: 57.618cm × 79.556cm
+    shortsWidth: 781.34, shortsHeight: 566.87, // Shorts: 78.134cm × 56.687cm
+    sleeveWidth: 440.24, sleeveHeight: 259.70, // Manga:  44.024cm × 25.97cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
 ];
 

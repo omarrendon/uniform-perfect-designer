@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { X, Upload, Check, AlertCircle, FileUp, Palette } from "lucide-react";
+import { X, Upload, Check, AlertCircle, FileUp, Palette, ChevronDown, ChevronRight } from "lucide-react";
 import { useDesignerStore } from "../store/desingerStore";
 import { validateExcelFile } from "../utils/excelReader";
 import { processExcelFile } from "../utils/excelProcessor";
@@ -11,14 +11,21 @@ interface UniformSizesModalProps {
   onClose: () => void;
 }
 
-type ImageSlot = 'jerseyFront' | 'jerseyBack' | 'shortsLeft' | 'shortsRight';
+type ImageSlot = 'jerseyFront' | 'jerseyBack' | 'shortsLeft' | 'shortsRight'
+              | 'sleeveLeft' | 'sleeveRight' | 'collar';
 
 const SLOT_LABELS: Record<ImageSlot, string> = {
   jerseyFront: 'Playera Delantera',
-  jerseyBack: 'Playera Trasera',
-  shortsLeft: 'Short Izquierdo',
+  jerseyBack:  'Playera Trasera',
+  shortsLeft:  'Short Izquierdo',
   shortsRight: 'Short Derecho',
+  sleeveLeft:  'Manga Izquierda',
+  sleeveRight: 'Manga Derecha',
+  collar:      'Cuello',
 };
+
+const BASE_SLOTS:     ImageSlot[] = ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight'];
+const OPTIONAL_SLOTS: ImageSlot[] = ['sleeveLeft', 'sleeveRight', 'collar'];
 
 export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   isOpen,
@@ -28,6 +35,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
   const [showDesignModal, setShowDesignModal] = useState(false);
+  const [showOptionalSlots, setShowOptionalSlots] = useState(false);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
   const { uniformTemplate, setUniformTemplate, isTemplateComplete } = useDesignerStore();
@@ -102,12 +110,68 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   const templateComplete = isTemplateComplete();
   const hasJerseys = !!(uniformTemplate?.jerseyFront && uniformTemplate?.jerseyBack);
   const hasShorts  = !!(uniformTemplate?.shortsLeft  && uniformTemplate?.shortsRight);
-  const uploadedCount = [
-    uniformTemplate?.jerseyFront,
-    uniformTemplate?.jerseyBack,
-    uniformTemplate?.shortsLeft,
-    uniformTemplate?.shortsRight,
-  ].filter(Boolean).length;
+  const uploadedCount = BASE_SLOTS.filter(s => !!uniformTemplate?.[s]).length;
+
+  const renderSlot = (slot: ImageSlot) => {
+    const imageUrl = uniformTemplate?.[slot];
+    return (
+      <div key={slot}>
+        <label style={{
+          display: 'block', fontSize: '14px', fontWeight: '600',
+          color: '#374151', marginBottom: '8px',
+        }}>
+          {SLOT_LABELS[slot]}
+        </label>
+        <div style={{
+          border: imageUrl ? '2px solid #10b981' : '2px dashed #d1d5db',
+          borderRadius: '12px', padding: '16px', textAlign: 'center',
+          backgroundColor: imageUrl ? '#f0fdf4' : 'white',
+          transition: 'all 0.2s',
+        }}>
+          {imageUrl ? (
+            <div>
+              <img
+                src={imageUrl}
+                alt={SLOT_LABELS[slot]}
+                style={{
+                  width: '100%', height: '150px',
+                  objectFit: 'contain', marginBottom: '12px', borderRadius: '8px',
+                }}
+              />
+              <label style={{
+                display: 'inline-block', padding: '8px 16px',
+                backgroundColor: '#3b82f6', color: 'white',
+                borderRadius: '6px', fontSize: '13px',
+                fontWeight: '500', cursor: 'pointer',
+              }}>
+                Cambiar imagen
+                <input
+                  type="file" accept="image/*,image/svg+xml"
+                  onChange={(e) => handleImageUpload(slot, e)}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+          ) : (
+            <label style={{ cursor: 'pointer', display: 'block' }}>
+              <Upload style={{ width: '40px', height: '40px', color: '#9ca3af', margin: '0 auto 12px' }} />
+              <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
+                Haz clic para subir
+              </p>
+              <p style={{ fontSize: '11px', color: '#9ca3af' }}>
+                SVG, PNG, JPG, WEBP
+              </p>
+              <input
+                type="file" accept="image/*,image/svg+xml"
+                onChange={(e) => handleImageUpload(slot, e)}
+                style={{ display: 'none' }}
+              />
+            </label>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -184,7 +248,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
             }}>
               <AlertCircle style={{ width: '18px', height: '18px', color: '#f59e0b' }} />
               <span style={{ fontSize: '14px', color: '#92400e', fontWeight: '500' }}>
-                {uploadedCount}/4 imágenes — carga al menos el par de playeras o el par de shorts
+                {uploadedCount}/4 piezas base — carga al menos el par de playeras o el par de shorts
               </span>
             </div>
           )}
@@ -209,71 +273,82 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
 
         {/* Image Uploads */}
         <div style={{ padding: '24px' }}>
+
+          {/* Slots base: playeras y shorts */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
             gap: '20px',
+            marginBottom: '24px',
           }}>
-            {(Object.keys(SLOT_LABELS) as ImageSlot[]).map(slot => {
-              const imageUrl = uniformTemplate?.[slot];
-              return (
-                <div key={slot}>
-                  <label style={{
-                    display: 'block', fontSize: '14px', fontWeight: '600',
-                    color: '#374151', marginBottom: '8px',
+            {BASE_SLOTS.map(slot => renderSlot(slot))}
+          </div>
+
+          {/* Sección opcional: mangas y cuello */}
+          <div style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}>
+            <button
+              onClick={() => setShowOptionalSlots(v => !v)}
+              style={{
+                width: '100%', padding: '14px 18px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                backgroundColor: showOptionalSlots ? '#f5f3ff' : '#f9fafb',
+                border: 'none', cursor: 'pointer',
+                borderBottom: showOptionalSlots ? '1px solid #e5e7eb' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {showOptionalSlots
+                  ? <ChevronDown style={{ width: '18px', height: '18px', color: '#7c3aed' }} />
+                  : <ChevronRight style={{ width: '18px', height: '18px', color: '#6b7280' }} />
+                }
+                <span style={{
+                  fontSize: '14px', fontWeight: '600',
+                  color: showOptionalSlots ? '#7c3aed' : '#374151',
+                }}>
+                  Piezas opcionales — Mangas y Cuello
+                </span>
+                {OPTIONAL_SLOTS.some(s => !!uniformTemplate?.[s]) && (
+                  <span style={{
+                    fontSize: '11px', fontWeight: '600',
+                    backgroundColor: '#7c3aed', color: 'white',
+                    padding: '2px 8px', borderRadius: '9999px',
                   }}>
-                    {SLOT_LABELS[slot]}
-                  </label>
-                  <div style={{
-                    border: imageUrl ? '2px solid #10b981' : '2px dashed #d1d5db',
-                    borderRadius: '12px', padding: '16px', textAlign: 'center',
-                    backgroundColor: imageUrl ? '#f0fdf4' : 'white',
-                    transition: 'all 0.2s',
-                  }}>
-                    {imageUrl ? (
-                      <div>
-                        <img
-                          src={imageUrl}
-                          alt={SLOT_LABELS[slot]}
-                          style={{
-                            width: '100%', height: '150px',
-                            objectFit: 'contain', marginBottom: '12px', borderRadius: '8px',
-                          }}
-                        />
-                        <label style={{
-                          display: 'inline-block', padding: '8px 16px',
-                          backgroundColor: '#3b82f6', color: 'white',
-                          borderRadius: '6px', fontSize: '13px',
-                          fontWeight: '500', cursor: 'pointer',
-                        }}>
-                          Cambiar imagen
-                          <input
-                            type="file" accept="image/*"
-                            onChange={(e) => handleImageUpload(slot, e)}
-                            style={{ display: 'none' }}
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <label style={{ cursor: 'pointer', display: 'block' }}>
-                        <Upload style={{ width: '40px', height: '40px', color: '#9ca3af', margin: '0 auto 12px' }} />
-                        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
-                          Haz clic para subir
-                        </p>
-                        <p style={{ fontSize: '11px', color: '#9ca3af' }}>
-                          PNG, JPG, WEBP
-                        </p>
-                        <input
-                          type="file" accept="image/*"
-                          onChange={(e) => handleImageUpload(slot, e)}
-                          style={{ display: 'none' }}
-                        />
-                      </label>
-                    )}
-                  </div>
+                    {OPTIONAL_SLOTS.filter(s => !!uniformTemplate?.[s]).length} cargadas
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                Para playeras de fútbol con manga separada
+              </span>
+            </button>
+
+            {showOptionalSlots && (
+              <div style={{ padding: '20px' }}>
+                <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
+                  Carga estas imágenes solo si el pedido incluye playeras con manga. En el Excel
+                  usa la columna <strong>tipo_manga</strong> con valores: <code>ninguna</code>,&nbsp;
+                  <code>corta</code> o <code>larga</code>.
+                </p>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '16px',
+                }}>
+                  {OPTIONAL_SLOTS.map(slot => renderSlot(slot))}
                 </div>
-              );
-            })}
+                <p style={{
+                  fontSize: '11px', color: '#f59e0b', marginTop: '14px',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                }}>
+                  ⚠️ Las dimensiones de manga y cuello son aproximadas hasta actualizar
+                  TABLA-TALLAS.xlsx con las medidas reales.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -354,7 +429,10 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                 <strong>Columnas requeridas:</strong> nombre, talla
               </p>
               <p style={{ fontSize: '11px', color: '#1e40af', marginBottom: '4px' }}>
-                <strong>Columnas opcionales:</strong> genero, numero, fuente, color
+                <strong>Columnas opcionales:</strong> genero, numero, fuente, color, tipo_manga
+              </p>
+              <p style={{ fontSize: '10px', color: '#1e40af', marginBottom: '4px' }}>
+                <strong>tipo_manga:</strong> ninguna (default) | corta | larga
               </p>
               <p style={{ fontSize: '10px', color: '#1e40af' }}>
                 <strong>Tamaños de texto:</strong> tamano_numero_frente, tamano_numero_espalda, tamano_nombre_espalda, tamano_numero_short

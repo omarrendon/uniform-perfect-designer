@@ -25,12 +25,18 @@ export const SIZE_MAP: Record<SizeSpanish, Size> = {
   'XG': 'XL',
 };
 
+// Tipo de manga para columna Excel — 'ninguna' = camiseta sin manga
+export type SleeveType = 'ninguna' | 'corta' | 'larga';
+
 // Configuración de imágenes por talla
 export interface SizeImages {
   jerseyFront?: string;   // URL o base64 de playera delantera
   jerseyBack?: string;    // URL o base64 de playera trasera
   shortsLeft?: string;    // URL o base64 de short izquierdo
   shortsRight?: string;   // URL o base64 de short derecho
+  sleeveLeft?: string;    // URL o base64 de manga izquierda (opcional)
+  sleeveRight?: string;   // URL o base64 de manga derecha  (opcional)
+  collar?: string;        // URL o base64 de cuello         (opcional)
 }
 
 export interface UniformSizesConfig {
@@ -42,8 +48,13 @@ export interface SizeConfig {
   gender: Gender; // Género del uniforme (Hombre/Mujer)
   width: number;  // Ancho de playera en píxeles (pixelsPerCm = 10)
   height: number; // Alto de playera en píxeles (pixelsPerCm = 10)
-  shortsWidth?: number;  // Ancho de shorts en píxeles (opcional, precisión de moldes)
-  shortsHeight?: number; // Alto de shorts en píxeles (opcional, precisión de moldes)
+  shortsWidth?: number;  // Ancho de shorts en píxeles
+  shortsHeight?: number; // Alto de shorts en píxeles
+  // Piezas opcionales — pendiente de medidas reales en TABLA-TALLAS.xlsx
+  sleeveWidth?: number;  // Ancho de manga en píxeles
+  sleeveHeight?: number; // Alto de manga en píxeles
+  collarWidth?: number;  // Ancho de cuello en píxeles
+  collarHeight?: number; // Alto de cuello en píxeles
 }
 
 export interface Position {
@@ -56,7 +67,7 @@ export interface Dimensions {
   height: number;
 }
 
-export type UniformPart = 'jersey' | 'shorts';
+export type UniformPart = 'jersey' | 'shorts' | 'sleeve' | 'collar';
 
 export interface UniformElement {
   id: string;
@@ -71,7 +82,8 @@ export interface UniformElement {
   visible: boolean;
 }
 
-export type TemplatePiece = 'jerseyFront' | 'jerseyBack' | 'shortsLeft' | 'shortsRight';
+export type TemplatePiece = 'jerseyFront' | 'jerseyBack' | 'shortsLeft' | 'shortsRight'
+                          | 'sleeveLeft' | 'sleeveRight' | 'collar';
 
 export interface UniformTemplate extends UniformElement {
   type: 'uniform';

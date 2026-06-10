@@ -1,7 +1,9 @@
 import * as XLSX from "xlsx";
+import type { SleeveType } from "../types";
 
 export interface ExcelRow {
   nombre: string;
+  tipo_manga?: SleeveType; // 'ninguna' | 'corta' | 'larga' — default ninguna
   [key: string]: any;
 }
 
