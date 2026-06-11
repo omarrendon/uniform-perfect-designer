@@ -407,6 +407,9 @@ export function optimizeLayoutAdvanced(
   const canvasArea   = canvasWidth * canvasHeight;
   const gap          = finalOptions.elementGap;
 
+  // ── DEBUG TEMPORAL ───────────────────────────────────────────────────────
+  console.log('[Layout] elements:', elements.length, '| canvasH:', canvasHeight, 'px | canvasW:', canvasWidth, 'px');
+
   // ── Clasificadores ───────────────────────────────────────────────────────
   const XL_SIZES = new Set(['XL', 'XG', '2XL', '2XG', '3XL', '3XG']);
   const isXL    = (el: CanvasElement) => XL_SIZES.has((el as UniformTemplate).size as string);
@@ -434,6 +437,10 @@ export function optimizeLayoutAdvanced(
     xlShorts_0.length,
     xlShorts_180.length,
   );
+
+  // ── DEBUG TEMPORAL PASO 1 ────────────────────────────────────────────────
+  console.log('[PASO 1] xlJerseys:', xlJerseys.length, '| xlShorts_0:', xlShorts_0.length, '| xlShorts_180:', xlShorts_180.length, '| nBlocks:', nBlocks);
+  console.log('[PASO 1] nonXlPool:', nonXlPool.length, '| canvasH:', canvasHeight);
 
   for (let i = 0; i < nBlocks; i++) {
     const jFront  = xlJerseys[i * 2];
@@ -556,8 +563,15 @@ export function optimizeLayoutAdvanced(
         }
       }
 
-      // Sin progreso → pieza más grande que el canvas (evitar loop infinito)
-      if (shortIdx + jerseyIdx === progressBefore) break;
+      // Sin progreso: si yOffset > 0, aún puede haber espacio en la siguiente página.
+      // Solo se rompe si ya estamos en y=0 y aun así no cabe → elemento más grande que el canvas.
+      if (shortIdx + jerseyIdx === progressBefore) {
+        if (yOffset === 0) break;
+        pageIdx++;
+        pages.push([]);
+        yOffset = 0;
+        continue;
+      }
 
       yOffset = Math.max(yLeft, yRight);
 
@@ -580,6 +594,20 @@ export function optimizeLayoutAdvanced(
   const totalCanvasArea = canvasArea * pagesUsed;
   const efficiency      = (totalUsedArea / totalCanvasArea) * 100;
   const wastedSpace     = totalCanvasArea - totalUsedArea;
+
+  // ── DEBUG TEMPORAL ───────────────────────────────────────────────────────
+  console.log('[Layout] resultado → páginas:', pagesUsed, '| elementos por página:', pages.map(p => p.length));
+  pages.forEach((p, i) => {
+    const shorts = p.filter(el => el.type === 'uniform' && (el as any).part === 'shorts');
+    const jerseys = p.filter(el => el.type === 'uniform' && (el as any).part === 'jersey');
+    console.log(`  Página ${i + 1}: ${shorts.length} shorts, ${jerseys.length} jerseys`);
+    if (p.length > 0) {
+      const sizes = [...new Set(p.map(el => (el as any).size))];
+      console.log(`    Tallas: ${sizes.join(', ')}`);
+      const dims = p.map(el => `${el.dimensions.width.toFixed(0)}×${el.dimensions.height.toFixed(0)}`);
+      console.log(`    Dims (primeros 4): ${dims.slice(0,4).join(', ')}`);
+    }
+  });
 
   return { pages, efficiency, wastedSpace, pagesUsed, totalElements: elements.length };
 }
