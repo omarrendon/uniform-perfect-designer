@@ -61,7 +61,7 @@ const DEFAULT_OPTIONS: LayoutOptions = {
 /**
  * Clase que implementa el algoritmo MaxRects para bin-packing 2D
  */
-class MaxRectsBinPack {
+export class MaxRectsBinPack {
   private canvasWidth: number;
   private canvasHeight: number;
   private freeRectangles: FreeRectangle[];
@@ -476,10 +476,11 @@ export function optimizeLayoutAdvanced(
     ...xlShorts_180.slice(nBlocks),
   ];
 
-  // ── PASO 2: Resto (no-XL + sobrantes XL) con interleave + MaxRects BL ───
-  const xlBottomY   = yOffset;
-  const xlBottomPg  = pageIdx;
-
+  // ── PASO 2: Columnas independientes para no-XL ───────────────────────────
+  // Columna izquierda (shorts) avanza sh.height + gap independientemente.
+  // Columna derecha  (jerseys) avanza j.height  + gap independientemente.
+  // Cada columna llena la página hasta su propio tope, eliminando el espacio
+  // muerto que generaba sincronizar ambas alturas en una sola fila compartida.
   const restElements = [...nonXlPool, ...xlLeftover];
 
   if (restElements.length > 0) {
@@ -491,37 +492,50 @@ export function optimizeLayoutAdvanced(
       .filter(el => !isShort(el))
       .sort((a, b) => a.dimensions.width - b.dimensions.width);
 
-    const ordered: CanvasElement[] = [];
-    const maxLen = Math.max(shortsDesc.length, jerseysAsc.length);
-    for (let i = 0; i < maxLen; i++) {
-      if (i < shortsDesc.length) ordered.push(shortsDesc[i]);
-      if (i < jerseysAsc.length) ordered.push(jerseysAsc[i]);
-    }
+    // x fija de la columna derecha: ancho del short más ancho + gap
+    const jerseyColX = shortsDesc.length > 0
+      ? shortsDesc[0].dimensions.width + gap
+      : 0;
 
-    const packer = new MaxRectsBinPack(canvasWidth, canvasHeight, finalOptions);
-    if (pageIdx === xlBottomPg) packer.setMinimumY(xlBottomY);
+    let shortIdx  = 0;
+    let jerseyIdx = 0;
 
-    for (const element of ordered) {
-      let result = packer.place(element.dimensions.width, element.dimensions.height);
-      if (!result) {
+    while (shortIdx < shortsDesc.length || jerseyIdx < jerseysAsc.length) {
+      const progressBefore = shortIdx + jerseyIdx;
+
+      let yLeft  = yOffset;
+      let yRight = yOffset;
+
+      // Llenar columna izquierda (shorts) hasta el borde de la página
+      while (shortIdx < shortsDesc.length) {
+        const sh = shortsDesc[shortIdx];
+        if (yLeft + sh.dimensions.height + gap > canvasHeight) break;
+        pages[pageIdx].push({ ...sh, position: { x: 0, y: yLeft } });
+        totalUsedArea += sh.dimensions.width * sh.dimensions.height;
+        yLeft += sh.dimensions.height + gap;
+        shortIdx++;
+      }
+
+      // Llenar columna derecha (jerseys) hasta el borde de la página
+      while (jerseyIdx < jerseysAsc.length) {
+        const j = jerseysAsc[jerseyIdx];
+        if (yRight + j.dimensions.height + gap > canvasHeight) break;
+        pages[pageIdx].push({ ...j, position: { x: jerseyColX, y: yRight } });
+        totalUsedArea += j.dimensions.width * j.dimensions.height;
+        yRight += j.dimensions.height + gap;
+        jerseyIdx++;
+      }
+
+      // Sin progreso → pieza más grande que el canvas (evitar loop infinito)
+      if (shortIdx + jerseyIdx === progressBefore) break;
+
+      yOffset = Math.max(yLeft, yRight);
+
+      if (shortIdx < shortsDesc.length || jerseyIdx < jerseysAsc.length) {
         pageIdx++;
         pages.push([]);
-        packer.reset();
-        result = packer.place(element.dimensions.width, element.dimensions.height);
-        if (!result) {
-          console.warn(`Elemento ${element.id} demasiado grande para el canvas`);
-          continue;
-        }
+        yOffset = 0;
       }
-      pages[pageIdx].push({
-        ...element,
-        position: result.position,
-        dimensions: result.rotated
-          ? { width: element.dimensions.height, height: element.dimensions.width }
-          : element.dimensions,
-        rotation: result.rotated ? (element.rotation + 90) % 360 : element.rotation,
-      });
-      totalUsedArea += element.dimensions.width * element.dimensions.height;
     }
   }
 
