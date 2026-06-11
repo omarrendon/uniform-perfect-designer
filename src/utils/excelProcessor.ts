@@ -257,10 +257,12 @@ export const processExcelFile = async (
     useDesignerStore.setState({ uniformSizesConfigCompressed: compressedConfig });
 
     // Comprimir uniformTemplate para canvas (una sola vez para todas las tallas)
+    // Incluye piezas opcionales (sleeveLeft, sleeveRight, collar) si están cargadas.
     const { uniformTemplate: tmpl } = useDesignerStore.getState();
     if (tmpl) {
       const compressedTemplate: Record<string, string> = {};
-      const pieces = ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight'] as const;
+      const pieces = ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight',
+                      'sleeveLeft', 'sleeveRight', 'collar'] as const;
       await Promise.all(
         pieces.map(async (piece) => {
           if (tmpl[piece]) {
@@ -275,9 +277,10 @@ export const processExcelFile = async (
     const stagedUniforms: UniformTemplate[] = [];
     const stagedTexts: Array<{ element: TextElement; parentId: string }> = [];
 
-    // Poblar blob URLs desde las imágenes ya comprimidas
+    // Poblar blob URLs desde las imágenes ya comprimidas (base + opcionales)
     const { uniformTemplateCompressed, uniformSizesConfigCompressed } = useDesignerStore.getState();
-    for (const piece of ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight'] as const) {
+    for (const piece of ['jerseyFront', 'jerseyBack', 'shortsLeft', 'shortsRight',
+                         'sleeveLeft', 'sleeveRight', 'collar'] as const) {
       const base64 = uniformTemplateCompressed?.[piece];
       if (base64) templateBlobUrls[piece] = base64ToBlobUrl(base64);
     }
@@ -612,6 +615,81 @@ export const processExcelFile = async (
         stagedTexts.push({ element: numeroShortRightText, parentId: shortParentId });
       }
       } // end hasShorts
+
+      // --- MANGAS Y CUELLO (opcionales) ---
+      // Se generan automáticamente para todos los uniformes del pedido
+      // si las imágenes de manga están cargadas en el modal de plantilla.
+      // No se requiere ninguna columna extra en el Excel.
+      const hasSleevesTemplate = !!(uniformTemplate?.sleeveLeft && uniformTemplate?.sleeveRight);
+      const hasCollarTemplate  = !!uniformTemplate?.collar;
+
+      if (hasJerseys && hasSleevesTemplate) {
+        const sleeveW = sizeConfig.sleeveWidth  ?? sizeConfig.width  * 0.40;
+        const sleeveH = sizeConfig.sleeveHeight ?? sizeConfig.height * 0.50;
+
+        // Manga Izquierda
+        stagedUniforms.push({
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "sleeve",
+          size: tallaMostrar as any,
+          position: { x: 0, y: 0 },
+          dimensions: { width: sleeveW, height: sleeveH },
+          rotation: 0,
+          zIndex: elementCount + 4,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: templateBlobUrls['sleeveLeft'] ?? "",
+          templatePiece: 'sleeveLeft',
+          side: "left",
+          source: 'excel',
+          isSvg: isSvgTemplate,
+        });
+
+        // Manga Derecha
+        stagedUniforms.push({
+          id: generateId("uniform"),
+          type: "uniform",
+          part: "sleeve",
+          size: tallaMostrar as any,
+          position: { x: 0, y: 0 },
+          dimensions: { width: sleeveW, height: sleeveH },
+          rotation: 0,
+          zIndex: elementCount + 5,
+          locked: false,
+          visible: true,
+          baseColor: "#ffffff",
+          imageUrl: templateBlobUrls['sleeveRight'] ?? "",
+          templatePiece: 'sleeveRight',
+          side: "right",
+          source: 'excel',
+          isSvg: isSvgTemplate,
+        });
+
+        // Cuello (solo si también está cargado el template)
+        if (hasCollarTemplate) {
+          const collarW = sizeConfig.collarWidth  ?? sizeConfig.width  * 0.30;
+          const collarH = sizeConfig.collarHeight ?? sizeConfig.width  * 0.09;
+          stagedUniforms.push({
+            id: generateId("uniform"),
+            type: "uniform",
+            part: "collar",
+            size: tallaMostrar as any,
+            position: { x: 0, y: 0 },
+            dimensions: { width: collarW, height: collarH },
+            rotation: 0,
+            zIndex: elementCount + 6,
+            locked: false,
+            visible: true,
+            baseColor: "#ffffff",
+            imageUrl: templateBlobUrls['collar'] ?? "",
+            templatePiece: 'collar',
+            source: 'excel',
+            isSvg: isSvgTemplate,
+          });
+        }
+      }
 
       onProgress(processedCount, rows.length);
       await new Promise(resolve => setTimeout(resolve, 0));
