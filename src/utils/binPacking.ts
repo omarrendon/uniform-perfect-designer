@@ -102,6 +102,24 @@ class MaxRectsBinPack {
   }
 
   /**
+   * Descarta o recorta rectángulos libres que empiecen antes de minY.
+   * Úsalo para que MaxRects no invada el espacio ya ocupado por el bloque XL.
+   */
+  setMinimumY(minY: number): void {
+    if (minY <= 0) return;
+    const updated: FreeRectangle[] = [];
+    for (const r of this.freeRectangles) {
+      if (r.y + r.height <= minY) continue;
+      if (r.y < minY) {
+        updated.push({ x: r.x, y: minY, width: r.width, height: r.y + r.height - minY });
+      } else {
+        updated.push(r);
+      }
+    }
+    this.freeRectangles = updated;
+  }
+
+  /**
    * Intenta colocar un elemento en el mejor espacio disponible
    */
   place(width: number, height: number): PlacementResult | null {
@@ -367,8 +385,12 @@ function compactLayout(
 }
 
 /**
- * Algoritmo principal de layout optimizado con MaxRects
- * Soporta múltiples páginas automáticas
+ * Algoritmo principal de layout con acomodo especial 2×2 para talla XL
+ * y MaxRects BL (interleave complementario) para el resto de tallas.
+ *
+ * Bloque XL por jugador:
+ *   Fila par:   jerseyFrente (x=0) | shortsRight rot=180 (x=jW+gap)
+ *   Fila impar: shortsLeft   (x=0) | jerseyEspalda      (x=sW+gap)
  */
 export function optimizeLayoutAdvanced(
   elements: CanvasElement[],
@@ -376,104 +398,146 @@ export function optimizeLayoutAdvanced(
   options: Partial<LayoutOptions> = {}
 ): LayoutResult {
   if (elements.length === 0) {
-    return {
-      pages: [[]],
-      efficiency: 0,
-      wastedSpace: 0,
-      pagesUsed: 1,
-      totalElements: 0,
-    };
+    return { pages: [[]], efficiency: 0, wastedSpace: 0, pagesUsed: 1, totalElements: 0 };
   }
 
   const finalOptions = { ...DEFAULT_OPTIONS, ...options };
-  const canvasWidth = cmToPixels(canvasConfig.width, canvasConfig.pixelsPerCm);
+  const canvasWidth  = cmToPixels(canvasConfig.width,  canvasConfig.pixelsPerCm);
   const canvasHeight = cmToPixels(canvasConfig.height, canvasConfig.pixelsPerCm);
-  const canvasArea = canvasWidth * canvasHeight;
+  const canvasArea   = canvasWidth * canvasHeight;
+  const gap          = finalOptions.elementGap;
 
-  // Interleave complementario: short más ancho + playera más angosta comparten fila.
-  // Short XL (~952px) + Jersey XS (~513px) ≈ ancho canvas → fila casi sin desperdicio.
-  const isShort = (el: CanvasElement) =>
-    el.type === 'uniform' && (el as UniformTemplate).part === 'shorts';
+  // ── Clasificadores ───────────────────────────────────────────────────────
+  const XL_SIZES = new Set(['XL', 'XG', '2XL', '2XG', '3XL', '3XG']);
+  const isXL    = (el: CanvasElement) => XL_SIZES.has((el as UniformTemplate).size as string);
+  const isShort = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'shorts';
+  const isJrsy  = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'jersey';
 
-  const shortsDesc = [...elements]
-    .filter(isShort)
-    .sort((a, b) => b.dimensions.width - a.dimensions.width);
-
-  const jerseysAsc = [...elements]
-    .filter(el => !isShort(el))
-    .sort((a, b) => a.dimensions.width - b.dimensions.width);
-
-  const orderedElements: CanvasElement[] = [];
-  const maxLen = Math.max(shortsDesc.length, jerseysAsc.length);
-  for (let i = 0; i < maxLen; i++) {
-    if (i < shortsDesc.length) orderedElements.push(shortsDesc[i]);
-    if (i < jerseysAsc.length) orderedElements.push(jerseysAsc[i]);
-  }
-
-  // Inicializar el packer
-  const packer = new MaxRectsBinPack(canvasWidth, canvasHeight, finalOptions);
+  // ── Separar XL (jerseys + shorts) del resto ──────────────────────────────
+  const xlJerseys    = elements.filter(el => isJrsy(el)  && isXL(el));
+  const xlShorts_180 = elements.filter(el => isShort(el) && isXL(el) && (el as UniformTemplate).rotation === 180);
+  const xlShorts_0   = elements.filter(el => isShort(el) && isXL(el) && (el as UniformTemplate).rotation !== 180);
+  // Todo lo que no sea jersey/short XL va al pool del MaxRects (incluye mangas, cuellos, tallas menores)
+  const nonXlPool    = elements.filter(el => !isXL(el) || (!isJrsy(el) && !isShort(el)));
 
   const pages: CanvasElement[][] = [[]];
-  let currentPageIndex = 0;
+  let pageIdx      = 0;
+  let yOffset      = 0;
   let totalUsedArea = 0;
 
-  // Procesar cada elemento
-  for (const element of orderedElements) {
-    const width = element.dimensions.width;
-    const height = element.dimensions.height;
+  // ── PASO 1: Bloques 2×2 para XL ─────────────────────────────────────────
+  // Cada bloque cubre las 4 piezas de un jugador XL:
+  //   Fila par:   jerseyFrente (izq) + shortsRight_180 (der)
+  //   Fila impar: shortsLeft_0 (izq) + jerseyEspalda  (der)
+  const nBlocks = Math.min(
+    Math.floor(xlJerseys.length / 2),
+    xlShorts_0.length,
+    xlShorts_180.length,
+  );
 
-    // Intentar colocar en la página actual
-    let result = packer.place(width, height);
+  for (let i = 0; i < nBlocks; i++) {
+    const jFront  = xlJerseys[i * 2];
+    const jBack   = xlJerseys[i * 2 + 1];
+    const sRot0   = xlShorts_0[i];
+    const sRot180 = xlShorts_180[i];
 
-    // Si no cabe, crear nueva página
-    if (!result) {
-      currentPageIndex++;
+    const jW = jFront.dimensions.width;
+    const jH = jFront.dimensions.height;
+    const sW = sRot0.dimensions.width;
+    const sH = sRot0.dimensions.height;
+
+    const rowH_even = Math.max(jH, sH) + gap;   // fila par: jersey + short_180
+    const rowH_odd  = Math.max(sH, jH) + gap;   // fila impar: short_0 + jersey
+    const blockH    = rowH_even + rowH_odd;
+
+    if (yOffset > 0 && yOffset + blockH > canvasHeight) {
+      pageIdx++;
       pages.push([]);
-      packer.reset();
-      result = packer.place(width, height);
-
-      // Si aún no cabe, el elemento es muy grande para el canvas
-      if (!result) {
-        console.warn(`Elemento ${element.id} es demasiado grande para el canvas`);
-        continue;
-      }
+      yOffset = 0;
     }
 
-    // Crear el elemento posicionado
-    const positionedElement: CanvasElement = {
-      ...element,
-      position: result.position,
-      // Si se rotó, intercambiar dimensiones
-      dimensions: result.rotated
-        ? { width: height, height: width }
-        : element.dimensions,
-      rotation: result.rotated ? (element.rotation + 90) % 360 : element.rotation,
-    };
+    // Fila par: jerseyFrente izq | shortsRight_180 der
+    pages[pageIdx].push({ ...jFront,  position: { x: 0,        y: yOffset } });
+    pages[pageIdx].push({ ...sRot180, position: { x: jW + gap, y: yOffset } });
+    totalUsedArea += jW * jH + sW * sH;
+    yOffset += rowH_even;
 
-    pages[currentPageIndex].push(positionedElement);
-    totalUsedArea += width * height;
+    // Fila impar: shortsLeft_0 izq | jerseyEspalda der
+    pages[pageIdx].push({ ...sRot0, position: { x: 0,        y: yOffset } });
+    pages[pageIdx].push({ ...jBack, position: { x: sW + gap, y: yOffset } });
+    totalUsedArea += sW * sH + jW * jH;
+    yOffset += rowH_odd;
   }
 
-  // Calcular métricas
-  const pagesUsed = pages.length;
-  const totalCanvasArea = canvasArea * pagesUsed;
-  const efficiency = (totalUsedArea / totalCanvasArea) * 100;
-  const wastedSpace = totalCanvasArea - totalUsedArea;
+  // Piezas XL sin bloque completo → caen al MaxRects junto al resto
+  const xlLeftover: CanvasElement[] = [
+    ...xlJerseys.slice(nBlocks * 2),
+    ...xlShorts_0.slice(nBlocks),
+    ...xlShorts_180.slice(nBlocks),
+  ];
 
-  // Compaction por silueta real si hay bitmaps disponibles
+  // ── PASO 2: Resto (no-XL + sobrantes XL) con interleave + MaxRects BL ───
+  const xlBottomY   = yOffset;
+  const xlBottomPg  = pageIdx;
+
+  const restElements = [...nonXlPool, ...xlLeftover];
+
+  if (restElements.length > 0) {
+    const shortsDesc = [...restElements]
+      .filter(isShort)
+      .sort((a, b) => b.dimensions.width - a.dimensions.width);
+
+    const jerseysAsc = [...restElements]
+      .filter(el => !isShort(el))
+      .sort((a, b) => a.dimensions.width - b.dimensions.width);
+
+    const ordered: CanvasElement[] = [];
+    const maxLen = Math.max(shortsDesc.length, jerseysAsc.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < shortsDesc.length) ordered.push(shortsDesc[i]);
+      if (i < jerseysAsc.length) ordered.push(jerseysAsc[i]);
+    }
+
+    const packer = new MaxRectsBinPack(canvasWidth, canvasHeight, finalOptions);
+    if (pageIdx === xlBottomPg) packer.setMinimumY(xlBottomY);
+
+    for (const element of ordered) {
+      let result = packer.place(element.dimensions.width, element.dimensions.height);
+      if (!result) {
+        pageIdx++;
+        pages.push([]);
+        packer.reset();
+        result = packer.place(element.dimensions.width, element.dimensions.height);
+        if (!result) {
+          console.warn(`Elemento ${element.id} demasiado grande para el canvas`);
+          continue;
+        }
+      }
+      pages[pageIdx].push({
+        ...element,
+        position: result.position,
+        dimensions: result.rotated
+          ? { width: element.dimensions.height, height: element.dimensions.width }
+          : element.dimensions,
+        rotation: result.rotated ? (element.rotation + 90) % 360 : element.rotation,
+      });
+      totalUsedArea += element.dimensions.width * element.dimensions.height;
+    }
+  }
+
+  // ── Post-proceso: compaction por silueta SVG real ────────────────────────
   if (finalOptions.bitmaps?.size) {
     for (let p = 0; p < pages.length; p++) {
       pages[p] = compactLayout(pages[p], finalOptions);
     }
   }
 
-  return {
-    pages,
-    efficiency,
-    wastedSpace,
-    pagesUsed,
-    totalElements: orderedElements.length,
-  };
+  const pagesUsed       = pages.length;
+  const totalCanvasArea = canvasArea * pagesUsed;
+  const efficiency      = (totalUsedArea / totalCanvasArea) * 100;
+  const wastedSpace     = totalCanvasArea - totalUsedArea;
+
+  return { pages, efficiency, wastedSpace, pagesUsed, totalElements: elements.length };
 }
 
 /**
