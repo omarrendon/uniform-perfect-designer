@@ -502,11 +502,14 @@ export function optimizeLayoutAdvanced(
 
     while (shortIdx < shortsDesc.length || jerseyIdx < jerseysAsc.length) {
       const progressBefore = shortIdx + jerseyIdx;
+      // Capturar ANTES de Fase 1: si los shorts ya estaban agotados al inicio de
+      // esta iteración de página, Fase 2 se salta para que Fase 3 maneje ambas columnas.
+      const shortsExhaustedAtStart = shortIdx >= shortsDesc.length;
 
       let yLeft  = yOffset;
       let yRight = yOffset;
 
-      // Llenar columna izquierda (shorts) hasta el borde de la página
+      // Fase 1: columna izquierda con shorts
       while (shortIdx < shortsDesc.length) {
         const sh = shortsDesc[shortIdx];
         if (yLeft + sh.dimensions.height + gap > canvasHeight) break;
@@ -516,14 +519,41 @@ export function optimizeLayoutAdvanced(
         shortIdx++;
       }
 
-      // Llenar columna derecha (jerseys) hasta el borde de la página
-      while (jerseyIdx < jerseysAsc.length) {
-        const j = jerseysAsc[jerseyIdx];
-        if (yRight + j.dimensions.height + gap > canvasHeight) break;
-        pages[pageIdx].push({ ...j, position: { x: jerseyColX, y: yRight } });
-        totalUsedArea += j.dimensions.width * j.dimensions.height;
-        yRight += j.dimensions.height + gap;
-        jerseyIdx++;
+      // Fase 2: columna derecha con jerseys.
+      // Se omite cuando los shorts ya estaban agotados al inicio de esta página,
+      // para que Fase 3 pueda usar ambas columnas en lugar de llenar solo la derecha.
+      if (!shortsExhaustedAtStart) {
+        while (jerseyIdx < jerseysAsc.length) {
+          const j = jerseysAsc[jerseyIdx];
+          if (yRight + j.dimensions.height + gap > canvasHeight) break;
+          pages[pageIdx].push({ ...j, position: { x: jerseyColX, y: yRight } });
+          totalUsedArea += j.dimensions.width * j.dimensions.height;
+          yRight += j.dimensions.height + gap;
+          jerseyIdx++;
+        }
+      }
+
+      // Fase 3: shorts agotados → jerseys restantes usan ambas columnas (greedy)
+      // Se activa cuando ya no hay más shorts en ninguna página siguiente.
+      // El cursor más bajo recibe el siguiente jersey para distribuir uniformemente.
+      if (shortIdx >= shortsDesc.length) {
+        while (jerseyIdx < jerseysAsc.length) {
+          const j = jerseysAsc[jerseyIdx];
+          const leftFits  = yLeft  + j.dimensions.height + gap <= canvasHeight;
+          const rightFits = yRight + j.dimensions.height + gap <= canvasHeight;
+
+          if (!leftFits && !rightFits) break;
+
+          if (leftFits && (!rightFits || yLeft <= yRight)) {
+            pages[pageIdx].push({ ...j, position: { x: 0, y: yLeft } });
+            yLeft += j.dimensions.height + gap;
+          } else {
+            pages[pageIdx].push({ ...j, position: { x: jerseyColX, y: yRight } });
+            yRight += j.dimensions.height + gap;
+          }
+          totalUsedArea += j.dimensions.width * j.dimensions.height;
+          jerseyIdx++;
+        }
       }
 
       // Sin progreso → pieza más grande que el canvas (evitar loop infinito)
