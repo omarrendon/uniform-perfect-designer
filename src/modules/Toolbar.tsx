@@ -215,8 +215,16 @@ export const Toolbar: React.FC = () => {
       // Obtener el estado actual
       const { canvasConfig, addPage, addElementsBatch, sizeConfigs } = useDesignerStore.getState();
 
+      // Normaliza el campo "genero" del Excel al tipo interno
+      const excelToGender = (generoExcel: unknown): 'Hombre' | 'Mujer' => {
+        if (generoExcel == null || generoExcel === '') return 'Hombre';
+        const g = String(generoExcel).toLowerCase().trim();
+        if (g === 'mujer' || g === 'f' || g === 'femenino') return 'Mujer';
+        return 'Hombre';
+      };
+
       // Función para obtener la configuración de talla
-      const getSizeConfig = (tallaExcel: string) => {
+      const getSizeConfig = (tallaExcel: string, genero: 'Hombre' | 'Mujer') => {
         const tallaUpper = tallaExcel.toUpperCase().trim();
 
         // Mapeo de tallas en español a inglés (XS/XCH → S por eliminación de XS)
@@ -241,7 +249,8 @@ export const Toolbar: React.FC = () => {
         const tallaMapped = tallaMapping[tallaUpper] || tallaUpper as Size;
 
         return (
-          sizeConfigs.find(s => s.size === tallaMapped && s.gender === 'Hombre') ||
+          sizeConfigs.find(s => s.size === tallaMapped && s.gender === genero) ||
+          sizeConfigs.find(s => s.size === 'M' && s.gender === genero) ||
           sizeConfigs.find(s => s.size === 'M' && s.gender === 'Hombre') ||
           sizeConfigs[0]
         );
@@ -298,7 +307,8 @@ export const Toolbar: React.FC = () => {
         }
 
         const tallaExcel = row.talla || "m";
-        const sizeConfig = getSizeConfig(tallaExcel);
+        const genero = excelToGender(row.genero);
+        const sizeConfig = getSizeConfig(tallaExcel, genero);
         const tallaMostrar = tallaExcel.toUpperCase().trim();
 
         const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
@@ -499,6 +509,9 @@ export const Toolbar: React.FC = () => {
       }
 
       // --- POST-PROCESO: MaxRects ---
+      console.log('[Toolbar] stagedUniforms:', stagedUniforms.length, '| canvasConfig:', canvasConfig);
+      const generosMuestra = stagedUniforms.slice(0, 4).map(u => `${u.part} ${u.size} ${u.dimensions.width.toFixed(0)}×${u.dimensions.height.toFixed(0)}`);
+      console.log('[Toolbar] primeros elementos:', generosMuestra);
       const result = optimizeLayoutAdvanced(stagedUniforms, canvasConfig, {
         elementGap: 5,
         canvasMargin: 0,
