@@ -519,14 +519,17 @@ export function optimizeLayoutAdvanced(
       let yLeft  = yOffset;
       let yRight = yOffset;
 
-      // Fase 1: columna izquierda con shorts
-      while (shortIdx < shortsDesc.length) {
-        const sh = shortsDesc[shortIdx];
-        if (yLeft + sh.dimensions.height + gap > canvasHeight) break;
-        pages[pageIdx].push({ ...sh, position: { x: 0, y: yLeft } });
-        totalUsedArea += sh.dimensions.width * sh.dimensions.height;
-        yLeft += sh.dimensions.height + gap;
-        shortIdx++;
+      // Fase 1: columna izquierda con shorts.
+      // Se omite cuando no hay jerseys: en ese caso Fase 4 distribuye en ambas columnas.
+      if (jerseysAsc.length > 0) {
+        while (shortIdx < shortsDesc.length) {
+          const sh = shortsDesc[shortIdx];
+          if (yLeft + sh.dimensions.height + gap > canvasHeight) break;
+          pages[pageIdx].push({ ...sh, position: { x: 0, y: yLeft } });
+          totalUsedArea += sh.dimensions.width * sh.dimensions.height;
+          yLeft += sh.dimensions.height + gap;
+          shortIdx++;
+        }
       }
 
       // Fase 2: columna derecha con jerseys.
@@ -563,6 +566,31 @@ export function optimizeLayoutAdvanced(
           }
           totalUsedArea += j.dimensions.width * j.dimensions.height;
           jerseyIdx++;
+        }
+      }
+
+      // Fase 4: jerseys agotados → shorts restantes usan ambas columnas (greedy)
+      // Simétrico a Fase 3. El check horizontal evita desborde para shorts muy anchos (XL hombre).
+      if (jerseyIdx >= jerseysAsc.length) {
+        console.log('[Fase 4] activada | shortIdx:', shortIdx, '/ shortsDesc.length:', shortsDesc.length, '| jerseyColX:', jerseyColX, '| canvasW:', canvasWidth);
+        while (shortIdx < shortsDesc.length) {
+          const sh = shortsDesc[shortIdx];
+          const leftFits  = yLeft  + sh.dimensions.height + gap <= canvasHeight;
+          const rightFits = yRight + sh.dimensions.height + gap <= canvasHeight
+                            && jerseyColX + sh.dimensions.width <= canvasWidth;
+          console.log('[Fase 4] sh.w:', sh.dimensions.width.toFixed(0), '| leftFits:', leftFits, '| rightFits:', rightFits, '| jerseyColX+w:', (jerseyColX + sh.dimensions.width).toFixed(0));
+
+          if (!leftFits && !rightFits) break;
+
+          if (leftFits && (!rightFits || yLeft <= yRight)) {
+            pages[pageIdx].push({ ...sh, position: { x: 0, y: yLeft } });
+            yLeft += sh.dimensions.height + gap;
+          } else {
+            pages[pageIdx].push({ ...sh, position: { x: jerseyColX, y: yRight } });
+            yRight += sh.dimensions.height + gap;
+          }
+          totalUsedArea += sh.dimensions.width * sh.dimensions.height;
+          shortIdx++;
         }
       }
 
