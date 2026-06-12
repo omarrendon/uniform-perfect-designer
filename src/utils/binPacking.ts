@@ -499,10 +499,13 @@ export function optimizeLayoutAdvanced(
       .filter(el => !isShort(el))
       .sort((a, b) => a.dimensions.width - b.dimensions.width);
 
-    // x fija de la columna derecha: ancho del short más ancho + gap
+    // x fija de la columna derecha: ancho del short más ancho + gap.
+    // Sin shorts, se usa el jersey más ancho para que ambas columnas no se solapen.
     const jerseyColX = shortsDesc.length > 0
       ? shortsDesc[0].dimensions.width + gap
-      : 0;
+      : jerseysAsc.length > 0
+        ? jerseysAsc[jerseysAsc.length - 1].dimensions.width + gap
+        : 0;
 
     let shortIdx  = 0;
     let jerseyIdx = 0;
