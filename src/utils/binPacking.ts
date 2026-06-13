@@ -407,14 +407,12 @@ export function optimizeLayoutAdvanced(
   const canvasArea   = canvasWidth * canvasHeight;
   const gap          = finalOptions.elementGap;
 
-  // ── DEBUG TEMPORAL ───────────────────────────────────────────────────────
-  console.log('[Layout] elements:', elements.length, '| canvasH:', canvasHeight, 'px | canvasW:', canvasWidth, 'px');
-
   // ── Clasificadores ───────────────────────────────────────────────────────
   const XL_SIZES = new Set(['XL', 'XG', '2XL', '2XG', '3XL', '3XG']);
   const isXL    = (el: CanvasElement) => XL_SIZES.has((el as UniformTemplate).size as string);
-  const isShort = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'shorts';
-  const isJrsy  = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'jersey';
+  const isShort  = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'shorts';
+  const isJrsy   = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'jersey';
+  const isCollar = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'collar';
 
   // ── Separar XL (jerseys + shorts) del resto ──────────────────────────────
   const xlJerseys    = elements.filter(el => isJrsy(el)  && isXL(el));
@@ -437,10 +435,6 @@ export function optimizeLayoutAdvanced(
     xlShorts_0.length,
     xlShorts_180.length,
   );
-
-  // ── DEBUG TEMPORAL PASO 1 ────────────────────────────────────────────────
-  console.log('[PASO 1] xlJerseys:', xlJerseys.length, '| xlShorts_0:', xlShorts_0.length, '| xlShorts_180:', xlShorts_180.length, '| nBlocks:', nBlocks);
-  console.log('[PASO 1] nonXlPool:', nonXlPool.length, '| canvasH:', canvasHeight);
 
   for (let i = 0; i < nBlocks; i++) {
     const jFront  = xlJerseys[i * 2];
@@ -495,17 +489,101 @@ export function optimizeLayoutAdvanced(
       .filter(isShort)
       .sort((a, b) => b.dimensions.width - a.dimensions.width);
 
-    const jerseysAsc = [...restElements]
-      .filter(el => !isShort(el))
-      .sort((a, b) => a.dimensions.width - b.dimensions.width);
+    // Cuellos → PASO 3 (filas de 2).
+    const collars = restElements.filter(isCollar);
 
-    // x fija de la columna derecha: ancho del short más ancho + gap
+    // Mangas → PASO 2.5 (filas de hasta 3, después de shorts+jerseys).
+    const sleevePool = [...restElements]
+      .filter(el => (el as UniformTemplate).part === 'sleeve')
+      .sort((a, b) => b.dimensions.height - a.dimensions.height);
+
+    // Jerseys → columna derecha del PASO 2, ordenados por altura DESC.
+    const jerseysAsc = [...restElements]
+      .filter(el => (el as UniformTemplate).part === 'jersey')
+      .sort((a, b) => b.dimensions.height - a.dimensions.height);
+
+    // x fija de la columna derecha: ancho del short más ancho + gap.
+    // Sin shorts, se usa el jersey más ancho para que las columnas no se solapen.
+    const jerseyMaxW = jerseysAsc.reduce((m, el) => Math.max(m, el.dimensions.width), 0);
     const jerseyColX = shortsDesc.length > 0
       ? shortsDesc[0].dimensions.width + gap
-      : 0;
+      : jerseyMaxW > 0 ? jerseyMaxW + gap : 0;
 
     let shortIdx  = 0;
     let jerseyIdx = 0;
+
+    if (shortsDesc.length === 0) {
+      // Sin shorts: 2 jerseys por fila + mangas a la derecha (si caben).
+      // Cuando jerseys agotados: solo mangas hasta 3 por fila.
+      let jIdx = 0;
+      let sIdx = 0;
+
+      while (jIdx < jerseysAsc.length || sIdx < sleevePool.length) {
+        if (jIdx < jerseysAsc.length) {
+          const j1   = jerseysAsc[jIdx];
+          const rowH = j1.dimensions.height + gap;
+
+          if (yOffset + rowH > canvasHeight) {
+            pageIdx++;
+            pages.push([]);
+            yOffset = 0;
+          }
+
+          let xCursor = 0;
+
+          pages[pageIdx].push({ ...j1, position: { x: xCursor, y: yOffset } });
+          totalUsedArea += j1.dimensions.width * j1.dimensions.height;
+          xCursor += j1.dimensions.width + gap;
+          jIdx++;
+
+          if (jIdx < jerseysAsc.length) {
+            const j2 = jerseysAsc[jIdx];
+            if (xCursor + j2.dimensions.width <= canvasWidth) {
+              pages[pageIdx].push({ ...j2, position: { x: xCursor, y: yOffset } });
+              totalUsedArea += j2.dimensions.width * j2.dimensions.height;
+              xCursor += j2.dimensions.width + gap;
+              jIdx++;
+            }
+          }
+
+          // Mangas en columna vertical dentro del espacio sobrante a la derecha de los jerseys.
+          // El límite vertical es la altura del jersey (rowH).
+          const sleeveColX = xCursor;
+          let sleeveY = yOffset;
+          while (sIdx < sleevePool.length) {
+            const sl = sleevePool[sIdx];
+            if (sleeveColX + sl.dimensions.width > canvasWidth) break;
+            if (sleeveY + sl.dimensions.height > yOffset + j1.dimensions.height) break;
+            pages[pageIdx].push({ ...sl, position: { x: sleeveColX, y: sleeveY } });
+            totalUsedArea += sl.dimensions.width * sl.dimensions.height;
+            sleeveY += sl.dimensions.height + gap;
+            sIdx++;
+          }
+
+          yOffset += rowH;
+        } else {
+          const rowH = sleevePool[sIdx].dimensions.height + gap;
+
+          if (yOffset + rowH > canvasHeight) {
+            pageIdx++;
+            pages.push([]);
+            yOffset = 0;
+          }
+
+          let xCursor = 0;
+          while (sIdx < sleevePool.length) {
+            const sl = sleevePool[sIdx];
+            if (xCursor + sl.dimensions.width > canvasWidth) break;
+            pages[pageIdx].push({ ...sl, position: { x: xCursor, y: yOffset } });
+            totalUsedArea += sl.dimensions.width * sl.dimensions.height;
+            xCursor += sl.dimensions.width + gap;
+            sIdx++;
+          }
+
+          yOffset += rowH;
+        }
+      }
+    } else {
 
     while (shortIdx < shortsDesc.length || jerseyIdx < jerseysAsc.length) {
       const progressBefore = shortIdx + jerseyIdx;
@@ -516,14 +594,17 @@ export function optimizeLayoutAdvanced(
       let yLeft  = yOffset;
       let yRight = yOffset;
 
-      // Fase 1: columna izquierda con shorts
-      while (shortIdx < shortsDesc.length) {
-        const sh = shortsDesc[shortIdx];
-        if (yLeft + sh.dimensions.height + gap > canvasHeight) break;
-        pages[pageIdx].push({ ...sh, position: { x: 0, y: yLeft } });
-        totalUsedArea += sh.dimensions.width * sh.dimensions.height;
-        yLeft += sh.dimensions.height + gap;
-        shortIdx++;
+      // Fase 1: columna izquierda con shorts.
+      // Se omite cuando no hay jerseys: en ese caso Fase 4 distribuye en ambas columnas.
+      if (jerseysAsc.length > 0) {
+        while (shortIdx < shortsDesc.length) {
+          const sh = shortsDesc[shortIdx];
+          if (yLeft + sh.dimensions.height + gap > canvasHeight) break;
+          pages[pageIdx].push({ ...sh, position: { x: 0, y: yLeft } });
+          totalUsedArea += sh.dimensions.width * sh.dimensions.height;
+          yLeft += sh.dimensions.height + gap;
+          shortIdx++;
+        }
       }
 
       // Fase 2: columna derecha con jerseys.
@@ -563,6 +644,29 @@ export function optimizeLayoutAdvanced(
         }
       }
 
+      // Fase 4: jerseys agotados → shorts restantes usan ambas columnas (greedy)
+      // Simétrico a Fase 3. El check horizontal evita desborde para shorts muy anchos (XL hombre).
+      if (jerseyIdx >= jerseysAsc.length) {
+        while (shortIdx < shortsDesc.length) {
+          const sh = shortsDesc[shortIdx];
+          const leftFits  = yLeft  + sh.dimensions.height + gap <= canvasHeight;
+          const rightFits = yRight + sh.dimensions.height + gap <= canvasHeight
+                            && jerseyColX + sh.dimensions.width <= canvasWidth;
+
+          if (!leftFits && !rightFits) break;
+
+          if (leftFits && (!rightFits || yLeft <= yRight)) {
+            pages[pageIdx].push({ ...sh, position: { x: 0, y: yLeft } });
+            yLeft += sh.dimensions.height + gap;
+          } else {
+            pages[pageIdx].push({ ...sh, position: { x: jerseyColX, y: yRight } });
+            yRight += sh.dimensions.height + gap;
+          }
+          totalUsedArea += sh.dimensions.width * sh.dimensions.height;
+          shortIdx++;
+        }
+      }
+
       // Sin progreso: si yOffset > 0, aún puede haber espacio en la siguiente página.
       // Solo se rompe si ya estamos en y=0 y aun así no cabe → elemento más grande que el canvas.
       if (shortIdx + jerseyIdx === progressBefore) {
@@ -581,6 +685,67 @@ export function optimizeLayoutAdvanced(
         yOffset = 0;
       }
     }
+    } // end else (shortsDesc.length > 0)
+
+    // ── PASO 2.5: Mangas en filas de hasta 3 ────────────────────────────────
+    // Corre después de que shorts y jerseys están colocados.
+    // La primera manga de cada fila es la más alta → determina rowH correctamente.
+    // Solo corre cuando hay shorts: sin shorts, las mangas ya se colocaron en el bloque anterior.
+    if (sleevePool.length > 0 && shortsDesc.length > 0) {
+      let sIdx = 0;
+      while (sIdx < sleevePool.length) {
+        const rowH = sleevePool[sIdx].dimensions.height + gap;
+
+        if (yOffset + rowH > canvasHeight) {
+          pageIdx++;
+          pages.push([]);
+          yOffset = 0;
+        }
+
+        let xCursor = 0;
+        while (sIdx < sleevePool.length) {
+          const sl = sleevePool[sIdx];
+          if (xCursor + sl.dimensions.width > canvasWidth) break;
+          pages[pageIdx].push({ ...sl, position: { x: xCursor, y: yOffset } });
+          totalUsedArea += sl.dimensions.width * sl.dimensions.height;
+          xCursor += sl.dimensions.width + gap;
+          sIdx++;
+        }
+
+        yOffset += rowH;
+      }
+    }
+
+    // ── PASO 3: Cuellos en filas de 2 ───────────────────────────────────────
+    // El cuello (650×60px) es tan plano que distorsiona la columna derecha si
+    // se mezcla con jerseys. Se empaca de a 2 por fila usando ambas columnas.
+    if (collars.length > 0) {
+      const colW  = collars[0].dimensions.width;
+      const colH  = collars[0].dimensions.height;
+      const colX2 = colW + gap;
+      const rowH  = colH + gap;
+
+      let collarIdx = 0;
+      while (collarIdx < collars.length) {
+        if (yOffset + rowH > canvasHeight) {
+          pageIdx++;
+          pages.push([]);
+          yOffset = 0;
+        }
+
+        pages[pageIdx].push({ ...collars[collarIdx], position: { x: 0, y: yOffset } });
+        totalUsedArea += colW * colH;
+        collarIdx++;
+
+        if (collarIdx < collars.length && colX2 + colW <= canvasWidth) {
+          pages[pageIdx].push({ ...collars[collarIdx], position: { x: colX2, y: yOffset } });
+          totalUsedArea += colW * colH;
+          collarIdx++;
+        }
+
+        yOffset += rowH;
+      }
+    }
   }
 
   // ── Post-proceso: compaction por silueta SVG real ────────────────────────
@@ -594,20 +759,6 @@ export function optimizeLayoutAdvanced(
   const totalCanvasArea = canvasArea * pagesUsed;
   const efficiency      = (totalUsedArea / totalCanvasArea) * 100;
   const wastedSpace     = totalCanvasArea - totalUsedArea;
-
-  // ── DEBUG TEMPORAL ───────────────────────────────────────────────────────
-  console.log('[Layout] resultado → páginas:', pagesUsed, '| elementos por página:', pages.map(p => p.length));
-  pages.forEach((p, i) => {
-    const shorts = p.filter(el => el.type === 'uniform' && (el as any).part === 'shorts');
-    const jerseys = p.filter(el => el.type === 'uniform' && (el as any).part === 'jersey');
-    console.log(`  Página ${i + 1}: ${shorts.length} shorts, ${jerseys.length} jerseys`);
-    if (p.length > 0) {
-      const sizes = [...new Set(p.map(el => (el as any).size))];
-      console.log(`    Tallas: ${sizes.join(', ')}`);
-      const dims = p.map(el => `${el.dimensions.width.toFixed(0)}×${el.dimensions.height.toFixed(0)}`);
-      console.log(`    Dims (primeros 4): ${dims.slice(0,4).join(', ')}`);
-    }
-  });
 
   return { pages, efficiency, wastedSpace, pagesUsed, totalElements: elements.length };
 }

@@ -12,7 +12,6 @@ export const ExportLoadingOverlay: React.FC<ExportLoadingOverlayProps> = ({
   currentPage,
   totalPages,
 }) => {
-  console.log('ExportLoadingOverlay render:', { isVisible, currentPage, totalPages });
 
   if (!isVisible) return null;
 
