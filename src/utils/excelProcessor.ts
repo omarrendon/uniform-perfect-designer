@@ -84,12 +84,6 @@ export const processExcelFile = async (
       return;
     }
 
-    // Debug: Ver todas las columnas leídas del Excel
-    if (rows.length > 0) {
-      console.log("🔍 COLUMNAS ENCONTRADAS EN EL EXCEL:", Object.keys(rows[0]));
-      console.log("📄 PRIMERA FILA COMPLETA:", rows[0]);
-    }
-
     // Obtener funciones del store
     const {
       canvasConfig,
@@ -430,30 +424,30 @@ export const processExcelFile = async (
       stagedUniforms.push(newJerseyEspalda);
 
       if (row.numero) {
-        let offsetX: number, offsetY: number, fontSize: number;
+        let offsetY: number, fontSize: number;
 
         if (designConfig?.jerseyBackNumber) {
           const cfg = designConfig.jerseyBackNumber;
-          offsetX = cfg.relativeX * jerseyDimensions.width;
           offsetY = cfg.relativeY * jerseyDimensions.height;
           fontSize = cfg.fontSize * jerseyScale;
         } else if (textPosConfig) {
-          offsetX = textPosConfig.jerseyBackNumber.offsetX;
           offsetY = textPosConfig.jerseyBackNumber.offsetY;
           fontSize = textPosConfig.jerseyBackNumber.fontSize;
         } else {
-          offsetX = jerseyDimensions.width / 2 - 130;
           offsetY = jerseyDimensions.height * 0.35;
           fontSize = 40;
         }
 
+        // El número siempre se centra horizontalmente usando el ancho completo del jersey
+        // (dimensions.width > 450 → TextElement.tsx activa textAlign='center' en Konva).
+        // Así "1" y "10" quedan centrados igual, sin depender del ancho de los glifos.
         const numeroEspaldaText: TextElement = {
           id: generateId("text"),
           type: "text",
           part: "jersey",
           size: tallaMostrar as any,
-          position: { x: offsetX, y: offsetY },
-          dimensions: { width: 60, height: 40 },
+          position: { x: 0, y: offsetY },
+          dimensions: { width: jerseyDimensions.width, height: Math.ceil(fontSize * 1.2) },
           rotation: 0,
           zIndex: elementCount + 1000,
           locked: false,
@@ -463,7 +457,7 @@ export const processExcelFile = async (
           fontSize,
           fontColor: designConfig?.jerseyBackNumber?.fontColor ?? '#000000',
           fontColorCmyk: designConfig?.jerseyBackNumber?.fontColorCmyk,
-          textAlign: designConfig?.jerseyBackNumber?.textAlign ?? "center",
+          textAlign: 'center',
           fontWeight: designConfig?.jerseyBackNumber?.fontWeight ?? "bold",
           opacity: 1,
           side: "back",
@@ -475,12 +469,6 @@ export const processExcelFile = async (
         let offsetX: number, offsetY: number, fontSize: number;
         const nombreTexto = String(row.nombre).toUpperCase();
 
-        // X siempre en 0: el contenedor abarca el ancho completo del jersey y
-        // textAlign="center" centra el nombre dentro del molde, sin importar la talla.
-        offsetX = 0;
-
-        // Constantes compartidas: factor 0.70 cubre letras bold uppercase anchas (R, M, W…)
-        // targetWidth al 70% del ancho garantiza que 7+ chars queden bajo el cap de altura.
         const _charW = 0.70;
         const _targetW = jerseyDimensions.width * 0.70;
         const _maxFs = jerseyDimensions.height * 0.11;
@@ -488,17 +476,21 @@ export const processExcelFile = async (
 
         if (designConfig?.jerseyBackName) {
           const cfg = designConfig.jerseyBackName;
+          offsetX = cfg.relativeX * jerseyDimensions.width;
           offsetY = cfg.relativeY * jerseyDimensions.height;
-          // Tamaño configurado en el modal, escalado a la talla actual
           const configFs = cfg.fontSize * jerseyScale;
-          // Cap fit-to-width: para nombres largos, nunca superar el ancho disponible
           const fitFs = _targetW / (nombreTexto.length * _charW);
           fontSize = Math.max(_minFs, Math.min(_maxFs, configFs, fitFs));
         } else {
+          offsetX = textPosConfig?.jerseyBackName.offsetX ?? 0;
           offsetY = textPosConfig?.jerseyBackName.offsetY ?? jerseyDimensions.height * 0.17;
-          // Fit-to-width puro: nombres ≤6 quedan en el cap de altura; 7+ se reducen automáticamente
           fontSize = Math.max(_minFs, Math.min(_maxFs, _targetW / (nombreTexto.length * _charW)));
         }
+
+        // dimensions.width se mantiene < 450 para que Konva no active el centrado automático
+        // (TextElement.tsx pasa width al nodo solo cuando > 450). El texto se posiciona
+        // mediante offsetX (relativeX del modal), no mediante textAlign-centering.
+        const nameWidth = Math.min(400, Math.ceil(fontSize * nombreTexto.length * _charW));
 
         const nombreEspaldaText: TextElement = {
           id: generateId("text"),
@@ -506,7 +498,7 @@ export const processExcelFile = async (
           part: "jersey",
           size: tallaMostrar as any,
           position: { x: offsetX, y: offsetY },
-          dimensions: { width: jerseyDimensions.width, height: Math.ceil(fontSize * 1.3) },
+          dimensions: { width: nameWidth, height: Math.ceil(fontSize * 1.3) },
           rotation: 0,
           zIndex: elementCount + 1000,
           locked: false,

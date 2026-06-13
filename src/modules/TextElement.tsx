@@ -60,11 +60,6 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
     updateElement(element.id, {
       position: { x: newX, y: newY },
     });
-
-    // Log para debugging de posición
-    const partName = element.part === 'jersey' ? 'jersey' : element.part === 'shorts' ? 'shorts' : 'desconocido';
-    const sideInfo = element.side ? ` (${element.side})` : '';
-    console.log(`📍 [TEXTO MOVIDO] "${element.content}" | Parte: ${partName}${sideInfo} | Pos absoluta: (x: ${Math.round(newX)}, y: ${Math.round(newY)}) | Fuente: ${element.fontSize}px | Talla: ${element.size}`);
   };
 
   const handleTransformEnd = () => {
@@ -72,7 +67,6 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
     if (!node) return;
 
     const scaleX = node.scaleX();
-    const oldFontSize = element.fontSize;
     const newFontSize = Math.max(10, element.fontSize * scaleX);
     const textWidth = node.width();
     const textHeight = node.height();
@@ -94,10 +88,6 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
       position: constrainedPosition,
       rotation: node.rotation(),
     });
-
-    // Log para debugging de tamaño por transformación
-    const partName = element.part === 'jersey' ? 'jersey' : element.part === 'shorts' ? 'shorts' : 'desconocido';
-    console.log(`📏 [TAMAÑO CAMBIADO - Transform] "${element.content}" | Parte: ${partName} | Tamaño: ${Math.round(oldFontSize)}px → ${Math.round(newFontSize)}px | Pos: (x: ${Math.round(constrainedPosition.x)}, y: ${Math.round(constrainedPosition.y)})`);
   };
 
   if (element.locked) {

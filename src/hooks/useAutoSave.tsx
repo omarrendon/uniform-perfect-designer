@@ -21,7 +21,6 @@ export const useAutoSave = (intervalMs: number = 30000) => {
           "uniform-designer-autosave",
           JSON.stringify(autoSaveData)
         );
-        console.log("Auto-guardado realizado");
       } catch (error) {
         console.error("Error en auto-guardado:", error);
       }

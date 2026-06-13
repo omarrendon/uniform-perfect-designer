@@ -371,16 +371,10 @@ export const Header: React.FC = () => {
       sortStrategy: "area",
       heuristic: "BSSF",
     });
-
-    console.log('🔄 Configuración restablecida a valores por defecto');
   };
 
   const applyOptimization = async () => {
     // 1. Actualizar dimensiones del canvas si fueron modificadas
-    console.log('🔧 Aplicando nuevas dimensiones del canvas:', {
-      anterior: { width: canvasConfig.width, height: canvasConfig.height },
-      nueva: { width: customCanvasWidth, height: customCanvasHeight }
-    });
 
     // Aplicar las nuevas dimensiones al store
     const { setCanvasConfig } = useDesignerStore.getState();
@@ -394,7 +388,6 @@ export const Header: React.FC = () => {
 
     // Obtener el canvasConfig actualizado del store
     const updatedCanvasConfig = useDesignerStore.getState().canvasConfig;
-    console.log('✅ Verificación después de setCanvasConfig:', updatedCanvasConfig);
 
     // 2. Ejecutar optimización con las nuevas dimensiones
     const result = optimizeLayoutAdvanced(
@@ -483,7 +476,6 @@ export const Header: React.FC = () => {
     const filtered = ALL_FONTS.filter(font =>
       font.toLowerCase().includes(searchLower)
     );
-    console.log(`🔍 Búsqueda: "${fontSearchTerm}" → ${filtered.length} fuentes encontradas`);
     return filtered;
   }, [fontSearchTerm]);
 

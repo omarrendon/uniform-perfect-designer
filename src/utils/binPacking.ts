@@ -407,9 +407,6 @@ export function optimizeLayoutAdvanced(
   const canvasArea   = canvasWidth * canvasHeight;
   const gap          = finalOptions.elementGap;
 
-  // ── DEBUG TEMPORAL ───────────────────────────────────────────────────────
-  console.log('[Layout] elements:', elements.length, '| canvasH:', canvasHeight, 'px | canvasW:', canvasWidth, 'px');
-
   // ── Clasificadores ───────────────────────────────────────────────────────
   const XL_SIZES = new Set(['XL', 'XG', '2XL', '2XG', '3XL', '3XG']);
   const isXL    = (el: CanvasElement) => XL_SIZES.has((el as UniformTemplate).size as string);
@@ -438,10 +435,6 @@ export function optimizeLayoutAdvanced(
     xlShorts_0.length,
     xlShorts_180.length,
   );
-
-  // ── DEBUG TEMPORAL PASO 1 ────────────────────────────────────────────────
-  console.log('[PASO 1] xlJerseys:', xlJerseys.length, '| xlShorts_0:', xlShorts_0.length, '| xlShorts_180:', xlShorts_180.length, '| nBlocks:', nBlocks);
-  console.log('[PASO 1] nonXlPool:', nonXlPool.length, '| canvasH:', canvasHeight);
 
   for (let i = 0; i < nBlocks; i++) {
     const jFront  = xlJerseys[i * 2];
@@ -654,13 +647,11 @@ export function optimizeLayoutAdvanced(
       // Fase 4: jerseys agotados → shorts restantes usan ambas columnas (greedy)
       // Simétrico a Fase 3. El check horizontal evita desborde para shorts muy anchos (XL hombre).
       if (jerseyIdx >= jerseysAsc.length) {
-        console.log('[Fase 4] activada | shortIdx:', shortIdx, '/ shortsDesc.length:', shortsDesc.length, '| jerseyColX:', jerseyColX, '| canvasW:', canvasWidth);
         while (shortIdx < shortsDesc.length) {
           const sh = shortsDesc[shortIdx];
           const leftFits  = yLeft  + sh.dimensions.height + gap <= canvasHeight;
           const rightFits = yRight + sh.dimensions.height + gap <= canvasHeight
                             && jerseyColX + sh.dimensions.width <= canvasWidth;
-          console.log('[Fase 4] sh.w:', sh.dimensions.width.toFixed(0), '| leftFits:', leftFits, '| rightFits:', rightFits, '| jerseyColX+w:', (jerseyColX + sh.dimensions.width).toFixed(0));
 
           if (!leftFits && !rightFits) break;
 
@@ -768,20 +759,6 @@ export function optimizeLayoutAdvanced(
   const totalCanvasArea = canvasArea * pagesUsed;
   const efficiency      = (totalUsedArea / totalCanvasArea) * 100;
   const wastedSpace     = totalCanvasArea - totalUsedArea;
-
-  // ── DEBUG TEMPORAL ───────────────────────────────────────────────────────
-  console.log('[Layout] resultado → páginas:', pagesUsed, '| elementos por página:', pages.map(p => p.length));
-  pages.forEach((p, i) => {
-    const shorts = p.filter(el => el.type === 'uniform' && (el as any).part === 'shorts');
-    const jerseys = p.filter(el => el.type === 'uniform' && (el as any).part === 'jersey');
-    console.log(`  Página ${i + 1}: ${shorts.length} shorts, ${jerseys.length} jerseys`);
-    if (p.length > 0) {
-      const sizes = [...new Set(p.map(el => (el as any).size))];
-      console.log(`    Tallas: ${sizes.join(', ')}`);
-      const dims = p.map(el => `${el.dimensions.width.toFixed(0)}×${el.dimensions.height.toFixed(0)}`);
-      console.log(`    Dims (primeros 4): ${dims.slice(0,4).join(', ')}`);
-    }
-  });
 
   return { pages, efficiency, wastedSpace, pagesUsed, totalElements: elements.length };
 }

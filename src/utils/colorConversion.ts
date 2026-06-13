@@ -139,15 +139,6 @@ export const convertImageRGBtoCMYK = async (
         cmykData[pixelIndex + 3] = Math.round((k / 100) * 255);
       }
 
-      console.log(
-        `✓ Imagen convertida a CMYK con perfil ${options.profile}: ${canvas.width}x${canvas.height} píxeles`
-      );
-      console.log(
-        `  TAC: min=${minTAC.toFixed(1)}%, max=${maxTAC.toFixed(
-          1
-        )}%, avg=${(totalTAC / pixelCount).toFixed(1)}%`
-      );
-
       resolve({
         width: canvas.width,
         height: canvas.height,

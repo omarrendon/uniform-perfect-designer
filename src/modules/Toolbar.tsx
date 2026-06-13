@@ -346,7 +346,7 @@ export const Toolbar: React.FC = () => {
         };
         stagedUniforms.push(newJerseyEspalda);
 
-        // Nombre en espalda: fit-to-width proporcional, centrado sobre ancho del jersey
+        // Nombre en espalda
         const nombreTextoToolbar = (row.nombre || '').toString().toUpperCase();
         const targetWidthToolbar = jerseyDimensions.width * 0.70;
         let nombreFontSize = targetWidthToolbar / Math.max(1, nombreTextoToolbar.length * 0.70);
@@ -354,8 +354,9 @@ export const Toolbar: React.FC = () => {
           jerseyDimensions.width * 0.04,
           Math.min(jerseyDimensions.height * 0.11, nombreFontSize)
         );
+        const nombreWidthToolbar = Math.min(400, Math.ceil(nombreFontSize * nombreTextoToolbar.length * 0.70));
         const textoDimensions = {
-          width: jerseyDimensions.width,
+          width: nombreWidthToolbar,
           height: Math.ceil(nombreFontSize * 1.3),
         };
         const newTextoNombre: TextElement = {
@@ -364,7 +365,7 @@ export const Toolbar: React.FC = () => {
           part: "jersey",
           size: tallaMostrar as any,
           position: {
-            x: 0,
+            x: jerseyDimensions.width * 0.15,
             y: jerseyDimensions.height * 0.17,
           },
           dimensions: textoDimensions,
@@ -509,9 +510,6 @@ export const Toolbar: React.FC = () => {
       }
 
       // --- POST-PROCESO: MaxRects ---
-      console.log('[Toolbar] stagedUniforms:', stagedUniforms.length, '| canvasConfig:', canvasConfig);
-      const generosMuestra = stagedUniforms.slice(0, 4).map(u => `${u.part} ${u.size} ${u.dimensions.width.toFixed(0)}×${u.dimensions.height.toFixed(0)}`);
-      console.log('[Toolbar] primeros elementos:', generosMuestra);
       const result = optimizeLayoutAdvanced(stagedUniforms, canvasConfig, {
         elementGap: 5,
         canvasMargin: 0,
@@ -1070,12 +1068,7 @@ const EditTab: React.FC<{
                     value={element.fontSize}
                     onChange={e => {
                       const newSize = Number(e.target.value);
-                      const oldSize = element.fontSize;
                       onUpdate(element.id, { fontSize: newSize });
-
-                      // Log para debugging de tamaño desde controles
-                      const partName = element.part === 'jersey' ? 'jersey' : element.part === 'shorts' ? 'shorts' : 'desconocido';
-                      console.log(`📏 [TAMAÑO CAMBIADO - Input] "${element.content}" | Parte: ${partName} | Tamaño: ${oldSize}px → ${newSize}px | Pos: (x: ${Math.round(element.position.x)}, y: ${Math.round(element.position.y)})`);
                     }}
                     min={10}
                     max={200}

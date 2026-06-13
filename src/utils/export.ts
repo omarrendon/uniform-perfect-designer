@@ -4,7 +4,7 @@ import type { ExportOptions, UniformTemplate, TextElement } from '../types';
 import { useDesignerStore } from '../store/desingerStore';
 import { convertImageRGBtoCMYK, cmykToHex, type CMYKConversionOptions } from './colorConversion';
 import { addPrintMarks, expandPageForMarks, generatePrintFileName } from './printMarks';
-import { runPreflight, generatePreflightReport } from './preflight';
+import { runPreflight } from './preflight';
 import { getGlobalCMYKConfig } from './cmykConfig';
 import { CUSTOM_FONTS, loadUserFontFromDataUrl } from './fontLoader';
 
@@ -270,14 +270,11 @@ const swapToOriginalImages = async (element: HTMLElement): Promise<() => void> =
   // Esperar a que todas las imágenes originales carguen
   await Promise.all(imagesToLoad);
 
-  console.log(`✓ Reemplazadas ${originalSrcs.length} imágenes por versiones originales`);
-
   // Retornar función de restauración
   return () => {
     originalSrcs.forEach(({ img, src }) => {
       img.src = src;
     });
-    console.log(`✓ Restauradas ${originalSrcs.length} imágenes comprimidas`);
   };
 };
 
@@ -323,15 +320,11 @@ const embedImageWithCMYK = async (
   profile: string;
 }> => {
   // Convertir imagen a CMYK con perfil ICC profesional
-  console.log(`🎨 Convirtiendo imagen de RGB a CMYK con perfil ${conversionOptions.profile}...`);
   const cmykData = await convertImageRGBtoCMYK(imageDataUrl, conversionOptions);
-  console.log(`✓ Conversión CMYK completada: ${cmykData.width}x${cmykData.height}`);
-  console.log(`  TAC: min=${cmykData.tac.min.toFixed(1)}%, max=${cmykData.tac.max.toFixed(1)}%, avg=${cmykData.tac.average.toFixed(1)}%`);
 
   // Convertir a PNG si es necesario (pdf-lib requiere PNG o JPEG específicamente)
   let pngDataUrl = imageDataUrl;
   if (!imageDataUrl.startsWith('data:image/png')) {
-    console.log('  🔄 Convirtiendo imagen a PNG para embedear...');
     pngDataUrl = await convertToPng(imageDataUrl);
   }
 
@@ -432,8 +425,6 @@ const swapCanvasImagesToOriginal = async (): Promise<() => void> => {
     }
   });
 
-  console.log(`✓ ${originalImageUrls.size} elementos actualizados con imágenes originales`);
-
   // Retornar función para restaurar las URLs comprimidas
   return () => {
     originalImageUrls.forEach((compressedUrl, elementId) => {
@@ -441,7 +432,6 @@ const swapCanvasImagesToOriginal = async (): Promise<() => void> => {
         imageUrl: compressedUrl,
       });
     });
-    console.log(`✓ ${originalImageUrls.size} elementos restaurados con imágenes comprimidas`);
   };
 };
 
@@ -464,7 +454,6 @@ export const exportAsPNG = async (
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Reemplazar imágenes comprimidas por originales en el canvas de Konva
-    console.log('📸 Preparando imágenes originales para exportación PNG...');
     restoreImages = await swapCanvasImagesToOriginal();
 
     // Esperar a que Konva re-renderice con las nuevas imágenes
@@ -518,13 +507,6 @@ const ensureCustomFontsLoaded = async (elements: any[]): Promise<void> => {
 
   if (fontsToLoad.size === 0) return;
 
-  console.log(`📝 Verificando ${fontsToLoad.size} fuentes personalizadas...`);
-  console.log('📋 Fuentes en document.fonts:');
-
-  // Log de todas las fuentes cargadas para debugging
-  Array.from(document.fonts).forEach((font: any) => {
-    console.log(`   - "${font.family}" (peso: ${font.weight}, estilo: ${font.style}, estado: ${font.status})`);
-  });
 
   // Esperar a que todas las fuentes estén listas
   await document.fonts.ready;
@@ -540,7 +522,6 @@ const ensureCustomFontsLoaded = async (elements: any[]): Promise<void> => {
         );
         if (!alreadyLoaded) {
           await loadUserFontFromDataUrl(userFont.name, userFont.dataUrl, userFont.format);
-          console.log(`  ✓ Fuente de usuario "${fontName}" rehidratada para exportación`);
         }
         return;
       }
@@ -552,7 +533,6 @@ const ensureCustomFontsLoaded = async (elements: any[]): Promise<void> => {
 
       if (fontFace) {
         await fontFace.load();
-        console.log(`  ✓ Fuente "${fontName}" lista (familia real: "${(fontFace as any).family}")`);
       } else {
         console.warn(`  ⚠️ Fuente "${fontName}" NO encontrada en document.fonts`);
         console.warn(`  📋 Fuentes disponibles:`, Array.from(document.fonts).map((f: any) => f.family));
@@ -563,7 +543,6 @@ const ensureCustomFontsLoaded = async (elements: any[]): Promise<void> => {
   });
 
   await Promise.all(fontPromises);
-  console.log('✓ Todas las fuentes personalizadas procesadas');
 };
 
 /**
@@ -574,15 +553,11 @@ export const exportAsPNGDirect = async (
   options: Partial<ExportOptions> = {}
 ): Promise<void> => {
   try {
-    console.log('📸 Exportando PNG con composición directa (máxima calidad)...');
 
-    // Obtener elementos y configuración del store
     const store = useDesignerStore.getState();
-    const elements = store.elements; // Elementos de la página actual
-    const canvasConfig = store.canvasConfig;
+    const elements = store.elements;
     const uniformSizesConfig = store.uniformSizesConfig;
 
-    // Asegurar que las fuentes personalizadas estén cargadas
     await ensureCustomFontsLoaded(elements);
 
     // Configuración de escala para alta resolución
@@ -590,7 +565,6 @@ export const exportAsPNGDirect = async (
     const SCALE_FACTOR = 5; // 5x para alta calidad sin exceder límites del navegador
 
     // PASO 1: Calcular el bounding box de todos los elementos visibles
-    console.log('📏 Calculando bounding box de elementos...');
 
     let minX = Infinity;
     let minY = Infinity;
@@ -627,9 +601,6 @@ export const exportAsPNGDirect = async (
     const boundingWidth = maxX - minX;
     const boundingHeight = maxY - minY;
 
-    console.log(`  ✓ Bounding box: ${minX.toFixed(1)}, ${minY.toFixed(1)} → ${maxX.toFixed(1)}, ${maxY.toFixed(1)}`);
-    console.log(`  ✓ Dimensiones usadas: ${boundingWidth.toFixed(1)} × ${boundingHeight.toFixed(1)} px`);
-
     // Calcular dimensiones en píxeles con alta resolución (solo el área usada)
     const canvasWidthPx = Math.floor(boundingWidth * SCALE_FACTOR);
     const canvasHeightPx = Math.floor(boundingHeight * SCALE_FACTOR);
@@ -642,12 +613,6 @@ export const exportAsPNGDirect = async (
         `Máximo permitido: ${MAX_CANVAS_SIZE}px. Reduce las dimensiones del canvas.`
       );
     }
-
-    const canvasWidthCm = boundingWidth / canvasConfig.pixelsPerCm;
-    const canvasHeightCm = boundingHeight / canvasConfig.pixelsPerCm;
-
-    console.log(`📐 Dimensiones PNG: ${canvasWidthCm.toFixed(2)} × ${canvasHeightCm.toFixed(2)} cm`);
-    console.log(`📐 Resolución PNG: ${canvasWidthPx} × ${canvasHeightPx} px (escala ${SCALE_FACTOR}x)`);
 
     // Crear canvas HTML5 nativo
     const canvas = document.createElement('canvas');
@@ -662,8 +627,6 @@ export const exportAsPNGDirect = async (
       throw new Error('No se pudo crear contexto 2D del canvas');
     }
 
-    console.log('✓ Canvas creado exitosamente');
-
     // Configurar canvas para máxima calidad
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
@@ -676,8 +639,6 @@ export const exportAsPNGDirect = async (
 
     // Ordenar elementos por zIndex
     const sortedElements = [...elements].sort((a, b) => a.zIndex - b.zIndex);
-
-    console.log(`📦 Procesando ${sortedElements.length} elementos...`);
 
     // Procesar cada elemento
     for (const element of sortedElements) {
@@ -721,7 +682,6 @@ export const exportAsPNGDirect = async (
         }
 
         if (originalImageUrl) {
-          console.log(`  🖼️  Cargando imagen: ${uniform.id}`);
 
           // Cargar imagen original
           const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -732,7 +692,6 @@ export const exportAsPNGDirect = async (
             }
 
             image.onload = () => {
-              console.log(`    ✓ Imagen cargada: ${image.width}x${image.height}px`);
               resolve(image);
             };
             image.onerror = (e) => {
@@ -776,8 +735,6 @@ export const exportAsPNGDirect = async (
 
           // Restaurar estado del contexto
           ctx.restore();
-
-          console.log(`  ✓ Imagen dibujada: ${uniform.id}`);
 
           // Agregar texto de talla SOLO si proviene de Excel
           if (uniform.source === 'excel') {
@@ -824,8 +781,6 @@ export const exportAsPNGDirect = async (
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
 
-        console.log(`  📝 Dibujando texto: "${textEl.content}" | Fuente: ${textEl.fontFamily || 'Arial'}`);
-
         // Escalar posición y tamaño (ajustadas al bounding box) - SIN offsets por ahora
         // Usar las mismas coordenadas que en el canvas para ver si coinciden
         const x = (textEl.position.x - minX) * SCALE_FACTOR;
@@ -854,8 +809,6 @@ export const exportAsPNGDirect = async (
           : (textEl.fontColor || '#000000');
         ctx.globalAlpha = textEl.opacity || 1;
 
-        console.log(`    Font aplicada: ${ctx.font} | Es custom: ${isCustomFont}`);
-
         // IMPORTANTE: En Konva sin width, (x,y) es SIEMPRE la esquina superior izquierda
         // El textAlign NO tiene efecto sin width especificado
         ctx.textAlign = 'left';
@@ -872,8 +825,6 @@ export const exportAsPNGDirect = async (
 
         // Restaurar estado
         ctx.restore();
-
-        console.log(`  ✓ Texto dibujado`);
       }
     }
 
@@ -891,10 +842,7 @@ export const exportAsPNGDirect = async (
       throw new Error('El canvas está vacío. No se pudieron cargar las imágenes.');
     }
 
-    console.log('✓ Canvas tiene contenido, convirtiendo a PNG...');
-
     // Convertir canvas a PNG de alta calidad
-    console.log('💾 Convirtiendo a PNG...');
     const dataUrl = canvas.toDataURL('image/png', 1.0);
 
     // Verificar que el dataURL no esté vacío
@@ -902,17 +850,11 @@ export const exportAsPNGDirect = async (
       throw new Error('Error al convertir canvas a PNG: dataURL vacío');
     }
 
-    console.log(`✓ PNG generado: ${(dataUrl.length / 1024 / 1024).toFixed(2)} MB`);
-
     // Descargar la imagen
     const link = document.createElement('a');
     link.download = `uniform-design-HQ-${Date.now()}.png`;
     link.href = dataUrl;
     link.click();
-
-    console.log('✓ PNG de alta calidad exportado exitosamente');
-    console.log(`  Dimensiones: ${canvasWidthPx} × ${canvasHeightPx} px`);
-    console.log(`  🎉 CALIDAD COMPLETA - Imágenes originales sin degradación`);
   } catch (error) {
     console.error('Error al exportar PNG directo:', error);
     throw error;
@@ -942,7 +884,6 @@ export const exportAsPDF = async (
     const cmykConfig = getGlobalCMYKConfig();
 
     // Reemplazar imágenes comprimidas por originales
-    console.log('📸 Preparando imágenes originales para exportación PDF CMYK profesional...');
     restoreImages = await swapToOriginalImages(element);
 
     // Exportar con imágenes originales
@@ -994,13 +935,10 @@ export const exportAsPDF = async (
     );
 
     // Ejecutar validación Preflight
-    console.log('🔍 Ejecutando validación Preflight...');
     const preflightResult = await runPreflight(dataUrl, tacStats, {
       ...cmykConfig.preflight,
       profile: cmykConfig.profile,
     });
-
-    console.log(generatePreflightReport(preflightResult));
 
     if (!preflightResult.passed) {
       console.warn('⚠️ El documento tiene errores de preflight, pero se exportará de todos modos.');
@@ -1008,8 +946,7 @@ export const exportAsPDF = async (
 
     // Expandir página para marcas de impresión si está habilitado
     if (cmykConfig.printMarks.addCropMarks || cmykConfig.printMarks.addRegistrationMarks) {
-      const expandedSize = expandPageForMarks(page, cmykConfig.printMarks);
-      console.log(`📐 Página expandida para marcas: ${expandedSize.width}x${expandedSize.height} pts`);
+      expandPageForMarks(page, cmykConfig.printMarks);
     }
 
     // Dibujar la imagen ocupando toda la página (ajustado por expansión)
@@ -1022,7 +959,6 @@ export const exportAsPDF = async (
 
     // Agregar marcas de impresión
     if (cmykConfig.printMarks) {
-      console.log('🖨️ Agregando marcas de impresión...');
       await addPrintMarks(pdfDoc, page, {
         ...cmykConfig.printMarks,
         jobInfo: {
@@ -1035,7 +971,6 @@ export const exportAsPDF = async (
     }
 
     // Serializar PDF
-    console.log('💾 Guardando PDF...');
     const pdfBytes = await pdfDoc.save();
 
     // Generar nombre de archivo profesional
@@ -1053,9 +988,6 @@ export const exportAsPDF = async (
     link.href = url;
     link.click();
     URL.revokeObjectURL(url);
-
-    console.log(`✓ PDF CMYK profesional exportado: ${fileName}`);
-    console.log(`  Perfil: ${profile} | TAC máx: ${tacStats.max.toFixed(1)}% | Preflight: ${preflightResult.passed ? '✓' : '⚠️'}`);
   } catch (error) {
     console.error('Error al exportar PDF:', error);
     throw error;
@@ -1091,8 +1023,6 @@ export const exportMultiPagePDF = async (
     // Esperar a que React re-renderice
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    console.log(`📸 Procesando ${pages.length} páginas con conversión CMYK...`);
-
     // Crear documento PDF
     const pdfDoc = await PDFDocument.create();
 
@@ -1117,7 +1047,6 @@ export const exportMultiPagePDF = async (
 
       try {
         // Reemplazar imágenes comprimidas por originales para esta página
-        console.log(`   Página ${i + 1}/${pages.length}: Preparando imágenes originales...`);
         restoreImages = await swapToOriginalImages(pageElement);
 
         // Convertir la página a imagen con imágenes originales
@@ -1132,8 +1061,6 @@ export const exportMultiPagePDF = async (
           restoreImages();
           restoreImages = null;
         }
-
-        console.log(`   Página ${i + 1}/${pages.length}: Convirtiendo a CMYK...`);
 
         // Obtener configuración CMYK
         const cmykConfig = getGlobalCMYKConfig();
@@ -1157,8 +1084,6 @@ export const exportMultiPagePDF = async (
           width: widthInPoints,
           height: heightInPoints,
         });
-
-        console.log(`   ✓ Página ${i + 1}/${pages.length} procesada`);
       } finally {
         // Asegurar que se restauren las imágenes incluso si hay error
         if (restoreImages) {
@@ -1168,7 +1093,6 @@ export const exportMultiPagePDF = async (
     }
 
     // Serializar PDF
-    console.log('💾 Guardando PDF multipágina...');
     const pdfBytes = await pdfDoc.save();
 
     // Descargar el PDF
@@ -1179,8 +1103,6 @@ export const exportMultiPagePDF = async (
     link.href = url;
     link.click();
     URL.revokeObjectURL(url);
-
-    console.log('✓ PDF multipágina CMYK exportado exitosamente');
   } catch (error) {
     console.error('Error al exportar PDF multipágina:', error);
     throw error;
@@ -1198,7 +1120,6 @@ export const exportAsPDFDirect = async (
   options: Partial<ExportOptions> = {}
 ): Promise<void> => {
   try {
-    console.log('📄 Exportando PDF con composición directa (máxima calidad)...');
 
     // Obtener configuración CMYK global
     const cmykConfig = getGlobalCMYKConfig();
@@ -1239,8 +1160,6 @@ export const exportAsPDFDirect = async (
 
     // Ordenar elementos por zIndex
     const sortedElements = [...elements].sort((a, b) => a.zIndex - b.zIndex);
-
-    console.log(`📦 Procesando ${sortedElements.length} elementos...`);
 
     // Procesar cada elemento
     for (const element of sortedElements) {
@@ -1283,11 +1202,9 @@ export const exportAsPDFDirect = async (
         // Si no se encontró en el mapeo, resolver desde templatePiece o originalImageUrl
         if (!originalImageUrl) {
           originalImageUrl = resolveOriginalImage(uniform, store.uniformTemplate ?? null) || uniform.imageUrl;
-          console.log(`  ⚠️  No se encontró imagen original, usando fallback`);
         }
 
         if (originalImageUrl) {
-          console.log(`  🖼️  Procesando uniforme: ${uniform.id}`);
 
           // Calcular posición y dimensiones en puntos
           const xInCm = uniform.position.x / canvasConfig.pixelsPerCm;
@@ -1331,7 +1248,6 @@ export const exportAsPDFDirect = async (
           const pdfRotation = (uniform.rotation === 90 || uniform.rotation === 270) ? 0 : uniform.rotation;
 
           page.drawImage(pdfImage, { x: pdfX, y: pdfY, width: widthInPts, height: heightInPts, rotate: degrees(pdfRotation) });
-          console.log(`  ✓ Uniforme renderizado (TAC: ${tacStats.max.toFixed(1)}%)`);
 
           // Agregar texto de talla SOLO si proviene de Excel
           if (uniform.source === 'excel') {
@@ -1416,14 +1332,10 @@ export const exportAsPDFDirect = async (
               color: rgb(0, 0, 0),
               rotate: degrees(tallaTextRotation),
             });
-
-            console.log(`  ✓ Texto de talla agregado: "${tallaText}" (rotación: ${uniform.rotation}°)`);
           }
         }
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
-
-        console.log(`  📝 Procesando texto: "${textEl.content}" | Fuente: ${textEl.fontFamily || 'Arial'}`);
 
         const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
         const hexColor = textEl.fontColorCmyk
@@ -1448,6 +1360,15 @@ export const exportAsPDFDirect = async (
           let pdfX = xInPts;
           let pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
 
+          // Replicar el centrado de Konva: TextElement.tsx pasa width al nodo Konva solo
+          // cuando dimensions.width > 450, activando textAlign='center' dentro de ese ancho.
+          // Sin esta corrección, el PDF coloca el texto en el borde izquierdo del nodo
+          // en lugar de centrarlo, como ocurre con el nombre en la playera trasera.
+          if (textEl.textAlign === 'center' && textEl.dimensions.width > 450) {
+            const dimWidthPts = (textEl.dimensions.width / canvasConfig.pixelsPerCm) * 28.35;
+            pdfX += (dimWidthPts - textImg.widthPts) / 2;
+          }
+
           // Alinear textos rotation=180° entre Konva y PDF.
           // En Konva, rotation=180° rota alrededor del top-left del nodo: el contenido
           // va hacia ARRIBA e IZQUIERDA desde el anchor (cx, cy).
@@ -1457,7 +1378,13 @@ export const exportAsPDFDirect = async (
           //   pdfX = xInPts  (la imagen irá de xInPts-w a xInPts)
           //   pdfY = H - yInPts + heightPts - yOffsetPts
           if (textEl.rotation === 180) {
-            pdfX = xInPts;
+            const baseX = xInPts;
+            if (textEl.textAlign === 'center' && textEl.dimensions.width > 450) {
+              const dimWidthPts = (textEl.dimensions.width / canvasConfig.pixelsPerCm) * 28.35;
+              pdfX = baseX - (dimWidthPts - textImg.widthPts) / 2;
+            } else {
+              pdfX = baseX;
+            }
             pdfY = heightInPoints - yInPts + textImg.heightPts - textImg.yOffsetPts;
           }
 
@@ -1470,8 +1397,6 @@ export const exportAsPDFDirect = async (
             rotate: degrees(textEl.rotation),
           });
         }
-
-        console.log(`  ✓ Texto renderizado como imagen`);
       }
     }
 
@@ -1481,23 +1406,18 @@ export const exportAsPDFDirect = async (
     const tacStats = { min: 0, max: maxTAC, average: avgTAC };
 
     // Ejecutar validación Preflight
-    console.log('🔍 Ejecutando validación Preflight...');
-    const preflightResult = await runPreflight('', tacStats, {
+    await runPreflight('', tacStats, {
       ...cmykConfig.preflight,
       profile: cmykConfig.profile,
     });
 
-    console.log(generatePreflightReport(preflightResult));
-
     // Expandir página para marcas de impresión
     if (cmykConfig.printMarks.addCropMarks || cmykConfig.printMarks.addRegistrationMarks) {
-      const expandedSize = expandPageForMarks(page, cmykConfig.printMarks);
-      console.log(`📐 Página expandida para marcas: ${expandedSize.width}x${expandedSize.height} pts`);
+      expandPageForMarks(page, cmykConfig.printMarks);
     }
 
     // Agregar marcas de impresión
     if (cmykConfig.printMarks) {
-      console.log('🖨️  Agregando marcas de impresión...');
       await addPrintMarks(pdfDoc, page, {
         ...cmykConfig.printMarks,
         jobInfo: {
@@ -1510,7 +1430,6 @@ export const exportAsPDFDirect = async (
     }
 
     // Serializar PDF
-    console.log('💾 Guardando PDF...');
     const pdfBytes = await pdfDoc.save();
 
     // Generar nombre de archivo
@@ -1528,10 +1447,6 @@ export const exportAsPDFDirect = async (
     link.href = url;
     link.click();
     URL.revokeObjectURL(url);
-
-    console.log(`✓ PDF CMYK profesional exportado (DIRECT): ${fileName}`);
-    console.log(`  Perfil: ${cmykConfig.profile} | TAC máx: ${tacStats.max.toFixed(1)}% | Preflight: ${preflightResult.passed ? '✓' : '⚠️'}`);
-    console.log(`  🎉 CALIDAD COMPLETA - Imágenes originales sin degradación`);
   } catch (error) {
     console.error('Error al exportar PDF directo:', error);
     throw error;
@@ -1553,10 +1468,7 @@ export const exportMultiPagePDFDirect = async (
     const canvasConfig = store.canvasConfig;
     const cmykConfig = getGlobalCMYKConfig();
 
-    console.log(`📄 Exportando ${totalPages} páginas (un archivo por página) - OPTIMIZADO...`);
-
     // OPTIMIZACIÓN: Pre-procesar y cachear datos de imágenes CMYK
-    console.log('⚡ Pre-procesando imágenes únicas...');
 
     const uniformSizesConfig = store.uniformSizesConfig;
     const uniformSizesConfigCompressed = store.uniformSizesConfigCompressed;
@@ -1608,8 +1520,6 @@ export const exportMultiPagePDFDirect = async (
       }
     }
 
-    console.log(`  ✓ ${uniqueImages.size} imágenes únicas encontradas`);
-
     const conversionOptions: CMYKConversionOptions = {
       profile: cmykConfig.profile,
       gcrMethod: cmykConfig.gcrMethod,
@@ -1618,20 +1528,14 @@ export const exportMultiPagePDFDirect = async (
     };
 
     // Pre-convertir todas las imágenes únicas a PNG y calcular TAC stats
-    console.log('🎨 Pre-convirtiendo imágenes a CMYK para calcular TAC...');
     const imagePngCache = new Map<string, string>(); // URL original -> PNG dataURL
     const imageTacCache = new Map<string, { min: number; max: number; average: number }>(); // URL original -> TAC stats
 
-    let processedCount = 0;
     for (const imageUrl of uniqueImages) {
       // SVG no necesita conversión PNG ni cálculo TAC — se renderiza como vector
       if (imageUrl.startsWith('data:image/svg+xml')) {
-        // SVG: rasterizar via browser para capturar diseños embebidos
-        console.log(`  [${++processedCount}/${uniqueImages.size}] SVG — rasterizando: ${imageUrl.substring(0, 50)}...`);
         continue; // se rasteriza on-demand en el loop de páginas (necesita widthInPts/heightInPts)
       }
-
-      console.log(`  [${++processedCount}/${uniqueImages.size}] Procesando: ${imageUrl.substring(0, 50)}...`);
 
       // Convertir a PNG si es necesario
       let pngDataUrl = imageUrl;
@@ -1643,12 +1547,7 @@ export const exportMultiPagePDFDirect = async (
       // Calcular TAC stats
       const cmykData = await convertImageRGBtoCMYK(imageUrl, conversionOptions);
       imageTacCache.set(imageUrl, cmykData.tac);
-
-      console.log(`    ✓ TAC: max=${cmykData.tac.max.toFixed(1)}%, avg=${cmykData.tac.average.toFixed(1)}%`);
     }
-
-    console.log(`✓ ${uniqueImages.size} imágenes pre-procesadas`);
-    console.log(`✓ Listo para generar ${totalPages} archivos PDF`);
 
     // Estadísticas
     let totalImagesEmbedded = 0;
@@ -1661,7 +1560,6 @@ export const exportMultiPagePDFDirect = async (
 
     // Procesar cada página como un PDF separado
     for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-      console.log(`\n📑 Procesando página ${pageIndex + 1}/${totalPages}...`);
 
       // Actualizar progreso
       if (options.onProgress) {
@@ -1784,7 +1682,6 @@ export const exportMultiPagePDFDirect = async (
               const tacStats = imageTacCache.get(originalImageUrl);
 
               if (!pngDataUrl) {
-                console.log(`  🔄 Convirtiendo imagen para PDF: ${originalImageUrl.substring(0, 60)}...`);
                 try {
                   pngDataUrl = originalImageUrl.startsWith('data:image/png')
                     ? originalImageUrl
@@ -1932,9 +1829,22 @@ export const exportMultiPagePDFDirect = async (
             let pdfX = xInPts;
             let pdfY = heightInPoints - yInPts - textImg.heightPts + textImg.yOffsetPts;
 
+            // Replicar el centrado de Konva: TextElement.tsx pasa width al nodo Konva solo
+            // cuando dimensions.width > 450, activando textAlign='center' dentro de ese ancho.
+            if (textEl.textAlign === 'center' && textEl.dimensions.width > 450) {
+              const dimWidthPts = (textEl.dimensions.width / canvasConfig.pixelsPerCm) * 28.35;
+              pdfX += (dimWidthPts - textImg.widthPts) / 2;
+            }
+
             // Alinear textos rotation=180° entre Konva y PDF (ver exportDirectPDF).
             if (textEl.rotation === 180) {
-              pdfX = xInPts;
+              const baseX = xInPts;
+              if (textEl.textAlign === 'center' && textEl.dimensions.width > 450) {
+                const dimWidthPts = (textEl.dimensions.width / canvasConfig.pixelsPerCm) * 28.35;
+                pdfX = baseX - (dimWidthPts - textImg.widthPts) / 2;
+              } else {
+                pdfX = baseX;
+              }
               pdfY = heightInPoints - yInPts + textImg.heightPts - textImg.yOffsetPts;
             }
 
@@ -1951,7 +1861,6 @@ export const exportMultiPagePDFDirect = async (
       }
 
       // Serializar este PDF individual
-      console.log(`  💾 Guardando archivo PDF de página ${pageIndex + 1}...`);
       const pdfBytes = await pdfDoc.save();
 
       // Generar nombre de archivo único para esta página
@@ -1966,24 +1875,8 @@ export const exportMultiPagePDFDirect = async (
       link.href = url;
       link.click();
       URL.revokeObjectURL(url);
-
-      console.log(`  ✓ Archivo guardado: ${fileName} (${(pdfBytes.length / 1024 / 1024).toFixed(2)} MB)`);
-      console.log(`  ✓ Página ${pageIndex + 1}/${totalPages} completada`);
     }
 
-    // Estadísticas finales de optimización
-    console.log(`\n📊 ESTADÍSTICAS DE OPTIMIZACIÓN:`);
-    console.log(`  🖼️  Imágenes únicas pre-procesadas: ${uniqueImages.size}`);
-    console.log(`  ⚡ Imágenes embebidas desde caché: ${totalImagesFromCache}`);
-    console.log(`  📄 Archivos PDF generados: ${totalPages}`);
-
-    const totalImages = totalImagesEmbedded;
-    if (totalImages > 0) {
-      const timeSavedEstimate = (uniqueImages.size - 1) * totalPages * 0.5; // Tiempo ahorrado al no re-convertir
-      console.log(`  ⏱️  Tiempo ahorrado estimado: ~${timeSavedEstimate.toFixed(1)} segundos`);
-    }
-
-    console.log(`\n✅ ${totalPages} archivos PDF exportados con CALIDAD COMPLETA (un archivo por página)`);
   } catch (error) {
     console.error('Error al exportar múltiples páginas:', error);
     throw error;
