@@ -1455,6 +1455,38 @@ export const exportAsPDFDirect = async (
 
 
 /**
+ * Procesa una imagen en un Web Worker dedicado para conversión CMYK.
+ * El worker corre en un hilo separado → no bloquea el hilo principal durante
+ * la conversión pixel-a-pixel.
+ */
+const processImageWithWorker = (
+  imageUrl: string,
+  options: CMYKConversionOptions,
+): Promise<{ pngDataUrl: string; tac: { min: number; max: number; average: number } }> =>
+  new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL('../workers/cmykWorker.ts', import.meta.url),
+      { type: 'module' },
+    );
+    worker.onmessage = (e) => {
+      worker.terminate();
+      if (e.data.error) reject(new Error(e.data.error));
+      else resolve({ pngDataUrl: e.data.pngDataUrl, tac: e.data.tac });
+    };
+    worker.onerror = (e) => { worker.terminate(); reject(new Error(e.message)); };
+    worker.postMessage({
+      id: imageUrl,
+      imageDataUrl: imageUrl,
+      options: {
+        profile: options.profile,
+        gcrMethod: options.gcrMethod,
+        customTAC: options.customTAC,
+        applyDotGain: options.applyDotGain,
+      },
+    });
+  });
+
+/**
  * Exporta múltiples páginas como PDFs separados usando composición directa
  */
 export const exportMultiPagePDFDirect = async (
@@ -1531,23 +1563,23 @@ export const exportMultiPagePDFDirect = async (
     const imagePngCache = new Map<string, string>(); // URL original -> PNG dataURL
     const imageTacCache = new Map<string, { min: number; max: number; average: number }>(); // URL original -> TAC stats
 
-    for (const imageUrl of uniqueImages) {
-      // SVG no necesita conversión PNG ni cálculo TAC — se renderiza como vector
-      if (imageUrl.startsWith('data:image/svg+xml')) {
-        continue; // se rasteriza on-demand en el loop de páginas (necesita widthInPts/heightInPts)
-      }
-
-      // Convertir a PNG si es necesario
-      let pngDataUrl = imageUrl;
-      if (!imageUrl.startsWith('data:image/png')) {
-        pngDataUrl = await convertToPng(imageUrl);
-      }
-      imagePngCache.set(imageUrl, pngDataUrl);
-
-      // Calcular TAC stats
-      const cmykData = await convertImageRGBtoCMYK(imageUrl, conversionOptions);
-      imageTacCache.set(imageUrl, cmykData.tac);
-    }
+    // Procesar imágenes no-SVG en paralelo usando Web Workers (una imagen por worker)
+    const nonSvgUrls = Array.from(uniqueImages).filter(url => !url.startsWith('data:image/svg+xml'));
+    await Promise.all(
+      nonSvgUrls.map(async (url) => {
+        try {
+          const { pngDataUrl, tac } = await processImageWithWorker(url, conversionOptions);
+          imagePngCache.set(url, pngDataUrl);
+          imageTacCache.set(url, tac);
+        } catch {
+          // Fallback al hilo principal si el worker falla
+          const pngDataUrl = url.startsWith('data:image/png') ? url : await convertToPng(url);
+          imagePngCache.set(url, pngDataUrl);
+          const cmykData = await convertImageRGBtoCMYK(url, conversionOptions);
+          imageTacCache.set(url, cmykData.tac);
+        }
+      })
+    );
 
     // Estadísticas
     let totalImagesEmbedded = 0;
@@ -1585,6 +1617,11 @@ export const exportMultiPagePDFDirect = async (
 
       // Agregar página al documento
       const page = pdfDoc.addPage([widthInPoints, heightInPoints]);
+
+      // Caché de imagen embebida por página — evita reconvertir CMYK para el mismo template SVG
+      const svgEmbedCache = new Map<string, { pdfImage: PDFImage; tacStats: { min: number; max: number; average: number } }>();
+      // Caché de PDFImage para PNG/JPEG — evita re-embeber la misma imagen dentro de una página
+      const pngEmbedCache = new Map<string, PDFImage>();
 
       // Estadísticas de TAC
       let maxTAC = 0;
@@ -1659,7 +1696,13 @@ export const exportMultiPagePDFDirect = async (
                 pngDataUrl = await convertSvgToPng(originalImageUrl, widthInPts * SVG_PDF_SCALE, heightInPts * SVG_PDF_SCALE, uniform.rotation);
                 renderPngCache.set(svgCacheKey, pngDataUrl);
               }
-              const { image: pdfImage, tacStats } = await embedImageWithCMYK(pdfDoc, pngDataUrl, conversionOptions);
+              let svgCached = svgEmbedCache.get(svgCacheKey);
+              if (!svgCached) {
+                const embedded = await embedImageWithCMYK(pdfDoc, pngDataUrl, conversionOptions);
+                svgCached = { pdfImage: embedded.image, tacStats: embedded.tacStats };
+                svgEmbedCache.set(svgCacheKey, svgCached);
+              }
+              const { pdfImage, tacStats } = svgCached;
               maxTAC = Math.max(maxTAC, tacStats.max);
               avgTAC += tacStats.average;
               tacCount++;
@@ -1694,7 +1737,11 @@ export const exportMultiPagePDFDirect = async (
                 }
               }
 
-              const pdfImage = await pdfDoc.embedPng(pngDataUrl);
+              let pdfImage = pngEmbedCache.get(pngDataUrl);
+              if (!pdfImage) {
+                pdfImage = await pdfDoc.embedPng(pngDataUrl);
+                pngEmbedCache.set(pngDataUrl, pdfImage);
+              }
               totalImagesEmbedded++;
               totalImagesFromCache++;
 
