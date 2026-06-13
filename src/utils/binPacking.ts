@@ -519,6 +519,79 @@ export function optimizeLayoutAdvanced(
     let shortIdx  = 0;
     let jerseyIdx = 0;
 
+    if (shortsDesc.length === 0) {
+      // Sin shorts: 2 jerseys por fila + mangas a la derecha (si caben).
+      // Cuando jerseys agotados: solo mangas hasta 3 por fila.
+      let jIdx = 0;
+      let sIdx = 0;
+
+      while (jIdx < jerseysAsc.length || sIdx < sleevePool.length) {
+        if (jIdx < jerseysAsc.length) {
+          const j1   = jerseysAsc[jIdx];
+          const rowH = j1.dimensions.height + gap;
+
+          if (yOffset + rowH > canvasHeight) {
+            pageIdx++;
+            pages.push([]);
+            yOffset = 0;
+          }
+
+          let xCursor = 0;
+
+          pages[pageIdx].push({ ...j1, position: { x: xCursor, y: yOffset } });
+          totalUsedArea += j1.dimensions.width * j1.dimensions.height;
+          xCursor += j1.dimensions.width + gap;
+          jIdx++;
+
+          if (jIdx < jerseysAsc.length) {
+            const j2 = jerseysAsc[jIdx];
+            if (xCursor + j2.dimensions.width <= canvasWidth) {
+              pages[pageIdx].push({ ...j2, position: { x: xCursor, y: yOffset } });
+              totalUsedArea += j2.dimensions.width * j2.dimensions.height;
+              xCursor += j2.dimensions.width + gap;
+              jIdx++;
+            }
+          }
+
+          // Mangas en columna vertical dentro del espacio sobrante a la derecha de los jerseys.
+          // El límite vertical es la altura del jersey (rowH).
+          const sleeveColX = xCursor;
+          let sleeveY = yOffset;
+          while (sIdx < sleevePool.length) {
+            const sl = sleevePool[sIdx];
+            if (sleeveColX + sl.dimensions.width > canvasWidth) break;
+            if (sleeveY + sl.dimensions.height > yOffset + j1.dimensions.height) break;
+            pages[pageIdx].push({ ...sl, position: { x: sleeveColX, y: sleeveY } });
+            totalUsedArea += sl.dimensions.width * sl.dimensions.height;
+            sleeveY += sl.dimensions.height + gap;
+            sIdx++;
+          }
+
+          yOffset += rowH;
+        } else {
+          const rowH = sleevePool[sIdx].dimensions.height + gap;
+
+          if (yOffset + rowH > canvasHeight) {
+            pageIdx++;
+            pages.push([]);
+            yOffset = 0;
+          }
+
+          let xCursor = 0;
+          while (sIdx < sleevePool.length) {
+            const sl = sleevePool[sIdx];
+            if (xCursor + sl.dimensions.width > canvasWidth) break;
+            pages[pageIdx].push({ ...sl, position: { x: xCursor, y: yOffset } });
+            totalUsedArea += sl.dimensions.width * sl.dimensions.height;
+            xCursor += sl.dimensions.width + gap;
+            sIdx++;
+          }
+
+          yOffset += rowH;
+        }
+      }
+    } else {
+
     while (shortIdx < shortsDesc.length || jerseyIdx < jerseysAsc.length) {
       const progressBefore = shortIdx + jerseyIdx;
       // Capturar ANTES de Fase 1: si los shorts ya estaban agotados al inicio de
@@ -621,11 +694,13 @@ export function optimizeLayoutAdvanced(
         yOffset = 0;
       }
     }
+    } // end else (shortsDesc.length > 0)
 
     // ── PASO 2.5: Mangas en filas de hasta 3 ────────────────────────────────
     // Corre después de que shorts y jerseys están colocados.
     // La primera manga de cada fila es la más alta → determina rowH correctamente.
-    if (sleevePool.length > 0) {
+    // Solo corre cuando hay shorts: sin shorts, las mangas ya se colocaron en el bloque anterior.
+    if (sleevePool.length > 0 && shortsDesc.length > 0) {
       let sIdx = 0;
       while (sIdx < sleevePool.length) {
         const rowH = sleevePool[sIdx].dimensions.height + gap;
