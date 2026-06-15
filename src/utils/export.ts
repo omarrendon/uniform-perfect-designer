@@ -122,20 +122,16 @@ function canvasTextToPDF(
 }
 
 /**
- * Renderiza texto en un canvas HTML usando la fuente del navegador y devuelve una imagen PNG
- * embebida en el PDF. Garantiza que cualquier fuente (Google Font, sistema) se renderice
- * correctamente sin problemas de encoding.
- *
- * @returns { pdfImage, widthPts, heightPts } — imagen y dimensiones en puntos PDF, o null si falla
+ * Renderiza texto en un canvas HTML y devuelve el PNG como data URL.
+ * Base compartida entre la exportación PDF local y la serialización para el servidor.
  */
-const renderTextAsImage = async (
-  pdfDoc: PDFDocument,
+const renderTextAsPng = async (
   text: string,
   fontFamily: string,
   fontWeight: string,
   fontSizePts: number,
   hexColor: string,
-): Promise<{ pdfImage: PDFImage; widthPts: number; heightPts: number; yOffsetPts: number } | null> => {
+): Promise<{ pngDataUrl: string; widthPts: number; heightPts: number; yOffsetPts: number } | null> => {
   try {
     const SCALE = 3;
     const PTS_TO_CSS_PX = 96 / 72;
@@ -143,11 +139,8 @@ const renderTextAsImage = async (
     const fontStyle = fontWeight === 'bold' ? 'bold' : 'normal';
     const fontSpec = `${fontStyle} ${fontSizeCssPx}px "${fontFamily}", Arial, sans-serif`;
 
-    // Konva dibuja texto con textBaseline='middle' en y=fontSize/2 dentro del nodo,
-    // y el nodo tiene altura exacta de fontSize. Replicamos eso para alineación perfecta.
     const midY = fontSizeCssPx / 2;
 
-    // Medir con 'middle' (igual que Konva) para detectar si el glifo se sale del cuadro
     const measureCanvas = document.createElement('canvas');
     measureCanvas.width  = Math.ceil(fontSizeCssPx * text.length * 1.5) + 20;
     measureCanvas.height = Math.ceil(fontSizeCssPx * 2.5);
@@ -156,11 +149,8 @@ const renderTextAsImage = async (
     mCtx.textBaseline = 'middle';
     const m = mCtx.measureText(text);
 
-    // Espacio que el glifo necesita arriba/abajo del punto 'middle'
     const glyphAbove = Math.ceil(m.actualBoundingBoxAscent)  + 2;
     const glyphBelow = Math.ceil(m.actualBoundingBoxDescent) + 2;
-
-    // Si el glifo sobresale del cuadro fontSize, agregar espacio extra para no recortarlo
     const extraTop    = Math.max(0, glyphAbove - midY);
     const extraBottom = Math.max(0, glyphBelow - midY);
 
@@ -182,24 +172,46 @@ const renderTextAsImage = async (
     const g = parseInt(hexColor.slice(3, 5), 16);
     const b = parseInt(hexColor.slice(5, 7), 16);
     ctx2.fillStyle = `rgb(${r},${g},${b})`;
-    // Mismo textBaseline y posición que Konva: 'middle' en y = fontSize/2
     ctx2.textBaseline = 'middle';
     ctx2.fillText(text, left, midY + extraTop);
 
-    const dataUrl = tmpCanvas.toDataURL('image/png');
-    const base64  = dataUrl.split(',')[1];
-    const binary  = atob(base64);
-    const bytes   = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-    const pdfImage  = await pdfDoc.embedPng(bytes);
-    const widthPts  = (w / SCALE) / PTS_TO_CSS_PX;
-    // heightPts = fontSizePts (= nodo Konva), más cualquier espacio extra si hubo desborde
-    const heightPts  = (h    / SCALE) / PTS_TO_CSS_PX;
-    // yOffsetPts solo > 0 si el glifo desbordó hacia arriba del cuadro fontSize
+    const pngDataUrl = tmpCanvas.toDataURL('image/png');
+    const widthPts   = (w / SCALE) / PTS_TO_CSS_PX;
+    const heightPts  = (h / SCALE) / PTS_TO_CSS_PX;
     const yOffsetPts = (extraTop / SCALE) / PTS_TO_CSS_PX;
 
-    return { pdfImage, widthPts, heightPts, yOffsetPts };
+    return { pngDataUrl, widthPts, heightPts, yOffsetPts };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Renderiza texto en un canvas HTML usando la fuente del navegador y devuelve una imagen PNG
+ * embebida en el PDF. Garantiza que cualquier fuente (Google Font, sistema) se renderice
+ * correctamente sin problemas de encoding.
+ *
+ * @returns { pdfImage, widthPts, heightPts } — imagen y dimensiones en puntos PDF, o null si falla
+ */
+const renderTextAsImage = async (
+  pdfDoc: PDFDocument,
+  text: string,
+  fontFamily: string,
+  fontWeight: string,
+  fontSizePts: number,
+  hexColor: string,
+): Promise<{ pdfImage: PDFImage; widthPts: number; heightPts: number; yOffsetPts: number } | null> => {
+  const result = await renderTextAsPng(text, fontFamily, fontWeight, fontSizePts, hexColor);
+  if (!result) return null;
+
+  try {
+    const base64 = result.pngDataUrl.split(',')[1];
+    const binary = atob(base64);
+    const bytes  = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const pdfImage = await pdfDoc.embedPng(bytes);
+    return { pdfImage, widthPts: result.widthPts, heightPts: result.heightPts, yOffsetPts: result.yOffsetPts };
   } catch {
     return null;
   }
@@ -1927,6 +1939,178 @@ export const exportMultiPagePDFDirect = async (
   } catch (error) {
     console.error('Error al exportar múltiples páginas:', error);
     throw error;
+  }
+};
+
+// Tipos del payload para el servidor
+interface UniformPayload {
+  type: 'uniform';
+  id: string;
+  part: string;
+  size: string;
+  source: string;
+  isSvg: boolean;
+  rotation: number;
+  zIndex: number;
+  visible: boolean;
+  position: { x: number; y: number };
+  dimensions: { width: number; height: number };
+  imageDataUrl: string;
+}
+
+interface TextPngPayload {
+  type: 'textPng';
+  id: string;
+  zIndex: number;
+  visible: boolean;
+  rotation: number;
+  position: { x: number; y: number };
+  dimensions: { width: number; height: number };
+  textAlign: string;
+  pngDataUrl: string;
+  widthPts: number;
+  heightPts: number;
+  yOffsetPts: number;
+}
+
+type ElementPayload = UniformPayload | TextPngPayload;
+
+interface PagePayload {
+  pageIndex: number;
+  heightCm: number;
+  elements: ElementPayload[];
+}
+
+/**
+ * Serializa el diseño completo y envía al servidor para generación de PDF.
+ * El servidor aplica Sharp + CMYK en paralelo — más rápido que el procesamiento en el browser.
+ */
+export const exportMultiPagePDFServer = async (
+  options: Partial<ExportOptions> & {
+    onProgress?: (current: number, total: number) => void;
+  } = {}
+): Promise<void> => {
+  const serverUrl = import.meta.env.VITE_PDF_SERVER_URL;
+  if (!serverUrl) throw new Error('VITE_PDF_SERVER_URL no está configurado en .env');
+
+  const store = useDesignerStore.getState();
+  const canvasConfig = store.canvasConfig;
+  const cmykConfig = getGlobalCMYKConfig();
+  const totalPages = store.pages.length;
+
+  const pages: PagePayload[] = [];
+
+  for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+    if (options.onProgress) options.onProgress(pageIndex + 1, totalPages);
+
+    const elements = store.pages[pageIndex] || [];
+    const heightCm = store.getPageHeight(pageIndex);
+    const serializedElements: ElementPayload[] = [];
+
+    for (const element of elements) {
+      if (!element.visible) continue;
+
+      if (element.type === 'uniform') {
+        const uniform = element as UniformTemplate;
+
+        // Resolver imagen original (nunca la comprimida)
+        let originalImageUrl = resolveOriginalImage(uniform, store.uniformTemplate ?? null);
+
+        if (!originalImageUrl) {
+          // Buscar en uniformSizesConfig via URL comprimida
+          const compressed = store.uniformSizesConfigCompressed;
+          const original = store.uniformSizesConfig;
+          for (const sizeKey of Object.keys(original)) {
+            const orig = original[sizeKey];
+            const comp = compressed[sizeKey];
+            if (!orig || !comp) continue;
+            if (uniform.imageUrl === comp.jerseyFront && orig.jerseyFront) { originalImageUrl = orig.jerseyFront; break; }
+            if (uniform.imageUrl === comp.jerseyBack  && orig.jerseyBack)  { originalImageUrl = orig.jerseyBack;  break; }
+            if (uniform.imageUrl === comp.shortsLeft  && orig.shortsLeft)  { originalImageUrl = orig.shortsLeft;  break; }
+            if (uniform.imageUrl === comp.shortsRight && orig.shortsRight) { originalImageUrl = orig.shortsRight; break; }
+          }
+        }
+
+        const imageDataUrl = originalImageUrl ?? uniform.imageUrl ?? '';
+
+        serializedElements.push({
+          type: 'uniform',
+          id: uniform.id,
+          part: uniform.part,
+          size: uniform.size,
+          source: uniform.source ?? 'manual',
+          isSvg: imageDataUrl.startsWith('data:image/svg+xml'),
+          rotation: uniform.rotation,
+          zIndex: uniform.zIndex,
+          visible: uniform.visible,
+          position: uniform.position,
+          dimensions: uniform.dimensions,
+          imageDataUrl,
+        });
+
+      } else if (element.type === 'text') {
+        const textEl = element as TextElement;
+
+        const hexColor = textEl.fontColorCmyk
+          ? cmykToHex(textEl.fontColorCmyk.c, textEl.fontColorCmyk.m, textEl.fontColorCmyk.y, textEl.fontColorCmyk.k)
+          : (textEl.fontColor || '#000000');
+
+        const fontSizePts = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
+
+        const rendered = await renderTextAsPng(
+          textEl.content,
+          textEl.fontFamily || 'Arial',
+          textEl.fontWeight || 'normal',
+          fontSizePts,
+          hexColor,
+        );
+
+        if (rendered) {
+          serializedElements.push({
+            type: 'textPng',
+            id: textEl.id,
+            zIndex: textEl.zIndex,
+            visible: textEl.visible,
+            rotation: textEl.rotation,
+            position: textEl.position,
+            dimensions: textEl.dimensions,
+            textAlign: textEl.textAlign,
+            pngDataUrl: rendered.pngDataUrl,
+            widthPts: rendered.widthPts,
+            heightPts: rendered.heightPts,
+            yOffsetPts: rendered.yOffsetPts,
+          });
+        }
+      }
+    }
+
+    pages.push({ pageIndex, heightCm, elements: serializedElements });
+  }
+
+  // Enviar al servidor
+  const response = await fetch(`${serverUrl}/api/export-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pages, canvasConfig, cmykConfig }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(err.error ?? `Error del servidor: ${response.status}`);
+  }
+
+  const { pages: resultPages } = await response.json();
+
+  // Descargar cada página como archivo separado
+  for (const resultPage of resultPages) {
+    const bytes = Uint8Array.from(atob(resultPage.pdfBase64), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = resultPage.fileName;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 };
 
