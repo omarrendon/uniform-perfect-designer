@@ -1998,6 +1998,19 @@ export const exportMultiPagePDFServer = async (
   const cmykConfig = getGlobalCMYKConfig();
   const totalPages = store.pages.length;
 
+  // Cache SVG→PNG para no rasterizar la misma imagen varias veces
+  const svgToPngCache = new Map<string, string>();
+
+  const rasterizeSvg = async (svgUrl: string, widthPx: number, heightPx: number): Promise<string> => {
+    const cacheKey = `${svgUrl}:${Math.round(widthPx)}:${Math.round(heightPx)}`;
+    const cached = svgToPngCache.get(cacheKey);
+    if (cached) return cached;
+    // Rasterizar a 2× para calidad de impresión
+    const png = await convertSvgToPng(svgUrl, widthPx * 2, heightPx * 2);
+    svgToPngCache.set(cacheKey, png);
+    return png;
+  };
+
   const pages: PagePayload[] = [];
 
   for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
@@ -2031,7 +2044,17 @@ export const exportMultiPagePDFServer = async (
           }
         }
 
-        const imageDataUrl = originalImageUrl ?? uniform.imageUrl ?? '';
+        let imageDataUrl = originalImageUrl ?? uniform.imageUrl ?? '';
+
+        // Rasterizar SVGs en el browser antes de enviar al servidor.
+        // Sharp/librsvg en el servidor crashea con SIGBUS en ciertos SVGs.
+        if (imageDataUrl.startsWith('data:image/svg+xml')) {
+          imageDataUrl = await rasterizeSvg(
+            imageDataUrl,
+            uniform.dimensions.width,
+            uniform.dimensions.height,
+          );
+        }
 
         serializedElements.push({
           type: 'uniform',
@@ -2039,7 +2062,7 @@ export const exportMultiPagePDFServer = async (
           part: uniform.part,
           size: uniform.size,
           source: uniform.source ?? 'manual',
-          isSvg: imageDataUrl.startsWith('data:image/svg+xml'),
+          isSvg: false,
           rotation: uniform.rotation,
           zIndex: uniform.zIndex,
           visible: uniform.visible,
