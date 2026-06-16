@@ -2005,8 +2005,9 @@ export const exportMultiPagePDFServer = async (
     const cacheKey = `${svgUrl}:${Math.round(widthPx)}:${Math.round(heightPx)}`;
     const cached = svgToPngCache.get(cacheKey);
     if (cached) return cached;
-    // Rasterizar a 2× para calidad de impresión
-    const png = await convertSvgToPng(svgUrl, widthPx * 2, heightPx * 2);
+    // 1× — el servidor aplica CMYK y genera el PDF; escalar más sube el payload
+    // IPC y el uso de RAM del contenedor Railway proporcionalmente (4× a 2×, 16× a 4×).
+    const png = await convertSvgToPng(svgUrl, widthPx, heightPx);
     svgToPngCache.set(cacheKey, png);
     return png;
   };
