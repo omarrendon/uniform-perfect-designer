@@ -208,15 +208,27 @@ export const Header: React.FC = () => {
         const totalPages = getTotalPages();
         setExportProgress({ current: 0, total: totalPages });
 
-        // NUEVA EXPORTACIÓN DIRECTA - Sin degradación de calidad
-        const { exportMultiPagePDFDirect } = await import("../utils/export");
-        await exportMultiPagePDFDirect({
-          canvasWidth: canvasConfig.width,
-          canvasHeight: canvasConfig.height,
-          onProgress: (current, total) => {
-            setExportProgress({ current, total });
-          },
-        });
+        // Usar servidor si está configurado, fallback a exportación local
+        const { exportMultiPagePDFServer, exportMultiPagePDFDirect } = await import("../utils/export");
+        const useServer = !!import.meta.env.VITE_PDF_SERVER_URL;
+
+        if (useServer) {
+          await exportMultiPagePDFServer({
+            canvasWidth: canvasConfig.width,
+            canvasHeight: canvasConfig.height,
+            onProgress: (current, total) => {
+              setExportProgress({ current, total });
+            },
+          });
+        } else {
+          await exportMultiPagePDFDirect({
+            canvasWidth: canvasConfig.width,
+            canvasHeight: canvasConfig.height,
+            onProgress: (current, total) => {
+              setExportProgress({ current, total });
+            },
+          });
+        }
 
         // Ocultar loading
         setIsExporting(false);
