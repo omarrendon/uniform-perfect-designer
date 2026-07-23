@@ -275,6 +275,7 @@ import type {
   Size,
   SizeConfig,
   SizeImages,
+  TemplatePiece,
   UniformDesignConfig,
   UniformSizesConfig,
   UserFont,
@@ -327,6 +328,13 @@ interface DesignerState {
   setUniformTemplate: (images: Partial<SizeImages>) => void;
   isTemplateComplete: () => boolean;
   clearUniformTemplate: () => void;
+
+  // Bytes crudos del PDF original por pieza — para embedding directo en Fase 2
+  // No se persisten en localStorage (demasiado grandes y no serializables como JSON)
+  uniformTemplatePdfBytes: Partial<Record<TemplatePiece, Uint8Array>> | null;
+  // bytes=null elimina la entrada del slot (usado cuando se reemplaza un PDF por una imagen)
+  setUniformTemplatePdfBytes: (piece: TemplatePiece, bytes: Uint8Array | null) => void;
+  clearUniformTemplatePdfBytes: () => void;
 
   // Diseño del uniforme (posiciones de textos)
   uniformDesignConfig: UniformDesignConfig | null;
@@ -469,6 +477,7 @@ export const useDesignerStore = create<DesignerState>()(
         uniformSizesConfigCompressed: {}, // Configuración de imágenes COMPRIMIDAS por talla
         uniformTemplate: null,
         uniformTemplateCompressed: null,
+        uniformTemplatePdfBytes: null,
         uniformDesignConfig: null,
         history: [],
         historyIndex: -1,
@@ -843,8 +852,22 @@ export const useDesignerStore = create<DesignerState>()(
           set(() => ({
             uniformTemplate: null,
             uniformTemplateCompressed: null,
+            uniformTemplatePdfBytes: null,
             uniformDesignConfig: null,
           })),
+
+        setUniformTemplatePdfBytes: (piece, bytes) =>
+          set(state => {
+            const current = { ...(state.uniformTemplatePdfBytes ?? {}) };
+            if (bytes === null) {
+              delete current[piece];
+              return { uniformTemplatePdfBytes: Object.keys(current).length > 0 ? current : null };
+            }
+            return { uniformTemplatePdfBytes: { ...current, [piece]: bytes } };
+          }),
+
+        clearUniformTemplatePdfBytes: () =>
+          set(() => ({ uniformTemplatePdfBytes: null })),
 
         setUniformDesignConfig: (config) =>
           set(() => ({ uniformDesignConfig: config })),

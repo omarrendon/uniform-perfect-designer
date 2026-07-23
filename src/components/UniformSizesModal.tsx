@@ -4,6 +4,8 @@ import { useDesignerStore } from "../store/desingerStore";
 import { validateExcelFile } from "../utils/excelReader";
 import { processExcelFile } from "../utils/excelProcessor";
 import type { ExcelProcessorCallbacks } from "../utils/excelProcessor";
+import { renderPdfPageToPng } from "../utils/pdfLoader";
+import type { TemplatePiece } from "../types";
 import { UniformDesignPreviewModal } from "./UniformDesignPreviewModal";
 
 interface UniformSizesModalProps {
@@ -36,9 +38,10 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 });
   const [showDesignModal, setShowDesignModal] = useState(false);
   const [showOptionalSlots, setShowOptionalSlots] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState<Set<ImageSlot>>(new Set());
   const excelInputRef = useRef<HTMLInputElement>(null);
 
-  const { uniformTemplate, setUniformTemplate, isTemplateComplete } = useDesignerStore();
+  const { uniformTemplate, setUniformTemplate, isTemplateComplete, setUniformTemplatePdfBytes } = useDesignerStore();
 
   if (!isOpen) return null;
 
@@ -46,10 +49,33 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      alert('Por favor selecciona un archivo de imagen válido');
+    if (file.type === 'application/pdf') {
+      setLoadingSlots(prev => new Set([...prev, slot]));
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const bytes = new Uint8Array(reader.result as ArrayBuffer);
+        setUniformTemplatePdfBytes(slot as TemplatePiece, bytes);
+        try {
+          // PDF.js renderiza con su motor ICC propio → colores fieles al original de CorelDraw
+          const pngDataUrl = await renderPdfPageToPng(bytes, 0, 6);
+          setUniformTemplate({ [slot]: pngDataUrl });
+        } catch {
+          alert('Error al renderizar el PDF. Verifica que sea un PDF válido con al menos una página.');
+        } finally {
+          setLoadingSlots(prev => { const next = new Set(prev); next.delete(slot); return next; });
+        }
+      };
+      reader.readAsArrayBuffer(file);
       return;
     }
+
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen válido o PDF');
+      return;
+    }
+
+    // Si había un PDF en este slot, limpiar sus bytes para que Fase 2 no use datos obsoletos
+    setUniformTemplatePdfBytes(slot as TemplatePiece, null);
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -114,6 +140,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
 
   const renderSlot = (slot: ImageSlot) => {
     const imageUrl = uniformTemplate?.[slot];
+    const isSlotLoading = loadingSlots.has(slot);
     return (
       <div key={slot}>
         <label style={{
@@ -123,12 +150,26 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
           {SLOT_LABELS[slot]}
         </label>
         <div style={{
-          border: imageUrl ? '2px solid #10b981' : '2px dashed #d1d5db',
+          border: isSlotLoading ? '2px dashed #3b82f6' : imageUrl ? '2px solid #10b981' : '2px dashed #d1d5db',
           borderRadius: '12px', padding: '16px', textAlign: 'center',
-          backgroundColor: imageUrl ? '#f0fdf4' : 'white',
+          backgroundColor: isSlotLoading ? '#eff6ff' : imageUrl ? '#f0fdf4' : 'white',
           transition: 'all 0.2s',
         }}>
-          {imageUrl ? (
+          {isSlotLoading ? (
+            <div style={{ padding: '24px 0' }}>
+              <div style={{
+                width: '36px', height: '36px', margin: '0 auto 12px',
+                border: '3px solid #bfdbfe', borderTopColor: '#3b82f6',
+                borderRadius: '50%', animation: 'spin 1s linear infinite',
+              }} />
+              <p style={{ fontSize: '13px', color: '#3b82f6', fontWeight: '500' }}>
+                Procesando PDF...
+              </p>
+              <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+                PDF.js renderizando a 432 DPI
+              </p>
+            </div>
+          ) : imageUrl ? (
             <div>
               <img
                 src={imageUrl}
@@ -146,7 +187,7 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
               }}>
                 Cambiar imagen
                 <input
-                  type="file" accept="image/*,image/svg+xml"
+                  type="file" accept="image/*,image/svg+xml,application/pdf"
                   onChange={(e) => handleImageUpload(slot, e)}
                   style={{ display: 'none' }}
                 />
@@ -159,10 +200,10 @@ export const UniformSizesModal: React.FC<UniformSizesModalProps> = ({
                 Haz clic para subir
               </p>
               <p style={{ fontSize: '11px', color: '#9ca3af' }}>
-                SVG, PNG, JPG, WEBP
+                SVG, PNG, JPG, WEBP, PDF
               </p>
               <input
-                type="file" accept="image/*,image/svg+xml"
+                type="file" accept="image/*,image/svg+xml,application/pdf"
                 onChange={(e) => handleImageUpload(slot, e)}
                 style={{ display: 'none' }}
               />
