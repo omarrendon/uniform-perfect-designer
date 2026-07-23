@@ -1971,6 +1971,7 @@ interface TextPngPayload {
   widthPts: number;
   heightPts: number;
   yOffsetPts: number;
+  content: string;
 }
 
 type ElementPayload = UniformPayload | TextPngPayload;
@@ -2090,19 +2091,42 @@ export const exportMultiPagePDFServer = async (
         );
 
         if (rendered) {
+          // Para nombres cortos (≤5 chars) centrados, buscar el jersey que los contiene
+          // y calcular la x centrada dentro de él. Nombres largos (>5) ya funcionan
+          // correctamente con la lógica de dimensions.width > 450 en el servidor.
+          let position = textEl.position;
+          if (textEl.textAlign === 'center' && textEl.content.length <= 5) {
+            const containingJersey = (elements.filter(el => el.type === 'uniform') as UniformTemplate[])
+              .find(j =>
+                (j as UniformTemplate).part === 'jersey' &&
+                textEl.position.x >= (j as UniformTemplate).position.x &&
+                textEl.position.x <= (j as UniformTemplate).position.x + (j as UniformTemplate).dimensions.width &&
+                textEl.position.y >= (j as UniformTemplate).position.y &&
+                textEl.position.y <= (j as UniformTemplate).position.y + (j as UniformTemplate).dimensions.height
+              ) as UniformTemplate | undefined;
+            if (containingJersey) {
+              position = {
+                x: containingJersey.position.x +
+                   (containingJersey.dimensions.width - textEl.dimensions.width) / 2,
+                y: textEl.position.y,
+              };
+            }
+          }
+
           serializedElements.push({
             type: 'textPng',
             id: textEl.id,
             zIndex: textEl.zIndex,
             visible: textEl.visible,
             rotation: textEl.rotation,
-            position: textEl.position,
+            position,
             dimensions: textEl.dimensions,
             textAlign: textEl.textAlign,
             pngDataUrl: rendered.pngDataUrl,
             widthPts: rendered.widthPts,
             heightPts: rendered.heightPts,
             yOffsetPts: rendered.yOffsetPts,
+            content: textEl.content,
           });
         }
       }

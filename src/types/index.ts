@@ -95,6 +95,7 @@ export interface UniformTemplate extends UniformElement {
   side?: 'front' | 'back' | 'right' | 'left'; // Lado del uniforme
   source?: 'excel' | 'manual'; // Origen: carga masiva Excel o imágenes manuales
   isSvg?: boolean; // true cuando imageUrl apunta a un SVG (para elegir renderer vectorial)
+  isPdf?: boolean; // true cuando la pieza proviene de un PDF — reservado para Fase 2 (embedding directo PDF→PDF)
 }
 
 export interface TextElement extends UniformElement {
