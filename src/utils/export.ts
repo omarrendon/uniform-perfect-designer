@@ -1,5 +1,5 @@
 import { toPng } from 'html-to-image';
-import { PDFDocument, PDFImage, rgb, StandardFonts, degrees } from 'pdf-lib';
+import { PDFDocument, PDFEmbeddedPage, PDFImage, rgb, StandardFonts, degrees } from 'pdf-lib';
 import type { ExportOptions, UniformTemplate, TextElement } from '../types';
 import { useDesignerStore } from '../store/desingerStore';
 import { convertImageRGBtoCMYK, cmykToHex, type CMYKConversionOptions } from './colorConversion';
@@ -1634,6 +1634,8 @@ export const exportMultiPagePDFDirect = async (
       const svgEmbedCache = new Map<string, { pdfImage: PDFImage; tacStats: { min: number; max: number; average: number } }>();
       // Caché de PDFImage para PNG/JPEG — evita re-embeber la misma imagen dentro de una página
       const pngEmbedCache = new Map<string, PDFImage>();
+      // Caché de PDFEmbeddedPage para piezas PDF — evita llamar embedPdf() más de una vez por pieza
+      const pdfPageEmbedCache = new Map<string, PDFEmbeddedPage>();
 
       // Estadísticas de TAC
       let maxTAC = 0;
@@ -1698,7 +1700,38 @@ export const exportMultiPagePDFDirect = async (
             const pdfYBottom = heightInPoints - yInPoints - heightInPts;
             const pdfX = xInPoints;
 
-            if (originalImageUrl.startsWith('data:image/svg+xml')) {
+            // Bytes del PDF original si esta pieza fue cargada como PDF (Fase 2)
+            const pdfSourceBytes = uniform.templatePiece
+              ? store.uniformTemplatePdfBytes?.[uniform.templatePiece]
+              : undefined;
+
+            if (pdfSourceBytes) {
+              // ── RAMA PDF: embedding directo PDF→PDF, cero rasterización, cero conversión de color ──
+              const cacheKey = uniform.templatePiece!;
+              let embeddedPage = pdfPageEmbedCache.get(cacheKey);
+              if (!embeddedPage) {
+                [embeddedPage] = await pdfDoc.embedPdf(pdfSourceBytes, [0]);
+                pdfPageEmbedCache.set(cacheKey, embeddedPage);
+              }
+
+              // Misma lógica de ajuste de coordenadas que la rama PNG para rotation=180°
+              let drawX = pdfX;
+              let drawY = pdfYBottom;
+              if (uniform.rotation === 180) {
+                drawX = xInPoints + widthInPts;
+                drawY = pdfYBottom + heightInPts;
+              }
+
+              page.drawPage(embeddedPage, {
+                x: drawX,
+                y: drawY,
+                width: widthInPts,
+                height: heightInPts,
+                rotate: degrees(uniform.rotation),
+              });
+              totalImagesEmbedded++;
+
+            } else if (originalImageUrl.startsWith('data:image/svg+xml')) {
               // SVG: rasterizar via browser a alta resolución.
               // Para 90°/270°, la rotación se aplica durante la rasterización — no en drawImage.
               const SVG_PDF_SCALE = 4;
