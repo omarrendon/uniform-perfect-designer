@@ -90,6 +90,10 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
     });
   };
 
+  const strokeProps = element.strokeEnabled && element.strokeWidth && element.strokeColor
+    ? { stroke: element.strokeColor, strokeWidth: element.strokeWidth }
+    : {};
+
   if (element.locked) {
     return (
       <Text
@@ -105,6 +109,7 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
         opacity={element.opacity}
         width={element.dimensions.width > 450 ? element.dimensions.width : undefined}
         wrap="none"
+        {...strokeProps}
       />
     );
   }
@@ -131,6 +136,7 @@ export const TextElementComponent: React.FC<TextElementProps> = ({
         onTransformEnd={handleTransformEnd}
         onClick={() => selectElement(element.id)}
         onTap={() => selectElement(element.id)}
+        {...strokeProps}
       />
 
       {isSelected && !element.locked && (

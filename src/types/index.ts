@@ -109,6 +109,11 @@ export interface TextElement extends UniformElement {
   fontWeight: 'normal' | 'bold';
   opacity: number;
   side: 'front' | 'back';
+  // Contorno del texto
+  strokeEnabled?: boolean;
+  strokeWidth?: number;      // píxeles, máximo 10 (= 1 cm)
+  strokeColor?: string;      // #RRGGBB
+  strokeColorCmyk?: CmykColor;
 }
 
 export interface ImageElement extends UniformElement {
@@ -160,6 +165,13 @@ export interface TextDesignConfig {
   fontColorCmyk?: CmykColor; // CMYK directo para PDF
   fontWeight: 'normal' | 'bold';
   textAlign: 'left' | 'center' | 'right';
+  // Contorno del texto
+  strokeEnabled?: boolean;
+  strokeWidth?: number;      // píxeles sobre talla M, máximo 10 (= 1 cm con pixelsPerCm=10)
+  strokeColor?: string;      // #RRGGBB
+  strokeColorCmyk?: CmykColor;
+  // jerseyBackName / jerseyBackNumber: centra el texto horizontalmente dentro del ancho de la playera
+  centerHorizontal?: boolean;
 }
 
 // Diseño completo del uniforme: posición y estilo de cada texto

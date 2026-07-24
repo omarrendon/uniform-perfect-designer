@@ -131,6 +131,7 @@ const renderTextAsPng = async (
   fontWeight: string,
   fontSizePts: number,
   hexColor: string,
+  strokeOpts?: { color: string; width: number } | null,
 ): Promise<{ pngDataUrl: string; widthPts: number; heightPts: number; yOffsetPts: number } | null> => {
   try {
     const SCALE = 3;
@@ -154,11 +155,14 @@ const renderTextAsPng = async (
     const extraTop    = Math.max(0, glyphAbove - midY);
     const extraBottom = Math.max(0, glyphBelow - midY);
 
-    const left  = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft)) + 2;
-    const right = Math.ceil(m.actualBoundingBoxRight) + 2;
+    // Padding extra para que el stroke no se corte en los bordes
+    const strokePad = strokeOpts ? Math.ceil(strokeOpts.width * SCALE) : 0;
+
+    const left  = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft)) + 2 + strokePad;
+    const right = Math.ceil(m.actualBoundingBoxRight) + 2 + strokePad;
 
     const w = left + right;
-    const h = Math.ceil(fontSizeCssPx) + extraTop + extraBottom;
+    const h = Math.ceil(fontSizeCssPx) + extraTop + extraBottom + strokePad * 2;
 
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width  = w;
@@ -167,18 +171,32 @@ const renderTextAsPng = async (
     const ctx2 = tmpCanvas.getContext('2d')!;
     ctx2.font = fontSpec;
     ctx2.clearRect(0, 0, w, h);
+    ctx2.textBaseline = 'middle';
+
+    const drawY = midY + extraTop + strokePad;
+
+    // Stroke primero (debajo del relleno)
+    if (strokeOpts) {
+      const sr = parseInt(strokeOpts.color.slice(1, 3), 16);
+      const sg = parseInt(strokeOpts.color.slice(3, 5), 16);
+      const sb = parseInt(strokeOpts.color.slice(5, 7), 16);
+      ctx2.strokeStyle = `rgb(${sr},${sg},${sb})`;
+      ctx2.lineWidth = strokeOpts.width * SCALE;
+      ctx2.lineJoin = 'round';
+      ctx2.miterLimit = 2;
+      ctx2.strokeText(text, left, drawY);
+    }
 
     const r = parseInt(hexColor.slice(1, 3), 16);
     const g = parseInt(hexColor.slice(3, 5), 16);
     const b = parseInt(hexColor.slice(5, 7), 16);
     ctx2.fillStyle = `rgb(${r},${g},${b})`;
-    ctx2.textBaseline = 'middle';
-    ctx2.fillText(text, left, midY + extraTop);
+    ctx2.fillText(text, left, drawY);
 
     const pngDataUrl = tmpCanvas.toDataURL('image/png');
     const widthPts   = (w / SCALE) / PTS_TO_CSS_PX;
     const heightPts  = (h / SCALE) / PTS_TO_CSS_PX;
-    const yOffsetPts = (extraTop / SCALE) / PTS_TO_CSS_PX;
+    const yOffsetPts = ((extraTop + strokePad) / SCALE) / PTS_TO_CSS_PX;
 
     return { pngDataUrl, widthPts, heightPts, yOffsetPts };
   } catch {
@@ -200,8 +218,9 @@ const renderTextAsImage = async (
   fontWeight: string,
   fontSizePts: number,
   hexColor: string,
+  strokeOpts?: { color: string; width: number } | null,
 ): Promise<{ pdfImage: PDFImage; widthPts: number; heightPts: number; yOffsetPts: number } | null> => {
-  const result = await renderTextAsPng(text, fontFamily, fontWeight, fontSizePts, hexColor);
+  const result = await renderTextAsPng(text, fontFamily, fontWeight, fontSizePts, hexColor, strokeOpts);
   if (!result) return null;
 
   try {
@@ -1355,6 +1374,10 @@ export const exportAsPDFDirect = async (
           : (textEl.fontColor || '#000000');
 
         // Renderizar texto como imagen PNG usando el navegador (garantiza fuente correcta)
+        const strokeOpts = textEl.strokeEnabled && textEl.strokeColor && textEl.strokeWidth
+          ? { color: textEl.strokeColor, width: textEl.strokeWidth }
+          : null;
+
         const textImg = await renderTextAsImage(
           pdfDoc,
           textEl.content,
@@ -1362,6 +1385,7 @@ export const exportAsPDFDirect = async (
           textEl.fontWeight || 'normal',
           fontSizeInPoints,
           hexColor,
+          strokeOpts,
         );
 
         if (textImg) {
@@ -1905,6 +1929,10 @@ export const exportMultiPagePDFDirect = async (
           const fontSizeInPoints = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
           const hexColor = textEl.fontColor || '#000000';
 
+          const strokeOptsMP = textEl.strokeEnabled && textEl.strokeColor && textEl.strokeWidth
+            ? { color: textEl.strokeColor, width: textEl.strokeWidth }
+            : null;
+
           // Renderizar texto como imagen PNG usando el navegador (garantiza fuente correcta)
           const textImg = await renderTextAsImage(
             pdfDoc,
@@ -1913,6 +1941,7 @@ export const exportMultiPagePDFDirect = async (
             textEl.fontWeight || 'normal',
             fontSizeInPoints,
             hexColor,
+            strokeOptsMP,
           );
 
           if (textImg) {
@@ -2115,12 +2144,17 @@ export const exportMultiPagePDFServer = async (
 
         const fontSizePts = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
 
+        const strokeOptsSrv = textEl.strokeEnabled && textEl.strokeColor && textEl.strokeWidth
+          ? { color: textEl.strokeColor, width: textEl.strokeWidth }
+          : null;
+
         const rendered = await renderTextAsPng(
           textEl.content,
           textEl.fontFamily || 'Arial',
           textEl.fontWeight || 'normal',
           fontSizePts,
           hexColor,
+          strokeOptsSrv,
         );
 
         if (rendered) {
