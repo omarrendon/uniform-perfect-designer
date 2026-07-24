@@ -398,6 +398,10 @@ export const processExcelFile = async (
           fontWeight: designConfig?.jerseyFrontNumber?.fontWeight ?? "bold",
           opacity: 1,
           side: "front",
+          strokeEnabled: designConfig?.jerseyFrontNumber?.strokeEnabled ?? false,
+          strokeWidth: designConfig?.jerseyFrontNumber?.strokeWidth ?? 2,
+          strokeColor: designConfig?.jerseyFrontNumber?.strokeColor ?? '#ffffff',
+          strokeColorCmyk: designConfig?.jerseyFrontNumber?.strokeColorCmyk,
         };
         stagedTexts.push({ element: numeroFrenteText, parentId: jerseyFrenteId });
       }
@@ -424,30 +428,37 @@ export const processExcelFile = async (
       stagedUniforms.push(newJerseyEspalda);
 
       if (row.numero) {
-        let offsetY: number, fontSize: number;
+        let offsetX: number, offsetY: number, fontSize: number;
+        const centerBackNumber = designConfig?.jerseyBackNumber?.centerHorizontal ?? true;
 
         if (designConfig?.jerseyBackNumber) {
           const cfg = designConfig.jerseyBackNumber;
+          offsetX = centerBackNumber ? 0 : cfg.relativeX * jerseyDimensions.width;
           offsetY = cfg.relativeY * jerseyDimensions.height;
           fontSize = cfg.fontSize * jerseyScale;
         } else if (textPosConfig) {
+          offsetX = centerBackNumber ? 0 : textPosConfig.jerseyBackNumber.offsetX ?? 0;
           offsetY = textPosConfig.jerseyBackNumber.offsetY;
           fontSize = textPosConfig.jerseyBackNumber.fontSize;
         } else {
+          offsetX = 0;
           offsetY = jerseyDimensions.height * 0.35;
           fontSize = 40;
         }
 
-        // El número siempre se centra horizontalmente usando el ancho completo del jersey
-        // (dimensions.width > 450 → TextElement.tsx activa textAlign='center' en Konva).
-        // Así "1" y "10" quedan centrados igual, sin depender del ancho de los glifos.
+        // Cuando centerHorizontal: x=0 + ancho completo activa el centrado automático
+        // en TextElement.tsx (dimensions.width > 450) y en el export PDF.
+        const backNumberWidth = centerBackNumber
+          ? jerseyDimensions.width
+          : Math.ceil(fontSize * String(row.numero).length * 0.75);
+
         const numeroEspaldaText: TextElement = {
           id: generateId("text"),
           type: "text",
           part: "jersey",
           size: tallaMostrar as any,
-          position: { x: 0, y: offsetY },
-          dimensions: { width: jerseyDimensions.width, height: Math.ceil(fontSize * 1.2) },
+          position: { x: offsetX, y: offsetY },
+          dimensions: { width: backNumberWidth, height: Math.ceil(fontSize * 1.2) },
           rotation: 0,
           zIndex: elementCount + 1000,
           locked: false,
@@ -457,10 +468,14 @@ export const processExcelFile = async (
           fontSize,
           fontColor: designConfig?.jerseyBackNumber?.fontColor ?? '#000000',
           fontColorCmyk: designConfig?.jerseyBackNumber?.fontColorCmyk,
-          textAlign: 'center',
+          textAlign: centerBackNumber ? 'center' : (designConfig?.jerseyBackNumber?.textAlign ?? 'center'),
           fontWeight: designConfig?.jerseyBackNumber?.fontWeight ?? "bold",
           opacity: 1,
           side: "back",
+          strokeEnabled: designConfig?.jerseyBackNumber?.strokeEnabled ?? false,
+          strokeWidth: designConfig?.jerseyBackNumber?.strokeWidth ?? 2,
+          strokeColor: designConfig?.jerseyBackNumber?.strokeColor ?? '#ffffff',
+          strokeColorCmyk: designConfig?.jerseyBackNumber?.strokeColorCmyk,
         };
         stagedTexts.push({ element: numeroEspaldaText, parentId: jerseyEspaldaId });
       }
@@ -474,23 +489,27 @@ export const processExcelFile = async (
         const _maxFs = jerseyDimensions.height * 0.11;
         const _minFs = jerseyDimensions.width * 0.04;
 
+        const centerHorizontalEnabled = designConfig?.jerseyBackName?.centerHorizontal ?? false;
+
         if (designConfig?.jerseyBackName) {
           const cfg = designConfig.jerseyBackName;
-          offsetX = cfg.relativeX * jerseyDimensions.width;
+          offsetX = centerHorizontalEnabled ? 0 : cfg.relativeX * jerseyDimensions.width;
           offsetY = cfg.relativeY * jerseyDimensions.height;
           const configFs = cfg.fontSize * jerseyScale;
           const fitFs = _targetW / (nombreTexto.length * _charW);
           fontSize = Math.max(_minFs, Math.min(_maxFs, configFs, fitFs));
         } else {
-          offsetX = textPosConfig?.jerseyBackName.offsetX ?? 0;
+          offsetX = centerHorizontalEnabled ? 0 : (textPosConfig?.jerseyBackName.offsetX ?? 0);
           offsetY = textPosConfig?.jerseyBackName.offsetY ?? jerseyDimensions.height * 0.17;
           fontSize = Math.max(_minFs, Math.min(_maxFs, _targetW / (nombreTexto.length * _charW)));
         }
 
-        // dimensions.width se mantiene < 450 para que Konva no active el centrado automático
-        // (TextElement.tsx pasa width al nodo solo cuando > 450). El texto se posiciona
-        // mediante offsetX (relativeX del modal), no mediante textAlign-centering.
-        const nameWidth = Math.min(400, Math.ceil(fontSize * nombreTexto.length * _charW));
+        // Cuando centerName está activo: ancho = jersey completo + textAlign='center'
+        // El export detecta dimensions.width > 450 para activar el centrado en PDF.
+        // Cuando está inactivo: ancho ajustado al texto (< 450) para no activar centrado.
+        const nameWidth = centerHorizontalEnabled
+          ? jerseyDimensions.width
+          : Math.min(400, Math.ceil(fontSize * nombreTexto.length * _charW));
 
         const nombreEspaldaText: TextElement = {
           id: generateId("text"),
@@ -508,10 +527,14 @@ export const processExcelFile = async (
           fontSize,
           fontColor: designConfig?.jerseyBackName?.fontColor ?? '#000000',
           fontColorCmyk: designConfig?.jerseyBackName?.fontColorCmyk,
-          textAlign: designConfig?.jerseyBackName?.textAlign ?? "center",
+          textAlign: centerHorizontalEnabled ? 'center' : (designConfig?.jerseyBackName?.textAlign ?? "center"),
           fontWeight: designConfig?.jerseyBackName?.fontWeight ?? "bold",
           opacity: 1,
           side: "back",
+          strokeEnabled: designConfig?.jerseyBackName?.strokeEnabled ?? false,
+          strokeWidth: designConfig?.jerseyBackName?.strokeWidth ?? 2,
+          strokeColor: designConfig?.jerseyBackName?.strokeColor ?? '#ffffff',
+          strokeColorCmyk: designConfig?.jerseyBackName?.strokeColorCmyk,
         };
         stagedTexts.push({ element: nombreEspaldaText, parentId: jerseyEspaldaId });
       }
@@ -603,6 +626,10 @@ export const processExcelFile = async (
           fontWeight: designConfig?.shortsNumber?.fontWeight ?? "bold",
           opacity: 1,
           side: "front",
+          strokeEnabled: designConfig?.shortsNumber?.strokeEnabled ?? false,
+          strokeWidth: designConfig?.shortsNumber?.strokeWidth ?? 2,
+          strokeColor: designConfig?.shortsNumber?.strokeColor ?? '#ffffff',
+          strokeColorCmyk: designConfig?.shortsNumber?.strokeColorCmyk,
         };
         stagedTexts.push({ element: numeroShortRightText, parentId: shortParentId });
       }

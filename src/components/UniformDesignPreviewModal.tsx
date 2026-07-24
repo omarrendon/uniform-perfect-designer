@@ -46,6 +46,9 @@ export const DEFAULT_DESIGN_CONFIG: UniformDesignConfig = {
     fontColor: '#000000',
     fontWeight: 'bold',
     textAlign: 'center',
+    strokeEnabled: false,
+    strokeWidth: 2,
+    strokeColor: '#ffffff',
   },
   jerseyBackNumber: {
     enabled: true,
@@ -56,16 +59,24 @@ export const DEFAULT_DESIGN_CONFIG: UniformDesignConfig = {
     fontColor: '#000000',
     fontWeight: 'bold',
     textAlign: 'center',
+    strokeEnabled: false,
+    strokeWidth: 2,
+    strokeColor: '#ffffff',
+    centerHorizontal: true,
   },
   jerseyBackName: {
     enabled: true,
     relativeX: 189 / M_JERSEY_W,
     relativeY: 130 / M_JERSEY_H,
     fontFamily: 'Arial',
-    fontSize: 94.59,
+    fontSize: 60,
     fontColor: '#000000',
     fontWeight: 'bold',
     textAlign: 'center',
+    strokeEnabled: false,
+    strokeWidth: 2,
+    strokeColor: '#ffffff',
+    centerHorizontal: false,
   },
   shortsNumber: {
     enabled: false,
@@ -77,6 +88,9 @@ export const DEFAULT_DESIGN_CONFIG: UniformDesignConfig = {
     fontColor: '#000000',
     fontWeight: 'bold',
     textAlign: 'center',
+    strokeEnabled: false,
+    strokeWidth: 2,
+    strokeColor: '#ffffff',
   },
 };
 
@@ -384,6 +398,186 @@ const TextSection: React.FC<TextSectionProps> = ({
             </div>
           </div>
 
+          {/* Centrado automático — número y nombre de espalda */}
+          {(configKey === 'jerseyBackName' || configKey === 'jerseyBackNumber') && (
+            <div style={{
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              overflow: 'hidden',
+            }}>
+              <div
+                onClick={() => onChange({ centerHorizontal: !(config as any).centerHorizontal })}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 10px',
+                  backgroundColor: (config as any).centerHorizontal ? '#f0f9ff' : '#f9fafb',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#374151', display: 'block' }}>
+                    Centrar en playera
+                  </span>
+                  <span style={{ fontSize: '10px', color: '#6b7280' }}>
+                    Ideal para nombres cortos — centra dentro del ancho completo
+                  </span>
+                </div>
+                <div style={{
+                  width: '32px', height: '18px',
+                  borderRadius: '9px',
+                  backgroundColor: (config as any).centerHorizontal ? '#3b82f6' : '#d1d5db',
+                  position: 'relative',
+                  transition: 'background-color 0.2s',
+                  flexShrink: 0,
+                  marginLeft: '8px',
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: '2px',
+                    left: (config as any).centerHorizontal ? '16px' : '2px',
+                    width: '14px', height: '14px',
+                    borderRadius: '50%',
+                    backgroundColor: 'white',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    transition: 'left 0.2s',
+                  }} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Contorno */}
+          <div style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            overflow: 'hidden',
+          }}>
+            {/* Toggle de contorno */}
+            <div
+              onClick={() => onChange({ strokeEnabled: !config.strokeEnabled })}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '8px 10px',
+                backgroundColor: config.strokeEnabled ? '#f0fdf4' : '#f9fafb',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <span style={{ fontSize: '11px', fontWeight: '600', color: '#374151' }}>Contorno</span>
+              <div style={{
+                width: '32px', height: '18px',
+                borderRadius: '9px',
+                backgroundColor: config.strokeEnabled ? '#22c55e' : '#d1d5db',
+                position: 'relative',
+                transition: 'background-color 0.2s',
+                flexShrink: 0,
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: config.strokeEnabled ? '16px' : '2px',
+                  width: '14px', height: '14px',
+                  borderRadius: '50%',
+                  backgroundColor: 'white',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+            </div>
+
+            {config.strokeEnabled && (
+              <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'white' }}>
+
+                {/* Ancho del contorno */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '11px', color: '#6b7280' }}>Ancho del contorno</label>
+                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#374151', fontFamily: 'monospace' }}>
+                      {(config.strokeWidth ?? 2).toFixed(1)} px
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="10"
+                    step="0.5"
+                    value={config.strokeWidth ?? 2}
+                    onChange={e => onChange({ strokeWidth: Number(e.target.value) })}
+                    style={{ width: '100%', accentColor: '#22c55e', height: '4px' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                    <span style={{ fontSize: '10px', color: '#9ca3af' }}>0.5 px</span>
+                    <span style={{ fontSize: '10px', color: '#9ca3af' }}>10 px (máx. 1 cm)</span>
+                  </div>
+                </div>
+
+                {/* Color del contorno (CMYK) */}
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6b7280', display: 'block', marginBottom: '6px' }}>Color del contorno (CMYK)</label>
+                  {(() => {
+                    const strokeHex = config.strokeColor || '#ffffff';
+                    const cmyk: CmykColor = config.strokeColorCmyk ?? hexToCMYK(strokeHex);
+                    const channels: { key: keyof CmykColor; label: string; color: string }[] = [
+                      { key: 'c', label: 'C', color: '#06b6d4' },
+                      { key: 'm', label: 'M', color: '#ec4899' },
+                      { key: 'y', label: 'Y', color: '#eab308' },
+                      { key: 'k', label: 'K', color: '#374151' },
+                    ];
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '6px',
+                            backgroundColor: strokeHex,
+                            border: '1px solid #d1d5db', flexShrink: 0,
+                          }} />
+                          <span style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>
+                            {strokeHex.toUpperCase()}
+                          </span>
+                        </div>
+                        {channels.map(({ key, label, color }) => (
+                          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: '700', color, width: '12px', flexShrink: 0 }}>{label}</span>
+                            <input
+                              type="range" min="0" max="100"
+                              value={cmyk[key]}
+                              onChange={e => {
+                                const newCmyk = { ...cmyk, [key]: Number(e.target.value) };
+                                onChange({
+                                  strokeColorCmyk: newCmyk,
+                                  strokeColor: cmykToHex(newCmyk.c, newCmyk.m, newCmyk.y, newCmyk.k),
+                                });
+                              }}
+                              style={{ flex: 1, accentColor: color, height: '4px' }}
+                            />
+                            <input
+                              type="number" min="0" max="100"
+                              value={cmyk[key]}
+                              onChange={e => {
+                                const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                                const newCmyk = { ...cmyk, [key]: val };
+                                onChange({
+                                  strokeColorCmyk: newCmyk,
+                                  strokeColor: cmykToHex(newCmyk.c, newCmyk.m, newCmyk.y, newCmyk.k),
+                                });
+                              }}
+                              style={{
+                                width: '44px', padding: '3px 4px', fontSize: '11px',
+                                border: '1px solid #d1d5db', borderRadius: '4px', textAlign: 'right',
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+              </div>
+            )}
+          </div>
+
           <p style={{ fontSize: '11px', color: '#9ca3af', margin: 0 }}>
             Arrastra el texto en el canvas para reposicionarlo
           </p>
@@ -612,12 +806,25 @@ export const UniformDesignPreviewModal: React.FC<UniformDesignPreviewModalProps>
                     const displayFontSize = getDisplayFontSize(el);
                     const isSelected = selectedKey === key;
                     const isShortRight = key === 'shortsNumber' && config.shortsNumber.side === 'right';
+                    const isCentered = (key === 'jerseyBackName' || key === 'jerseyBackNumber') && !!(el as any).centerHorizontal;
+
+                    const userStrokeWidth = el.strokeEnabled ? ((el.strokeWidth ?? 2) * DISPLAY_SCALE) : 0;
+                    const userStrokeColor = el.strokeEnabled ? (el.strokeColor || '#ffffff') : undefined;
+
+                    // Cuando está centrado: anclar X al borde izquierdo de la pieza
+                    // y usar width + align para que Konva centre automáticamente
+                    const textX = isCentered ? piece.x : pos.x;
+                    const textY = isCentered ? piece.y + el.relativeY * piece.height : pos.y;
+                    const textWidth = isCentered ? piece.width : undefined;
+                    const textAlign = isCentered ? 'center' : 'left';
 
                     return (
                       <KonvaText
                         key={key}
-                        x={pos.x}
-                        y={pos.y}
+                        x={textX}
+                        y={textY}
+                        width={textWidth}
+                        align={textAlign}
                         text={SAMPLE_CONTENT[key]}
                         fontSize={displayFontSize}
                         fontFamily={el.fontFamily}
@@ -625,17 +832,33 @@ export const UniformDesignPreviewModal: React.FC<UniformDesignPreviewModalProps>
                         fontStyle={el.fontWeight === 'bold' ? 'bold' : 'normal'}
                         rotation={isShortRight ? 180 : 0}
                         draggable
-                        strokeWidth={isSelected ? 1 : 0}
-                        stroke={isSelected ? '#3b82f6' : undefined}
+                        stroke={userStrokeColor}
+                        strokeWidth={userStrokeWidth}
+                        shadowColor={isSelected ? '#3b82f6' : undefined}
+                        shadowBlur={isSelected ? 6 : 0}
+                        shadowOpacity={isSelected ? 0.8 : 0}
                         onClick={() => setSelectedKey(isSelected ? null : key)}
                         onTap={() => setSelectedKey(isSelected ? null : key)}
                         dragBoundFunc={(rawPos) => {
-                          // Clampar dentro de la pieza
+                          if (isCentered) {
+                            // Solo se puede mover verticalmente
+                            return {
+                              x: piece.x,
+                              y: Math.max(piece.y, Math.min(piece.y + piece.height - displayFontSize, rawPos.y)),
+                            };
+                          }
                           const clampedX = Math.max(piece.x, Math.min(piece.x + piece.width - 4, rawPos.x));
                           const clampedY = Math.max(piece.y, Math.min(piece.y + piece.height - displayFontSize, rawPos.y));
                           return { x: clampedX, y: clampedY };
                         }}
                         onDragEnd={e => {
+                          if (isCentered) {
+                            // Solo guardar la posición Y
+                            const newRelY = Math.max(0, Math.min(1, (e.target.y() - piece.y) / piece.height));
+                            updateElement(key, { relativeY: newRelY } as any);
+                            return;
+                          }
+
                           let newRelX = Math.max(0, Math.min(1, (e.target.x() - piece.x) / piece.width));
                           let newRelY = Math.max(0, Math.min(1, (e.target.y() - piece.y) / piece.height));
 
