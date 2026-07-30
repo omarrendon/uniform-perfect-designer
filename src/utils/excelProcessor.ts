@@ -358,7 +358,7 @@ export const processExcelFile = async (
       };
       stagedUniforms.push(newJerseyFrente);
 
-      if (row.numero) {
+      if (row.numero && (designConfig?.jerseyFrontNumber?.enabled ?? true)) {
         let offsetX: number, offsetY: number, fontSize: number;
 
         if (designConfig?.jerseyFrontNumber) {
@@ -427,7 +427,7 @@ export const processExcelFile = async (
       };
       stagedUniforms.push(newJerseyEspalda);
 
-      if (row.numero) {
+      if (row.numero && (designConfig?.jerseyBackNumber?.enabled ?? true)) {
         let offsetX: number, offsetY: number, fontSize: number;
         const centerBackNumber = designConfig?.jerseyBackNumber?.centerHorizontal ?? true;
 
@@ -480,7 +480,7 @@ export const processExcelFile = async (
         stagedTexts.push({ element: numeroEspaldaText, parentId: jerseyEspaldaId });
       }
 
-      if (row.nombre) {
+      if (row.nombre && (designConfig?.jerseyBackName?.enabled ?? true)) {
         let offsetX: number, offsetY: number, fontSize: number;
         const nombreTexto = String(row.nombre).toUpperCase();
 

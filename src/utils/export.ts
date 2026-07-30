@@ -2232,11 +2232,9 @@ export const exportMultiPagePDFServer = async (
     if (options.onProgress) options.onProgress(pageIndex + 1, totalPages);
   };
 
-  // Enviar de a 3 páginas en paralelo para no saturar Railway ni acumular un payload gigante
-  const CONCURRENCY = 3;
-  for (let i = 0; i < totalPages; i += CONCURRENCY) {
-    const batch = Array.from({ length: Math.min(CONCURRENCY, totalPages - i) }, (_, k) => i + k);
-    await Promise.all(batch.map(sendPage));
+  // Procesar páginas secuencialmente: cada request es pequeño, sin race conditions en el cache SVG
+  for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+    await sendPage(pageIndex);
   }
 };
 
