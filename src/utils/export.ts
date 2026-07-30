@@ -156,7 +156,8 @@ const renderTextAsPng = async (
     const extraBottom = Math.max(0, glyphBelow - midY);
 
     // Padding extra para que el stroke no se corte en los bordes
-    const strokePad = strokeOpts ? Math.ceil(strokeOpts.width * SCALE) : 0;
+    // strokeOpts.width viene en puntos (igual que fontSizePts), se escala con PTS_TO_CSS_PX * SCALE
+    const strokePad = strokeOpts ? Math.ceil(strokeOpts.width * PTS_TO_CSS_PX * SCALE) : 0;
 
     const left  = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft)) + 2 + strokePad;
     const right = Math.ceil(m.actualBoundingBoxRight) + 2 + strokePad;
@@ -181,7 +182,7 @@ const renderTextAsPng = async (
       const sg = parseInt(strokeOpts.color.slice(3, 5), 16);
       const sb = parseInt(strokeOpts.color.slice(5, 7), 16);
       ctx2.strokeStyle = `rgb(${sr},${sg},${sb})`;
-      ctx2.lineWidth = strokeOpts.width * SCALE;
+      ctx2.lineWidth = strokeOpts.width * PTS_TO_CSS_PX * SCALE;
       ctx2.lineJoin = 'round';
       ctx2.miterLimit = 2;
       ctx2.strokeText(text, left, drawY);
@@ -1375,7 +1376,7 @@ export const exportAsPDFDirect = async (
 
         // Renderizar texto como imagen PNG usando el navegador (garantiza fuente correcta)
         const strokeOpts = textEl.strokeEnabled && textEl.strokeColor && textEl.strokeWidth
-          ? { color: textEl.strokeColor, width: textEl.strokeWidth }
+          ? { color: textEl.strokeColor, width: (textEl.strokeWidth / canvasConfig.pixelsPerCm) * 28.35 }
           : null;
 
         const textImg = await renderTextAsImage(
@@ -1930,7 +1931,7 @@ export const exportMultiPagePDFDirect = async (
           const hexColor = textEl.fontColor || '#000000';
 
           const strokeOptsMP = textEl.strokeEnabled && textEl.strokeColor && textEl.strokeWidth
-            ? { color: textEl.strokeColor, width: textEl.strokeWidth }
+            ? { color: textEl.strokeColor, width: (textEl.strokeWidth / canvasConfig.pixelsPerCm) * 28.35 }
             : null;
 
           // Renderizar texto como imagen PNG usando el navegador (garantiza fuente correcta)
@@ -2141,7 +2142,7 @@ export const exportMultiPagePDFServer = async (
         const fontSizePts = (textEl.fontSize / canvasConfig.pixelsPerCm) * 28.35;
 
         const strokeOptsSrv = textEl.strokeEnabled && textEl.strokeColor && textEl.strokeWidth
-          ? { color: textEl.strokeColor, width: textEl.strokeWidth }
+          ? { color: textEl.strokeColor, width: (textEl.strokeWidth / canvasConfig.pixelsPerCm) * 28.35 }
           : null;
 
         const rendered = await renderTextAsPng(

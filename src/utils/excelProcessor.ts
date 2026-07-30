@@ -446,6 +446,17 @@ export const processExcelFile = async (
           fontSize = 40;
         }
 
+        // Auto-fit: reducir fontSize si el número excede el ancho de la playera
+        // (mismo patrón que jerseyBackName). Para 1-2 dígitos nunca se activa;
+        // para 3+ dígitos con font grande evita que se salga del borde.
+        const numStr = String(row.numero);
+        const _charWNum = 0.65; // ratio ancho-dígito / font-size (dígitos son más estrechos que letras)
+        const _targetWNum = jerseyDimensions.width * 0.90;
+        const _maxFsNum = fontSize;
+        const _minFsNum = jerseyDimensions.width * 0.08;
+        const fitFsNum = _targetWNum / (numStr.length * _charWNum);
+        fontSize = Math.max(_minFsNum, Math.min(_maxFsNum, fitFsNum));
+
         // Cuando centerHorizontal: x=0 + ancho completo activa el centrado automático
         // en TextElement.tsx (dimensions.width > 450) y en el export PDF.
         const backNumberWidth = centerBackNumber
