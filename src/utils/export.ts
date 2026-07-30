@@ -2061,7 +2061,7 @@ export const exportMultiPagePDFServer = async (
   const cmykConfig = getGlobalCMYKConfig();
   const totalPages = store.pages.length;
 
-  // Cache SVG→PNG para no rasterizar la misma imagen varias veces
+  // Cache SVG→PNG para no rasterizar la misma imagen varias veces (compartido entre páginas)
   const svgToPngCache = new Map<string, string>();
 
   const rasterizeSvg = async (svgUrl: string, widthPx: number, heightPx: number): Promise<string> => {
@@ -2075,11 +2075,7 @@ export const exportMultiPagePDFServer = async (
     return png;
   };
 
-  const pages: PagePayload[] = [];
-
-  for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-    if (options.onProgress) options.onProgress(pageIndex + 1, totalPages);
-
+  const serializePage = async (pageIndex: number): Promise<PagePayload> => {
     const elements = store.pages[pageIndex] || [];
     const heightCm = store.getPageHeight(pageIndex);
     const serializedElements: ElementPayload[] = [];
@@ -2199,33 +2195,48 @@ export const exportMultiPagePDFServer = async (
       }
     }
 
-    pages.push({ pageIndex, heightCm, elements: serializedElements });
-  }
+    return { pageIndex, heightCm, elements: serializedElements };
+  };
 
-  // Enviar al servidor
-  const response = await fetch(`${serverUrl}/api/export-pdf`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pages, canvasConfig, cmykConfig }),
-  });
+  const sendPage = async (pageIndex: number): Promise<void> => {
+    const page = await serializePage(pageIndex);
+    const body = JSON.stringify({ pages: [page], canvasConfig, cmykConfig });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    throw new Error(err.error ?? `Error del servidor: ${response.status}`);
-  }
+    const sizeMB = (body.length / (1024 * 1024)).toFixed(2);
+    console.log(`[export-pdf] Página ${pageIndex + 1} — tamaño total: ${sizeMB} MB`);
 
-  const { pages: resultPages } = await response.json();
+    const response = await fetch(`${serverUrl}/api/export-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
 
-  // Descargar cada página como archivo separado
-  for (const resultPage of resultPages) {
-    const bytes = Uint8Array.from(atob(resultPage.pdfBase64), c => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = resultPage.fileName;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(`Página ${pageIndex + 1}: ${err.error ?? `Error del servidor: ${response.status}`}`);
+    }
+
+    const { pages: resultPages } = await response.json();
+
+    for (const resultPage of resultPages) {
+      const bytes = Uint8Array.from(atob(resultPage.pdfBase64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = resultPage.fileName;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    if (options.onProgress) options.onProgress(pageIndex + 1, totalPages);
+  };
+
+  // Enviar de a 3 páginas en paralelo para no saturar Railway ni acumular un payload gigante
+  const CONCURRENCY = 3;
+  for (let i = 0; i < totalPages; i += CONCURRENCY) {
+    const batch = Array.from({ length: Math.min(CONCURRENCY, totalPages - i) }, (_, k) => i + k);
+    await Promise.all(batch.map(sendPage));
   }
 };
 
