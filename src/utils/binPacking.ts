@@ -1,5 +1,5 @@
 import type { CanvasElement, Position, Dimensions, CanvasConfig } from "../types";
-import type { UniformTemplate } from "../types";
+import type { UniformTemplate, Size } from "../types";
 import { cmToPixels } from "./canvas";
 import { type BitmapMask, BITMAP_SCALE, masksOverlap } from "./svgBitmap";
 
@@ -408,8 +408,10 @@ export function optimizeLayoutAdvanced(
   const gap          = finalOptions.elementGap;
 
   // ── Clasificadores ───────────────────────────────────────────────────────
-  const XL_SIZES = new Set(['XL', 'XG', '2XL', '2XG', '3XL', '3XG']);
-  const isXL    = (el: CanvasElement) => XL_SIZES.has((el as UniformTemplate).size as string);
+  // Tallas grandes: se acomodan en filas propias antes del MaxRects porque no
+  // caben junto a las chicas sin desperdiciar ancho de pliego.
+  const XL_SIZES = new Set<Size>(['XL', 'XXL', '3XL', '4XL']);
+  const isXL    = (el: CanvasElement) => XL_SIZES.has((el as UniformTemplate).size);
   const isShort  = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'shorts';
   const isJrsy   = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'jersey';
   const isCollar = (el: CanvasElement) => el.type === 'uniform' && (el as UniformTemplate).part === 'collar';

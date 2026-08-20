@@ -392,8 +392,34 @@ const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
 const COLLAR_W = 650; // 65 cm × 10 px/cm
 const COLLAR_H =  60; //  6 cm × 10 px/cm
 
-// Configuraciones de tallas HOMBRE — Medidas oficiales TABLA-TALLAS.xlsx (jun 2026)
+// Configuraciones de tallas HOMBRE
+//
+// PROCEDENCIA DE LAS MEDIDAS — importante antes de imprimir:
+//   S, M, L, XL  → oficiales, TABLA-TALLAS.xlsx (jun 2026). Verificadas al centésimo
+//                  contra el trazo vectorial de ambos PDF de patronaje.
+//   XS, XXL,     → playera: MEDIDAS DE TALLAS DE CABALLERO.pdf (ago 2026)
+//   3XL, 4XL       shorts:  MEDIDAS TALLAS PARA CABALLERO SHORT FUTBOL.pdf (ago 2026)
+//                  Ambas medidas del trazo vectorial, exactas.
+//                  manga: DERIVADA, única pieza sin documento de patronaje.
+//
+// DERIVACIÓN de la manga en las tallas nuevas:
+//   S→XL avanza en pasos constantes (+18.71/+10.90 px) y se continuó esa progresión.
+//   Se eligió progresión lineal porque la playera —la prenda de la que la manga forma
+//   parte— sí es lineal en las 8 tallas medidas. Ojo: el short NO lo es (su paso se
+//   acelera de +31.33 a +33.88 px después de XL), así que si aparece un PDF de mangas
+//   es probable que estos valores queden cortos en 3XL/4XL.
+//   XS no sigue el paso de las demás: mide 0.9587× la S en playera y 0.9577× en short;
+//   para la manga se usó el factor de la playera.
+//   El ratio ancho/alto se conserva en todas (playera 0.7206, short 1.3755, manga 1.7171),
+//   que es la condición para que Konva escale la plantilla única sin distorsión.
 const SIZE_CONFIGS_HOMBRE: SizeConfig[] = [
+  {
+    size: "XS", gender: "Hombre",
+    width: 513.61, height: 712.73,         // Playera: 51.361cm × 71.273cm — PDF caballero
+    shortsWidth: 690.00, shortsHeight: 501.63, // Shorts: 69.00cm  × 50.163cm — PDF shorts
+    sleeveWidth: 412.54, sleeveHeight: 240.25, // Manga:  41.254cm × 24.025cm — DERIVADO
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
   {
     size: "S", gender: "Hombre",
     width: 535.75, height: 743.44,         // Playera: 53.575cm × 74.344cm
@@ -422,10 +448,52 @@ const SIZE_CONFIGS_HOMBRE: SizeConfig[] = [
     sleeveWidth: 486.45, sleeveHeight: 283.29, // Manga:  48.645cm × 28.329cm
     collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
+  {
+    size: "XXL", gender: "Hombre",
+    width: 628.92, height: 872.74,         // Playera: 62.892cm × 87.274cm — PDF caballero
+    shortsWidth: 847.06, shortsHeight: 615.81, // Shorts: 84.706cm × 61.581cm — PDF shorts
+    sleeveWidth: 505.16, sleeveHeight: 294.19, // Manga:  50.516cm × 29.419cm — DERIVADO
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
+  {
+    size: "3XL", gender: "Hombre",
+    width: 652.21, height: 905.06,         // Playera: 65.221cm × 90.506cm — PDF caballero
+    shortsWidth: 880.94, shortsHeight: 640.44, // Shorts: 88.094cm × 64.044cm — PDF shorts
+    sleeveWidth: 523.87, sleeveHeight: 305.08, // Manga:  52.387cm × 30.508cm — DERIVADO
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
+  {
+    size: "4XL", gender: "Hombre",
+    width: 675.51, height: 937.38,         // Playera: 67.551cm × 93.738cm — PDF caballero
+    shortsWidth: 914.82, shortsHeight: 665.08, // Shorts: 91.482cm × 66.508cm — PDF shorts
+    sleeveWidth: 542.58, sleeveHeight: 315.98, // Manga:  54.258cm × 31.598cm — DERIVADO
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
 ];
 
-// Configuraciones de tallas MUJER — Medidas oficiales TABLA-TALLAS.xlsx (jun 2026)
+// Configuraciones de tallas MUJER
+//
+// PROCEDENCIA: S, M, L, XL son oficiales (TABLA-TALLAS.xlsx, jun 2026).
+// XS, XXL, 3XL y 4XL están COMPLETAS por derivación — no existe documento de dama
+// para esas tallas. Validar con patronista antes de mandar a producción.
+//
+// Método por pieza:
+//   shorts  → se aplicó, talla por talla, el factor de crecimiento real que el PDF
+//             de caballero muestra respecto a XL (×1.0400, ×1.0816, ×1.1232) y
+//             respecto a S para XS (×0.9577). No se extrapola linealmente porque el
+//             short se acelera después de XL.
+//   playera → progresión lineal de S→XL (+25.05/+34.59 px), que es como se comporta
+//             la playera de caballero en las 8 tallas medidas; XS con factor 0.9587.
+//   manga   → misma progresión lineal (+19.14/+11.29 px).
+// Los ratios se conservan (playera 0.7242, shorts 1.3784, manga 1.6952).
 const SIZE_CONFIGS_MUJER: SizeConfig[] = [
+  {
+    size: "XS", gender: "Mujer",
+    width: 480.33, height: 663.22,         // Playera: 48.033cm × 66.322cm — DERIVADO
+    shortsWidth: 641.37, shortsHeight: 465.32, // Shorts: 64.137cm × 46.532cm — DERIVADO
+    sleeveWidth: 367.00, sleeveHeight: 216.50, // Manga:  36.70cm  × 21.65cm  — DERIVADO
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
   {
     size: "S", gender: "Mujer",
     width: 501.03, height: 691.80,         // Playera: 50.103cm × 69.18cm
@@ -452,6 +520,27 @@ const SIZE_CONFIGS_MUJER: SizeConfig[] = [
     width: 576.18, height: 795.56,         // Playera: 57.618cm × 79.556cm
     shortsWidth: 781.34, shortsHeight: 566.87, // Shorts: 78.134cm × 56.687cm
     sleeveWidth: 440.24, sleeveHeight: 259.70, // Manga:  44.024cm × 25.97cm
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
+  {
+    size: "XXL", gender: "Mujer",
+    width: 601.23, height: 830.15,         // Playera: 60.123cm × 83.015cm — DERIVADO
+    shortsWidth: 812.59, shortsHeight: 589.54, // Shorts: 81.259cm × 58.954cm — DERIVADO
+    sleeveWidth: 459.38, sleeveHeight: 270.99, // Manga:  45.938cm × 27.099cm — DERIVADO
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
+  {
+    size: "3XL", gender: "Mujer",
+    width: 626.28, height: 864.73,         // Playera: 62.628cm × 86.473cm — DERIVADO
+    shortsWidth: 845.10, shortsHeight: 613.12, // Shorts: 84.51cm  × 61.312cm — DERIVADO
+    sleeveWidth: 478.52, sleeveHeight: 282.28, // Manga:  47.852cm × 28.228cm — DERIVADO
+    collarWidth: COLLAR_W, collarHeight: COLLAR_H,
+  },
+  {
+    size: "4XL", gender: "Mujer",
+    width: 651.33, height: 899.32,         // Playera: 65.133cm × 89.932cm — DERIVADO
+    shortsWidth: 877.60, shortsHeight: 636.71, // Shorts: 87.76cm  × 63.671cm — DERIVADO
+    sleeveWidth: 497.66, sleeveHeight: 293.57, // Manga:  49.766cm × 29.357cm — DERIVADO
     collarWidth: COLLAR_W, collarHeight: COLLAR_H,
   },
 ];
@@ -1092,12 +1181,21 @@ export const useDesignerStore = create<DesignerState>()(
         name: "designer-storage-v8", // uniformSizesConfig NO se persiste (solo en memoria)
         partialize: state => ({
           canvasConfig: state.canvasConfig,
-          sizeConfigs: state.sizeConfigs,
+          // sizeConfigs: NO se persiste — es una tabla estática del código. Persistirla
+          // congelaba las medidas: al agregar tallas nuevas los usuarios seguían
+          // rehidratando la tabla vieja desde localStorage.
           // uniformSizesConfig: NO se guarda en localStorage para evitar problemas de espacio
           showGrid: state.showGrid,
           uniformDesignConfig: state.uniformDesignConfig,
           userFonts: state.userFonts,
         }),
+        // Descarta el sizeConfigs que quedó guardado por versiones anteriores, sin
+        // tirar el resto del estado (fuentes del usuario, diseño, canvas).
+        merge: (persisted, current) => {
+          const resto = { ...(persisted ?? {}) } as Partial<DesignerState>;
+          delete resto.sizeConfigs;
+          return { ...current, ...resto };
+        },
       }
     )
   )

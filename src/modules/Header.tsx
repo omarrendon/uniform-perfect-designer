@@ -221,6 +221,10 @@ export const Header: React.FC = () => {
             },
           });
         } else {
+          console.warn(
+            '[export] VITE_PDF_SERVER_URL no está configurado: usando el pipeline local, ' +
+            'que genera PDF en RGB. No apto para imprenta — ver exportMultiPagePDFDirect().'
+          );
           await exportMultiPagePDFDirect({
             canvasWidth: canvasConfig.width,
             canvasHeight: canvasConfig.height,
@@ -2467,6 +2471,27 @@ export const Header: React.FC = () => {
                     }
                   `}
                 </style>
+                {/* Sin servidor de PDF, la exportación cae al pipeline local, que
+                    embebe todo en RGB. Sirve para revisar, no para mandar a imprenta. */}
+                {!import.meta.env.VITE_PDF_SERVER_URL && (
+                  <div
+                    style={{
+                      padding: "8px 10px",
+                      marginBottom: "6px",
+                      backgroundColor: "#422006",
+                      border: "1px solid #a16207",
+                      borderRadius: "6px",
+                      color: "#fde68a",
+                      fontSize: "11px",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    <strong>PDF en RGB</strong>
+                    <br />
+                    Servidor de PDF no configurado. La salida es solo para revisión —
+                    no usar para imprenta.
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     handleExport("png");

@@ -41,13 +41,19 @@ Hasta que las 4 estén cargadas, el botón "Procesar" estará deshabilitado.
 
 Acepta formato español o inglés, en mayúsculas o minúsculas:
 
-| Español | Inglés equivalente |
-|---|---|
-| `XCH` | `XS` |
-| `CH` | `S` |
-| `M` | `M` |
-| `G` | `L` |
-| `XG` | `XL` |
+| Español | Inglés equivalente | Otros alias aceptados |
+|---|---|---|
+| `XCH` | `XS` | — |
+| `CH` | `S` | — |
+| `M` | `M` | — |
+| `G` | `L` | — |
+| `XG` | `XL` | — |
+| `2XG` | `XXL` | `2XL`, `XXG` |
+| `3XG` | `3XL` | `XXXL` |
+| `4XG` | `4XL` | — |
+
+Si el valor no corresponde a ninguna talla conocida, la fila usa la configuración
+por defecto (M Hombre) en lugar de fallar.
 
 ### Columnas opcionales
 
@@ -70,18 +76,43 @@ Acepta formato español o inglés, en mayúsculas o minúsculas:
 
 La plantilla se carga una sola vez y Konva escala la imagen a las dimensiones exactas de cada talla. Esto es posible porque todas las tallas mantienen la misma proporción:
 
-- **Playera**: ratio ~0.718 (todos los tamaños)  
-- **Shorts**: ratio ~1.433 (todos los tamaños)
+- **Playera**: ratio 0.7206 en Hombre, 0.7242 en Mujer (constante en las 8 tallas)
+- **Shorts**: ratio 1.3755 en Hombre, 1.3784 en Mujer (constante en las 8 tallas)
 
-Las dimensiones reales por talla (en píxeles, `pixelsPerCm = 10`):
+Las dimensiones reales por talla (en píxeles, `pixelsPerCm = 10`). Fuente de verdad:
+`SIZE_CONFIGS_HOMBRE` / `SIZE_CONFIGS_MUJER` en `src/store/desingerStore.ts`.
 
-| Talla | Playera (w×h) | Shorts (w×h) |
-|---|---|---|
-| XCH / XS | 513×714 | 780×544 |
-| CH / S | 540×752 | 821×572 |
-| M | 568×791 | 863×602 |
-| G / L | 599×834 | 906×632 |
-| XG / XL | 629×875 | 952×664 |
+**Hombre**
+
+| Talla | Playera (w×h) | Shorts (w×h) | Manga (w×h) |
+|---|---|---|---|
+| XCH / XS | 513.61×712.73 | 690.00×501.63 | 412.54×240.25 |
+| CH / S | 535.75×743.44 | 720.50×523.80 | 430.32×250.60 |
+| M | 559.04×775.77 | 751.83×546.58 | 449.03×261.49 |
+| G / L | 582.33×808.09 | 783.15×569.35 | 467.74×272.39 |
+| XG / XL | 605.63×840.41 | 814.48×592.13 | 486.45×283.29 |
+| 2XG / XXL | 628.92×872.74 | 847.06×615.81 | 505.16×294.19 |
+| 3XG / 3XL | 652.21×905.06 | 880.94×640.44 | 523.87×305.08 |
+| 4XG / 4XL | 675.51×937.38 | 914.82×665.08 | 542.58×315.98 |
+
+**Mujer**
+
+| Talla | Playera (w×h) | Shorts (w×h) | Manga (w×h) |
+|---|---|---|---|
+| XCH / XS | 480.33×663.22 | 641.37×465.32 | 367.00×216.50 |
+| CH / S | 501.03×691.80 | 669.72×485.89 | 382.82×225.83 |
+| M | 526.08×726.39 | 706.93×512.88 | 401.96×237.12 |
+| G / L | 551.13×760.98 | 744.14×539.88 | 421.10×248.41 |
+| XG / XL | 576.18×795.56 | 781.34×566.87 | 440.24×259.70 |
+| 2XG / XXL | 601.23×830.15 | 812.59×589.54 | 459.38×270.99 |
+| 3XG / 3XL | 626.28×864.73 | 845.10×613.12 | 478.52×282.28 |
+| 4XG / 4XL | 651.33×899.32 | 877.60×636.71 | 497.66×293.57 |
+
+> ⚠️ **Medidas derivadas.** En Hombre, playera y short de XS/XXL/3XL/4XL vienen de
+> documentos de patronaje (`MEDIDAS DE TALLAS DE CABALLERO.pdf` y
+> `MEDIDAS TALLAS PARA CABALLERO SHORT FUTBOL.pdf`, ago 2026) y son exactos.
+> Siguen derivados: la **manga** de Hombre en esas 4 tallas y **toda la columna de
+> Mujer**. Validar con patronista antes de mandar a producción.
 
 ---
 

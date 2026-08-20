@@ -22,6 +22,8 @@ import type {
   UniformTemplate,
   CanvasElement,
 } from "../types";
+import { SIZE_ORDER } from "../types";
+import { normalizeSize } from "../utils/designMapper";
 import {
   generateId,
   findValidPosition,
@@ -225,28 +227,7 @@ export const Toolbar: React.FC = () => {
 
       // Función para obtener la configuración de talla
       const getSizeConfig = (tallaExcel: string, genero: 'Hombre' | 'Mujer') => {
-        const tallaUpper = tallaExcel.toUpperCase().trim();
-
-        // Mapeo de tallas en español a inglés (XS/XCH → S por eliminación de XS)
-        const tallaMapping: { [key: string]: Size } = {
-          // Español
-          'XCH': 'S',
-          'CH': 'S',
-          'M': 'M',
-          'G': 'L',
-          'XG': 'XL',
-          '2XG': 'XL',
-          '3XG': 'XL',
-          // Inglés (también soportado)
-          'XS': 'S',
-          'S': 'S',
-          'L': 'L',
-          'XL': 'XL',
-          '2XL': 'XL',
-          '3XL': 'XL',
-        };
-
-        const tallaMapped = tallaMapping[tallaUpper] || tallaUpper as Size;
+        const tallaMapped = normalizeSize(tallaExcel) ?? (tallaExcel.toUpperCase().trim() as Size);
 
         return (
           sizeConfigs.find(s => s.size === tallaMapped && s.gender === genero) ||
@@ -309,7 +290,9 @@ export const Toolbar: React.FC = () => {
         const tallaExcel = row.talla || "m";
         const genero = excelToGender(row.genero);
         const sizeConfig = getSizeConfig(tallaExcel, genero);
-        const tallaMostrar = tallaExcel.toUpperCase().trim();
+        // Talla canónica: los elementos guardan siempre 'XS'|'S'|…|'4XL', nunca el alias
+        // crudo del Excel ('XG', '2XL'…), para que binPacking y la UI comparen un solo valor.
+        const tallaMostrar = normalizeSize(tallaExcel) ?? (String(tallaExcel).toUpperCase().trim() as Size);
 
         const fonteFila = getValidFontOrFallback(row.fuente, "Arial");
         if (fonteFila !== "Arial") {
@@ -332,7 +315,7 @@ export const Toolbar: React.FC = () => {
           id: jerseyEspaldaId,
           type: "uniform",
           part: "jersey",
-          size: tallaMostrar as any,
+          size: tallaMostrar,
           position: { x: 0, y: 0 },
           dimensions: jerseyDimensions,
           rotation: 0,
@@ -363,7 +346,7 @@ export const Toolbar: React.FC = () => {
           id: generateId("text"),
           type: "text",
           part: "jersey",
-          size: tallaMostrar as any,
+          size: tallaMostrar,
           position: {
             x: jerseyDimensions.width * 0.15,
             y: jerseyDimensions.height * 0.17,
@@ -392,7 +375,7 @@ export const Toolbar: React.FC = () => {
             id: generateId("text"),
             type: "text",
             part: "jersey",
-            size: tallaMostrar as any,
+            size: tallaMostrar,
             position: {
               x: (jerseyDimensions.width - numeroDims.width) / 2 + 30,
               y: (jerseyDimensions.height - numeroDims.height) / 2 + 20,
@@ -420,7 +403,7 @@ export const Toolbar: React.FC = () => {
           id: jerseyFrenteId,
           type: "uniform",
           part: "jersey",
-          size: tallaMostrar as any,
+          size: tallaMostrar,
           position: { x: 0, y: 0 },
           dimensions: jerseyDimensions,
           rotation: 0,
@@ -442,7 +425,7 @@ export const Toolbar: React.FC = () => {
             id: generateId("text"),
             type: "text",
             part: "jersey",
-            size: tallaMostrar as any,
+            size: tallaMostrar,
             position: {
               x: jerseyDimensions.width - numFrenteDims.width - 20,
               y: 20,
@@ -470,7 +453,7 @@ export const Toolbar: React.FC = () => {
           id: shortsLeftId,
           type: "uniform",
           part: "shorts",
-          size: tallaMostrar as any,
+          size: tallaMostrar,
           position: { x: 0, y: 0 },
           dimensions: shortsDimensions,
           rotation: 0,
@@ -489,7 +472,7 @@ export const Toolbar: React.FC = () => {
           id: generateId("uniform"),
           type: "uniform",
           part: "shorts",
-          size: tallaMostrar as any,
+          size: tallaMostrar,
           position: { x: 0, y: 0 },
           dimensions: shortsDimensions,
           rotation: 180,
@@ -864,7 +847,7 @@ const EditTab: React.FC<{
     );
   }
 
-  const sizes: Size[] = ["S", "M", "L", "XL"];
+  const sizes: Size[] = SIZE_ORDER;
 
   const handleSizeChange = (newSize: Size) => {
     const sizeConfig = sizeConfigs.find(s => s.size === newSize);

@@ -6,6 +6,7 @@ import { compressImageForCanvas } from "./imageCompressorForCanvas";
 import { loadFont } from "./fontLoader";
 import { optimizeLayoutAdvanced } from "./binPacking";
 import { generateBitmapMask, type BitmapMask } from "./svgBitmap";
+import { normalizeSize, toSpanishSize } from "./designMapper";
 
 export interface ExcelProcessorCallbacks {
   onError: (title: string, message: string, details?: string[]) => void;
@@ -33,8 +34,16 @@ interface SizeTextConfig {
 }
 
 // Offsets escalados proporcionalmente desde las medidas anteriores a las medidas
-// oficiales de TABLA-TALLAS.xlsx (jun 2026). XS eliminado — tallas disponibles: S, M, L, XL.
+// oficiales de TABLA-TALLAS.xlsx (jun 2026). Tallas: XS, S, M, L, XL, XXL, 3XL, 4XL.
+// XS se escaló desde S (×0.9587) y XXL/3XL/4XL desde XL (×1.0385 / ×1.0769 / ×1.1154),
+// usando la razón de ancho de playera de cada talla.
 const TEXT_POSITIONS_BY_SIZE: Record<string, SizeTextConfig> = {
+  'XS': {
+    jerseyFront:      { offsetX: 296, offsetY: 107, fontSize: 102.53 },
+    jerseyBackNumber: { offsetX: 138, offsetY: 210, fontSize: 269.10 },
+    jerseyBackName:   { offsetX: 155, offsetY: 128, fontSize:  82.15 },
+    shortsRight:      { offsetX: 256, offsetY: 245, fontSize: 122.51 },
+  },
   'S': {
     jerseyFront:      { offsetX: 309, offsetY: 112, fontSize: 106.95 },
     jerseyBackNumber: { offsetX: 144, offsetY: 219, fontSize: 280.70 },
@@ -58,6 +67,24 @@ const TEXT_POSITIONS_BY_SIZE: Record<string, SizeTextConfig> = {
     jerseyBackNumber: { offsetX: 132, offsetY: 236, fontSize: 318.38 },
     jerseyBackName:   { offsetX: 203, offsetY: 143, fontSize:  94.38 },
     shortsRight:      { offsetX: 333, offsetY: 296, fontSize: 137.89 },
+  },
+  'XXL': {
+    jerseyFront:      { offsetX: 357, offsetY: 137, fontSize: 121.58 },
+    jerseyBackNumber: { offsetX: 137, offsetY: 245, fontSize: 330.63 },
+    jerseyBackName:   { offsetX: 211, offsetY: 148, fontSize:  98.01 },
+    shortsRight:      { offsetX: 346, offsetY: 307, fontSize: 143.19 },
+  },
+  '3XL': {
+    jerseyFront:      { offsetX: 370, offsetY: 142, fontSize: 126.09 },
+    jerseyBackNumber: { offsetX: 142, offsetY: 254, fontSize: 342.87 },
+    jerseyBackName:   { offsetX: 219, offsetY: 154, fontSize: 101.64 },
+    shortsRight:      { offsetX: 359, offsetY: 319, fontSize: 148.50 },
+  },
+  '4XL': {
+    jerseyFront:      { offsetX: 384, offsetY: 147, fontSize: 130.59 },
+    jerseyBackNumber: { offsetX: 147, offsetY: 263, fontSize: 355.12 },
+    jerseyBackName:   { offsetX: 226, offsetY: 159, fontSize: 105.27 },
+    shortsRight:      { offsetX: 371, offsetY: 330, fontSize: 153.80 },
   },
 };
 
@@ -92,19 +119,6 @@ export const processExcelFile = async (
       setCanvasHidden,
       addElementsBatch
     } = useDesignerStore.getState();
-
-    // Mapeo de tallas Excel a tallas en español (XS/XCH ya no disponibles → CH/S)
-    const excelToSpanish: Record<string, SizeSpanish> = {
-      'xs': 'CH',
-      'xch': 'CH',
-      's': 'CH',
-      'ch': 'CH',
-      'm': 'M',
-      'l': 'G',
-      'g': 'G',
-      'xl': 'XG',
-      'xg': 'XG',
-    };
 
     // Mapeo de género Excel a tipo Gender
     const excelToGender = (generoExcel: unknown): 'Hombre' | 'Mujer' => {
@@ -155,8 +169,7 @@ export const processExcelFile = async (
 
     // Funciones auxiliares para obtener moldes (con género)
     const getMoldeFrenteUrl = (tallaExcel: string, genero: 'Hombre' | 'Mujer'): string => {
-      const talla = tallaExcel.toLowerCase().trim();
-      const tallaSpanish = excelToSpanish[talla];
+      const tallaSpanish = toSpanishSize(tallaExcel);
       if (!tallaSpanish) return templateBlobUrls['jerseyFront'] ?? "";
 
       const sizeKey = createSizeKey(genero, tallaSpanish);
@@ -164,8 +177,7 @@ export const processExcelFile = async (
     };
 
     const getMoldeEspaldaUrl = (tallaExcel: string, genero: 'Hombre' | 'Mujer'): string => {
-      const talla = tallaExcel.toLowerCase().trim();
-      const tallaSpanish = excelToSpanish[talla];
+      const tallaSpanish = toSpanishSize(tallaExcel);
       if (!tallaSpanish) return templateBlobUrls['jerseyBack'] ?? "";
 
       const sizeKey = createSizeKey(genero, tallaSpanish);
@@ -176,8 +188,7 @@ export const processExcelFile = async (
       left: { url: string };
       right: { url: string };
     } => {
-      const talla = tallaExcel.toLowerCase().trim();
-      const tallaSpanish = excelToSpanish[talla];
+      const tallaSpanish = toSpanishSize(tallaExcel);
       if (!tallaSpanish) return { left: { url: "" }, right: { url: "" } };
 
       const sizeKey = createSizeKey(genero, tallaSpanish);
@@ -188,29 +199,7 @@ export const processExcelFile = async (
     };
 
     const getSizeConfig = (tallaExcel: string, genero: 'Hombre' | 'Mujer') => {
-      const tallaUpper = tallaExcel.toUpperCase().trim();
-
-      // Mapeo de tallas en español a inglés (XS/XCH → S por eliminación de XS)
-      const tallaMapping: { [key: string]: Size } = {
-        // Español
-        'XCH': 'S',
-        'CH': 'S',
-        'M': 'M',
-        'G': 'L',
-        'XG': 'XL',
-        '2XG': 'XL',
-        '3XG': 'XL',
-        // Inglés (también soportado)
-        'XS': 'S',
-        'S': 'S',
-        'L': 'L',
-        'XL': 'XL',
-        '2XL': 'XL',
-        '3XL': 'XL',
-      };
-
-      // Obtener talla mapeada o usar la original
-      const tallaMapped = tallaMapping[tallaUpper] || tallaUpper as Size;
+      const tallaMapped = normalizeSize(tallaExcel) ?? (tallaExcel.toUpperCase().trim() as Size);
 
       // Usar la función del store para obtener configuración por talla y género
       const config = useDesignerStore.getState().getSizeConfig(tallaMapped, genero);
@@ -301,15 +290,9 @@ export const processExcelFile = async (
       const tallaExcel = String(row.talla ?? "m");
       const genero = excelToGender(row.genero);
       const sizeConfig = getSizeConfig(tallaExcel, genero);
-      const tallaMostrar = tallaExcel.toUpperCase().trim();
-
-      const tallaMapping: { [key: string]: Size } = {
-        'XCH': 'S', 'CH': 'S', 'M': 'M',
-        'G': 'L', 'XG': 'XL',
-        'XS': 'S', 'S': 'S', 'L': 'L',
-        'XL': 'XL',
-      };
-      const tallaMapeada = tallaMapping[tallaMostrar] || tallaMostrar;
+      // Talla canónica: los elementos guardan siempre 'XS'|'S'|…|'4XL', nunca el alias
+      // crudo del Excel ('XG', '2XL'…), para que binPacking y la UI comparen un solo valor.
+      const tallaMapeada = normalizeSize(tallaExcel) ?? (tallaExcel.toUpperCase().trim() as Size);
 
       const designConfig = useDesignerStore.getState().uniformDesignConfig;
       const designFont = designConfig?.jerseyFrontNumber?.fontFamily ?? 'Arial';
@@ -343,7 +326,7 @@ export const processExcelFile = async (
         id: jerseyFrenteId,
         type: "uniform",
         part: "jersey",
-        size: tallaMostrar as any,
+        size: tallaMapeada,
         position: { x: 0, y: 0 },
         dimensions: jerseyDimensions,
         rotation: 0,
@@ -382,7 +365,7 @@ export const processExcelFile = async (
           id: generateId("text"),
           type: "text",
           part: "jersey",
-          size: tallaMostrar as any,
+          size: tallaMapeada,
           position: { x: offsetX, y: offsetY },
           dimensions: { width: 30, height: 25 },
           rotation: 0,
@@ -412,7 +395,7 @@ export const processExcelFile = async (
         id: jerseyEspaldaId,
         type: "uniform",
         part: "jersey",
-        size: tallaMostrar as any,
+        size: tallaMapeada,
         position: { x: 0, y: 0 },
         dimensions: jerseyDimensions,
         rotation: 0,
@@ -467,7 +450,7 @@ export const processExcelFile = async (
           id: generateId("text"),
           type: "text",
           part: "jersey",
-          size: tallaMostrar as any,
+          size: tallaMapeada,
           position: { x: offsetX, y: offsetY },
           dimensions: { width: backNumberWidth, height: Math.ceil(fontSize * 1.2) },
           rotation: 0,
@@ -526,7 +509,7 @@ export const processExcelFile = async (
           id: generateId("text"),
           type: "text",
           part: "jersey",
-          size: tallaMostrar as any,
+          size: tallaMapeada,
           position: { x: offsetX, y: offsetY },
           dimensions: { width: nameWidth, height: Math.ceil(fontSize * 1.3) },
           rotation: 0,
@@ -558,7 +541,7 @@ export const processExcelFile = async (
         id: shortsLeftId,
         type: "uniform",
         part: "shorts",
-        size: tallaMostrar as any,
+        size: tallaMapeada,
         position: { x: 0, y: 0 },
         dimensions: shortsDimensions,
         rotation: 0,
@@ -580,7 +563,7 @@ export const processExcelFile = async (
         id: shortsRightId,
         type: "uniform",
         part: "shorts",
-        size: tallaMostrar as any,
+        size: tallaMapeada,
         position: { x: 0, y: 0 },
         dimensions: shortsDimensions,
         rotation: 180,
@@ -621,7 +604,7 @@ export const processExcelFile = async (
           id: generateId("text"),
           type: "text",
           part: "shorts",
-          size: tallaMostrar as any,
+          size: tallaMapeada,
           position: { x: offsetX, y: offsetY },
           dimensions: { width: 40, height: 30 },
           rotation: 0,
@@ -662,7 +645,7 @@ export const processExcelFile = async (
           id: generateId("uniform"),
           type: "uniform",
           part: "sleeve",
-          size: tallaMostrar as any,
+          size: tallaMapeada,
           position: { x: 0, y: 0 },
           dimensions: { width: sleeveW, height: sleeveH },
           rotation: 0,
@@ -682,7 +665,7 @@ export const processExcelFile = async (
           id: generateId("uniform"),
           type: "uniform",
           part: "sleeve",
-          size: tallaMostrar as any,
+          size: tallaMapeada,
           position: { x: 0, y: 0 },
           dimensions: { width: sleeveW, height: sleeveH },
           rotation: 0,
@@ -705,7 +688,7 @@ export const processExcelFile = async (
             id: generateId("uniform"),
             type: "uniform",
             part: "collar",
-            size: tallaMostrar as any,
+            size: tallaMapeada,
             position: { x: 0, y: 0 },
             dimensions: { width: collarW, height: collarH },
             rotation: 0,

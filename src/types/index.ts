@@ -1,6 +1,6 @@
 // Tipos principales de la aplicación
 
-export type Size = 'XS' | 'S' | 'M' | 'L' | 'XL';
+export type Size = 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL' | '3XL' | '4XL';
 
 // Color CMYK para impresión directa (valores 0-100)
 export interface CmykColor {
@@ -14,7 +14,7 @@ export interface CmykColor {
 export type Gender = 'Hombre' | 'Mujer';
 
 // Tallas en español
-export type SizeSpanish = 'XCH' | 'CH' | 'M' | 'G' | 'XG';
+export type SizeSpanish = 'XCH' | 'CH' | 'M' | 'G' | 'XG' | '2XG' | '3XG' | '4XG';
 
 // Mapeo de tallas español a inglés
 export const SIZE_MAP: Record<SizeSpanish, Size> = {
@@ -23,7 +23,14 @@ export const SIZE_MAP: Record<SizeSpanish, Size> = {
   'M': 'M',
   'G': 'L',
   'XG': 'XL',
+  '2XG': 'XXL',
+  '3XG': '3XL',
+  '4XG': '4XL',
 };
+
+// Orden ascendente de tallas — usar en selectores y recorridos para no depender
+// del orden de declaración de SIZE_MAP.
+export const SIZE_ORDER: Size[] = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL'];
 
 // Tipo de manga para columna Excel — 'ninguna' = camiseta sin manga
 export type SleeveType = 'ninguna' | 'corta' | 'larga';
@@ -40,7 +47,7 @@ export interface SizeImages {
 }
 
 export interface UniformSizesConfig {
-  [key: string]: SizeImages; // Key es la talla en español (XCH, CH, M, G, XG, 2XG, 3XG)
+  [key: string]: SizeImages; // Key es la talla en español (XCH, CH, M, G, XG, 2XG, 3XG, 4XG)
 }
 
 export interface SizeConfig {
