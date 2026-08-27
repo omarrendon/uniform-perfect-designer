@@ -122,6 +122,28 @@ function canvasTextToPDF(
  * Renderiza texto en un canvas HTML y devuelve el PNG como data URL.
  * Base compartida entre la exportación PDF local y la serialización para el servidor.
  */
+// Canvas reutilizados entre llamadas. Crear uno por texto disparaba picos de
+// cientos de MB y tumbaba el renderer de Chrome al exportar: un número de espalda
+// (318px ⇒ 903pt ⇒ 3610px de fuente) generaba un canvas de medición de
+// 10852×9027 = 374 MB en RGBA, sólo para llamar measureText.
+let measureCtx: CanvasRenderingContext2D | null = null;
+const getMeasureCtx = (): CanvasRenderingContext2D => {
+  if (!measureCtx) {
+    // measureText no rasteriza: las métricas no dependen del tamaño del canvas
+    const c = document.createElement('canvas');
+    c.width = 1;
+    c.height = 1;
+    measureCtx = c.getContext('2d')!;
+  }
+  return measureCtx;
+};
+
+let textCanvas: HTMLCanvasElement | null = null;
+const getTextCanvas = (): HTMLCanvasElement => {
+  if (!textCanvas) textCanvas = document.createElement('canvas');
+  return textCanvas;
+};
+
 const renderTextAsPng = async (
   text: string,
   fontFamily: string,
@@ -133,45 +155,68 @@ const renderTextAsPng = async (
   try {
     const SCALE = 3;
     const PTS_TO_CSS_PX = 96 / 72;
-    const fontSizeCssPx = fontSizePts * PTS_TO_CSS_PX * SCALE;
-    const fontStyle = fontWeight === 'bold' ? 'bold' : 'normal';
-    const fontSpec = `${fontStyle} ${fontSizeCssPx}px "${fontFamily}", Arial, sans-serif`;
+    // Válvula de seguridad, no un limitador de calidad: el peor caso real —número de
+    // 3 dígitos a 318px en una tipografía ancha— son 31.5 M px, así que todo el contenido
+    // normal se rasteriza a 3× (288 DPI) sin recorte. Solo entra con texto patológico
+    // (nombres muy largos al tamaño del dorsal), donde vale más bajar DPI que morir.
+    // El canvas se reutiliza y se libera por texto, así que nunca hay dos a la vez.
+    const MAX_RASTER_PX = 40_000_000;
 
-    const midY = fontSizeCssPx / 2;
+    const mCtx = getMeasureCtx();
 
-    const measureCanvas = document.createElement('canvas');
-    measureCanvas.width  = Math.ceil(fontSizeCssPx * text.length * 1.5) + 20;
-    measureCanvas.height = Math.ceil(fontSizeCssPx * 2.5);
-    const mCtx = measureCanvas.getContext('2d')!;
-    mCtx.font = fontSpec;
-    mCtx.textBaseline = 'middle';
-    const m = mCtx.measureText(text);
+    // Geometría del PNG para una escala dada
+    const layoutAt = (scale: number) => {
+      const fontSizeCssPx = fontSizePts * PTS_TO_CSS_PX * scale;
+      const fontStyle = fontWeight === 'bold' ? 'bold' : 'normal';
+      const fontSpec = `${fontStyle} ${fontSizeCssPx}px "${fontFamily}", Arial, sans-serif`;
+      const midY = fontSizeCssPx / 2;
 
-    const glyphAbove = Math.ceil(m.actualBoundingBoxAscent)  + 2;
-    const glyphBelow = Math.ceil(m.actualBoundingBoxDescent) + 2;
-    const extraTop    = Math.max(0, glyphAbove - midY);
-    const extraBottom = Math.max(0, glyphBelow - midY);
+      mCtx.font = fontSpec;
+      mCtx.textBaseline = 'middle';
+      const m = mCtx.measureText(text);
 
-    // Padding extra para que el stroke no se corte en los bordes
-    // strokeOpts.width viene en puntos (igual que fontSizePts), se escala con PTS_TO_CSS_PX * SCALE
-    const strokePad = strokeOpts ? Math.ceil(strokeOpts.width * PTS_TO_CSS_PX * SCALE) : 0;
+      const glyphAbove = Math.ceil(m.actualBoundingBoxAscent) + 2;
+      const glyphBelow = Math.ceil(m.actualBoundingBoxDescent) + 2;
+      const extraTop = Math.max(0, glyphAbove - midY);
+      const extraBottom = Math.max(0, glyphBelow - midY);
 
-    const left  = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft)) + 2 + strokePad;
-    const right = Math.ceil(m.actualBoundingBoxRight) + 2 + strokePad;
+      // Padding extra para que el stroke no se corte en los bordes
+      // strokeOpts.width viene en puntos (igual que fontSizePts), se escala con PTS_TO_CSS_PX * scale
+      const strokePad = strokeOpts ? Math.ceil(strokeOpts.width * PTS_TO_CSS_PX * scale) : 0;
 
-    const w = left + right;
-    const h = Math.ceil(fontSizeCssPx) + extraTop + extraBottom + strokePad * 2;
+      const left = Math.ceil(Math.max(0, -m.actualBoundingBoxLeft)) + 2 + strokePad;
+      const right = Math.ceil(m.actualBoundingBoxRight) + 2 + strokePad;
 
-    const tmpCanvas = document.createElement('canvas');
-    tmpCanvas.width  = w;
+      return {
+        fontSpec,
+        strokePad,
+        extraTop,
+        left,
+        w: left + right,
+        h: Math.ceil(fontSizeCssPx) + extraTop + extraBottom + strokePad * 2,
+        drawY: midY + extraTop + strokePad,
+      };
+    };
+
+    let scale = SCALE;
+    let layout = layoutAt(scale);
+    if (layout.w * layout.h > MAX_RASTER_PX) {
+      // Bajar la escala mantiene la geometría en el PDF (widthPts divide por scale),
+      // sólo reduce la resolución del raster.
+      scale = Math.max(1, scale * Math.sqrt(MAX_RASTER_PX / (layout.w * layout.h)));
+      layout = layoutAt(scale);
+    }
+
+    const { w, h, left, drawY, strokePad, extraTop, fontSpec } = layout;
+
+    // Reasignar width/height limpia el canvas y redimensiona el backing store
+    const tmpCanvas = getTextCanvas();
+    tmpCanvas.width = w;
     tmpCanvas.height = h;
 
     const ctx2 = tmpCanvas.getContext('2d')!;
     ctx2.font = fontSpec;
-    ctx2.clearRect(0, 0, w, h);
     ctx2.textBaseline = 'middle';
-
-    const drawY = midY + extraTop + strokePad;
 
     // Stroke primero (debajo del relleno)
     if (strokeOpts) {
@@ -179,7 +224,7 @@ const renderTextAsPng = async (
       const sg = parseInt(strokeOpts.color.slice(3, 5), 16);
       const sb = parseInt(strokeOpts.color.slice(5, 7), 16);
       ctx2.strokeStyle = `rgb(${sr},${sg},${sb})`;
-      ctx2.lineWidth = strokeOpts.width * PTS_TO_CSS_PX * SCALE;
+      ctx2.lineWidth = strokeOpts.width * PTS_TO_CSS_PX * scale;
       ctx2.lineJoin = 'round';
       ctx2.miterLimit = 2;
       ctx2.strokeText(text, left, drawY);
@@ -192,9 +237,14 @@ const renderTextAsPng = async (
     ctx2.fillText(text, left, drawY);
 
     const pngDataUrl = tmpCanvas.toDataURL('image/png');
-    const widthPts   = (w / SCALE) / PTS_TO_CSS_PX;
-    const heightPts  = (h / SCALE) / PTS_TO_CSS_PX;
-    const yOffsetPts = ((extraTop + strokePad) / SCALE) / PTS_TO_CSS_PX;
+
+    // Liberar el backing store ya: el GC no corre a tiempo dentro del loop de export
+    tmpCanvas.width = 0;
+    tmpCanvas.height = 0;
+
+    const widthPts = (w / scale) / PTS_TO_CSS_PX;
+    const heightPts = (h / scale) / PTS_TO_CSS_PX;
+    const yOffsetPts = ((extraTop + strokePad) / scale) / PTS_TO_CSS_PX;
 
     return { pngDataUrl, widthPts, heightPts, yOffsetPts };
   } catch {
@@ -1262,8 +1312,13 @@ export const exportMultiPagePDFServer = async (
     onProgress?: (current: number, total: number) => void;
   } = {}
 ): Promise<void> => {
-  const serverUrl = import.meta.env.VITE_PDF_SERVER_URL;
+  // Sin normalizar, una URL con barra final produce `//api/export-pdf` y Express
+  // devuelve 404 en vez de procesar la petición.
+  const serverUrl = (import.meta.env.VITE_PDF_SERVER_URL ?? '').replace(/\/+$/, '');
   if (!serverUrl) throw new Error('VITE_PDF_SERVER_URL no está configurado en .env');
+
+  // Debe coincidir con MAX_PAYLOAD_MB del servidor (express.json limit, default 80mb)
+  const MAX_PAYLOAD_MB = 80;
 
   const store = useDesignerStore.getState();
   const canvasConfig = store.canvasConfig;
@@ -1408,16 +1463,49 @@ export const exportMultiPagePDFServer = async (
   };
 
   const sendPage = async (pageIndex: number): Promise<void> => {
-    const page = await serializePage(pageIndex);
-    const body = JSON.stringify({ pages: [page], canvasConfig, cmykConfig });
+    let page: PagePayload | null = await serializePage(pageIndex);
 
-    const sizeMB = (body.length / (1024 * 1024)).toFixed(2);
-    console.log(`[export-pdf] Página ${pageIndex + 1} — tamaño total: ${sizeMB} MB`);
+    // Cuánto del payload son imágenes repetidas entre elementos: si es alto, conviene
+    // mandar un diccionario de imágenes y referenciarlas por id desde el servidor.
+    let totalImgChars = 0;
+    const uniqueImgChars = new Map<string, number>();
+    for (const el of page.elements) {
+      if (el.type === 'uniform' && el.imageDataUrl) {
+        totalImgChars += el.imageDataUrl.length;
+        uniqueImgChars.set(el.imageDataUrl, el.imageDataUrl.length);
+      }
+    }
+    const uniqueTotal = [...uniqueImgChars.values()].reduce((a, b) => a + b, 0);
+
+    let body: string = JSON.stringify({ pages: [page], canvasConfig, cmykConfig });
+    // Los PNG de texto sólo viven dentro de `page`; soltarlos ya evita arrastrarlos
+    // durante toda la request (los de uniforme siguen vivos en svgToPngCache).
+    page = null;
+
+    const sizeMB = body.length / (1024 * 1024);
+    console.log(
+      `[export-pdf] Página ${pageIndex + 1} — tamaño total: ${sizeMB.toFixed(2)} MB ` +
+      `(imágenes ${(totalImgChars / 1048576).toFixed(2)} MB, ` +
+      `${uniqueImgChars.size} única(s) = ${(uniqueTotal / 1048576).toFixed(2)} MB, ` +
+      `duplicación ${(totalImgChars / (uniqueTotal || 1)).toFixed(1)}×)`
+    );
+
+    if (sizeMB > MAX_PAYLOAD_MB) {
+      throw new Error(
+        `Página ${pageIndex + 1}: el payload pesa ${sizeMB.toFixed(1)} MB y el servidor acepta ` +
+        `hasta ${MAX_PAYLOAD_MB} MB. Divide el diseño en más páginas o reduce elementos por página.`
+      );
+    }
+
+    // Blob en vez de string: el contenido queda fuera del heap JS y el string de
+    // ~2 bytes/carácter se puede liberar antes de esperar la respuesta, que trae
+    // otro PDF de decenas de MB. Tener ambos vivos a la vez era parte del OOM.
+    const blob = new Blob([body], { type: 'application/json' });
+    body = '';
 
     const response = await fetch(`${serverUrl}/api/export-pdf`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
+      body: blob,
     });
 
     if (!response.ok) {
@@ -1428,8 +1516,10 @@ export const exportMultiPagePDFServer = async (
     const { pages: resultPages } = await response.json();
 
     for (const resultPage of resultPages) {
-      const bytes = Uint8Array.from(atob(resultPage.pdfBase64), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: 'application/pdf' });
+      // Decodificar via data URL: el browser hace el base64→bytes fuera del heap JS.
+      // atob() + Uint8Array.from() sobre un PDF de decenas de MB triplicaba el pico
+      // de memoria (binary string UTF-16 + array + blob) justo cuando ya estaba al límite.
+      const blob = await (await fetch(`data:application/pdf;base64,${resultPage.pdfBase64}`)).blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.download = resultPage.fileName;
