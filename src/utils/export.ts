@@ -986,7 +986,9 @@ export const exportMultiPagePDFDirect = async (
               ? store.uniformTemplatePdfBytes?.[uniform.templatePiece]
               : undefined;
 
-            if (pdfSourceBytes) {
+            // byteLength 0 = buffer detached por un worker; mejor caer al fallback PNG
+            // que abortar toda la exportación con "No PDF header found"
+            if (pdfSourceBytes && pdfSourceBytes.byteLength > 0) {
               // ── RAMA PDF: embedding directo PDF→PDF, cero rasterización, cero conversión de color ──
               const cacheKey = uniform.templatePiece!;
               let embeddedPage = pdfPageEmbedCache.get(cacheKey);

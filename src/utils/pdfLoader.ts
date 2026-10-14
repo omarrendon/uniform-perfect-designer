@@ -30,7 +30,10 @@ export async function renderPdfPageToPng(
 ): Promise<string> {
   ensureWorker();
 
-  const loadingTask = getDocument({ data: pdfBytes });
+  // PDF.js transfiere el buffer al worker y lo deja detached en el hilo principal.
+  // Mandamos una copia para no invalidar los bytes que conserva el llamador
+  // (el store los reusa después para embeberlos directo en el PDF de exportación).
+  const loadingTask = getDocument({ data: new Uint8Array(pdfBytes) });
   const pdf = await loadingTask.promise;
 
   const page = await pdf.getPage(pageIndex + 1); // PDF.js usa índice base-1
